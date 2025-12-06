@@ -1,6 +1,3 @@
-[submodule "lib/cppparser"]
-	path = lib/cppparser
-	url = https://github.com/satya-das/cppparser
-[submodule "lib/common"]
-	path = lib/common
-	url = https://github.com/satya-das/common.git
+[submodule "lib/subprocess"]
+	path = lib/subprocess
+	url = https://github.com/benman64/subprocess
