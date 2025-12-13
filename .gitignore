@@ -37,3 +37,7 @@ build/
 dist/
 src/parser/
 .cache/
+
+# Project files
+compile_commands.json
+.kateproject.*

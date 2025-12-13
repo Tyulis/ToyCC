@@ -1,7 +1,8 @@
 #pragma once
 
 #include <string>
+#include <iostream>
 
 namespace toycc {
-    std::string preprocess(std::string filename);
+    void preprocess(std::string filename, std::ostream& output);
 }
