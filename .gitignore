@@ -34,4 +34,6 @@
 
 # Build directory
 build/
-
+dist/
+src/parser/
+.cache/

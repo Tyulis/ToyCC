@@ -1,3 +1,9 @@
 [submodule "lib/subprocess"]
 	path = lib/subprocess
 	url = https://github.com/benman64/subprocess
+[submodule "lib/grammars-v4"]
+	path = lib/grammars-v4
+	url = https://github.com/antlr/grammars-v4
+[submodule "lib/antlr4"]
+	path = lib/antlr4
+	url = https://github.com/antlr/antlr4.git
