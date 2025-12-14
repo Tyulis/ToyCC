@@ -13,7 +13,7 @@ namespace toycc {
     void rtrim_inplace(std::string& str, std::string characters = WHITESPACE);
     void trim_inplace (std::string& str, std::string characters = WHITESPACE);
 
-    std::string ltrim(const std::string& str, std::string characters = WHITESPACE);
-    std::string rtrim(const std::string& str, std::string characters = WHITESPACE);
-    std::string trim (const std::string& str, std::string characters = WHITESPACE);
+    [[nodiscard]] std::string ltrim(const std::string& str, std::string characters = WHITESPACE);
+    [[nodiscard]] std::string rtrim(const std::string& str, std::string characters = WHITESPACE);
+    [[nodiscard]] std::string trim (const std::string& str, std::string characters = WHITESPACE);
 }

@@ -49,6 +49,12 @@ namespace toycc {
             case Level::INTERNAL_ERROR:  level_text = "INTERNAL_ERROR";  break;
         }
 
+        if (!_filename.has_value() && !_line.has_value()) {  // No location information -> don't print it'
+            std::string message = std::format("{} : {}", level_text, _base_message);
+            return message;
+        }
+
+
         std::string message = std::format("{} : at {}:{}:{} : {}", level_text, _filename.value_or("<input>"), _line.value_or(0) + 1, _character.value_or(0) + 1, _base_message);
         if (!_filename.has_value() || !_line.has_value())
             return message;

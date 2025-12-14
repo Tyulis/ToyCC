@@ -47,21 +47,23 @@ namespace toycc {
 
         while (!code.eof()) {
             std::getline(code, preprocessed_line);
-            trim(preprocessed_line);
+            rtrim_inplace(preprocessed_line);
+            std::string stripped_line = trim(preprocessed_line);
 
-            if (preprocessed_line.empty()) {
+            if (stripped_line.empty()) {
                 // Skip
-            } else if (preprocessed_line[0] == '#' && !preprocessed_line.substr(preprocessed_line.find_first_not_of("#" + WHITESPACE)).starts_with("pragma")) {
+            } else if (stripped_line[0] == '#' && !stripped_line.substr(stripped_line.find_first_not_of("#" + WHITESPACE)).starts_with("pragma")) {
                 try {
-                    last_marker = LineMarker(preprocessed_line);
-                    stripped_lines_since_last_marker += 1;
+                    last_marker = LineMarker(stripped_line);
+                    stripped_lines_since_last_marker = 0;
                 } catch (Diagnostic& diagnostic) {
                     diagnostic.line(preprocessed_line_number);
                     throw diagnostic;
                 }
             } else {
                 positions.push_back(last_marker.position(stripped_lines_since_last_marker));
-                stripped_code << preprocessed_line << "\n";
+                stripped_code << preprocessed_line << "\n";  // Keep the leading whitespace in the parsed line, so the character positions stay consistent with the source code
+                stripped_lines_since_last_marker += 1;
             }
             preprocessed_line_number += 1;
         }
