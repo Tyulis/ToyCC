@@ -81,6 +81,7 @@ int main(int argc, char** argv) {
         }
 
         // -------- Parsing
+        stripped_code.seekg(0);
         toycc::Parser parser(stripped_code, source_map);
 
         if (target_step == SequenceStep::PARSE) {

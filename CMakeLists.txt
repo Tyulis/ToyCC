@@ -30,7 +30,9 @@ antlr_target(CParser ${GRAMMAR_G4}
              OUTPUT_DIRECTORY ${PARSER_SRC}
              LEXER PARSER LISTENER)
 
-# include_directories(${ANTLR_CParser_OUTPUT_DIR})
+
+# Copy the prologues
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
 
 # Compile the app
 add_executable(${PROJECT_NAME}

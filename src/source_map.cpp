@@ -40,7 +40,7 @@ namespace toycc {
     // -------- IncludeStack
     SourceMap::SourceMap(std::istream& code, std::ostream& stripped_code) {
         std::string preprocessed_line;
-        size_t preprocessed_line_number = 0;
+        size_t preprocessed_line_number = 1;
 
         LineMarker last_marker;
         size_t stripped_lines_since_last_marker = 0;
@@ -70,6 +70,8 @@ namespace toycc {
     }
 
     LinePosition SourceMap::at(unsigned stripped_line) const {
+        if (stripped_line >= positions.size())
+            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Attempted to access non-existing stripped line {}/{}", stripped_line+1, positions.size()));
         return positions.at(stripped_line);
     }
 

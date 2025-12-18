@@ -506,7 +506,6 @@ translationUnit
 externalDeclaration
     : functionDefinition
     | declaration
-    | pragma
     | ';' // stray ;
     ;
 
@@ -1077,8 +1076,12 @@ fragment SChar
     | '\\\r\n' // Added line
     ;
 
-pragma
-    : '#' 'pragma' ~ '\n'*
+MultiLineMacro
+    : '#' (~[\n]*? '\\' '\r'? '\n')+ ~ [\n]+ -> channel (HIDDEN)
+    ;
+
+Directive
+    : '#' ~ [\n]* -> channel (HIDDEN)
     ;
 
 // ignore the following asm blocks:

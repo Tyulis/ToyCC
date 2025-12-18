@@ -6,6 +6,7 @@
 
 #include "parser.h"
 #include "diagnostic.h"
+#include "util/strings.h"
 
 namespace toycc {
     ErrorHandler::ErrorHandler(const SourceMap& source_map) : source_map(source_map) {}
@@ -15,9 +16,9 @@ namespace toycc {
     {
         const LinePosition source = source_map.at(line);
         std::string message = (offendingSymbol == nullptr)? std::format("Lexer error : {}", msg)
-                                                          : std::format("Syntax error : {}", msg);
+                                                          : std::format("Syntax error near `{}` : {}", to_printable(offendingSymbol->getText()), msg);
         Diagnostic diagnostic(Diagnostic::Level::ERROR, message, source.filename, source.line, charPositionInLine);
-        std::cerr << diagnostic.message() << std::endl;
+        std::cerr << diagnostic << std::endl;
 
         nof_errors += 1;
     }
@@ -39,7 +40,7 @@ namespace toycc {
         toycc::parser::CParser::CompilationUnitContext* unit = parser.compilationUnit();
         const std::string tree_string = unit->toStringTree(true);
 
-        error_handler.check();
+        //error_handler.check();
         return tree_string;
     }
 }

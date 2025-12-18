@@ -32,4 +32,6 @@ namespace toycc {
             std::optional<size_t> _line;
             std::optional<size_t> _character;
     };
+
+    std::ostream& operator<< (std::ostream& stream, Diagnostic diagnostic);
 }

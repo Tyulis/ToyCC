@@ -1,3 +1,6 @@
+#include <cctype>
+#include <format>
+
 #include "util/strings.h"
 
 namespace toycc {
@@ -25,19 +28,22 @@ namespace toycc {
         return tokens;
     }
 
-    void ltrim_inplace(std::string& str, std::string characters) {
+    std::string& ltrim_inplace(std::string& str, std::string characters) {
         str.erase(0, str.find_first_not_of(characters));
+        return str;
     }
 
-    void rtrim_inplace(std::string& str, std::string characters) {
+    std::string& rtrim_inplace(std::string& str, std::string characters) {
         size_t trimmed_end = str.find_last_not_of(characters);
         if (trimmed_end != std::string::npos)
             str.erase(trimmed_end + 1);
+        return str;
     }
 
-    void trim_inplace(std::string& str, std::string characters) {
+    std::string& trim_inplace(std::string& str, std::string characters) {
         ltrim_inplace(str, characters);
         rtrim_inplace(str, characters);
+        return str;
     }
 
     std::string ltrim(const std::string& str, std::string characters) {
@@ -55,6 +61,50 @@ namespace toycc {
     std::string trim(const std::string& str, std::string characters) {
         std::string result = str;
         trim_inplace(result, characters);
+        return result;
+    }
+
+    std::string& replace_inplace(std::string& str, std::string origin, std::string replacement) {
+        size_t position = 0;
+        while ((position = str.find(origin, position + replacement.length())) != std::string::npos)
+            str.replace(position, origin.length(), replacement);
+
+        return str;
+    }
+
+    std::string replace(const std::string& str, std::string origin, std::string replacement) {
+        std::string result = str;
+        replace_inplace(result, origin, replacement);
+        return result;
+    }
+
+    std::string& to_printable_inplace(std::string& str) {
+        size_t position = 0;
+        while (position < str.length()) {
+            if (std::isprint(str[position])) {
+                position += 1;
+                continue;
+            }
+
+            switch (str[position]) {
+                case '\t':  str.replace(position, position + 1, "\\t");  position += 2;  break;
+                case '\n':  str.replace(position, position + 1, "\\n");  position += 2;  break;
+                case '\v':  str.replace(position, position + 1, "\\v");  position += 2;  break;
+                case '\f':  str.replace(position, position + 1, "\\f");  position += 2;  break;
+                case '\r':  str.replace(position, position + 1, "\\r");  position += 2;  break;
+                default:
+                    std::string replacement = std::format("\\x{:02X}", static_cast<unsigned int>(str[position]));
+                    str.replace(position, position + 1, replacement);
+                    position += replacement.length();
+            }
+        }
+
+        return str;
+    }
+
+    std::string to_printable(const std::string& str) {
+        std::string result = str;
+        to_printable_inplace(result);
         return result;
     }
 }
