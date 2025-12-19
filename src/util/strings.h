@@ -22,4 +22,9 @@ namespace toycc {
 
     std::string& to_printable_inplace(std::string& str);
     std::string to_printable(const std::string& str);
+
+    std::string& escape_inplace(std::string& str);
+    std::string escape(const std::string& str);
+
+    std::string indent(const std::string& str, bool indent_first_line=true, std::string prefix="\t");
 }

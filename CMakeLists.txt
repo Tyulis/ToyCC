@@ -28,7 +28,7 @@ set(GRAMMAR_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/C.g4)
 antlr_target(CParser ${GRAMMAR_G4}
              PACKAGE "toycc::parser"
              OUTPUT_DIRECTORY ${PARSER_SRC}
-             LEXER PARSER LISTENER)
+             LEXER PARSER VISITOR)
 
 
 # Copy the prologues
@@ -37,6 +37,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY
 # Compile the app
 add_executable(${PROJECT_NAME}
 	src/diagnostic.cpp
+	src/json_output.cpp
 	src/main.cpp
 	src/parser.cpp
 	src/preprocess.cpp

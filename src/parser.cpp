@@ -5,6 +5,7 @@
 #include "Token.h"
 
 #include "parser.h"
+#include "json_output.h"
 #include "diagnostic.h"
 #include "util/strings.h"
 
@@ -36,11 +37,20 @@ namespace toycc {
         parser.addErrorListener(&error_handler);
     }
 
-    std::string Parser::to_tree_string() {
+    std::string Parser::to_lisp() {
         toycc::parser::CParser::CompilationUnitContext* unit = parser.compilationUnit();
-        const std::string tree_string = unit->toStringTree(true);
+        const std::string tree_lisp = unit->toStringTree(true);
 
-        //error_handler.check();
-        return tree_string;
+        error_handler.check();
+        return tree_lisp;
+    }
+
+    std::string Parser::to_json() {
+        toycc::parser::CParser::CompilationUnitContext* unit = parser.compilationUnit();
+        JSONOutputVisitor visitor;
+        const std::string tree_json = std::any_cast<std::string>(visitor.visit(unit));
+
+        error_handler.check();
+        return tree_json;
     }
 }

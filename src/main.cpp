@@ -20,7 +20,8 @@ int main(int argc, char** argv) {
     boost::program_options::options_description sequence_options("Sequence options");
     sequence_options.add_options()("preprocess,E",   "Only preprocess the source code")
                                   ("source-map",     "Preprocess and annotate the source lines")
-                                  ("parse",          "Output the AST as Lisp");
+                                  ("parse-lisp",     "Output the AST as Lisp")
+                                  ("parse-json",     "Output the AST as JSON");
 
     boost::program_options::options_description generic_options("Generic options");
     generic_options.add_options()("help,h",        "Show this help message")
@@ -54,7 +55,7 @@ int main(int argc, char** argv) {
         target_step = SequenceStep::PREPROCESS;
     if (options.count("source-map"))
         target_step = SequenceStep::SOURCE_MAP;
-    if (options.count("parse"))
+    if (options.count("parse-lisp") || options.count("parse-json"))
         target_step = SequenceStep::PARSE;
 
     if (target_step == SequenceStep::NONE)
@@ -85,7 +86,10 @@ int main(int argc, char** argv) {
         toycc::Parser parser(stripped_code, source_map);
 
         if (target_step == SequenceStep::PARSE) {
-            std::cout << parser.to_tree_string() << std::endl;
+            if (options.count("parse-lisp"))
+                std::cout << parser.to_lisp() << std::endl;
+            else //  if (options.count("parse-json"))  // Default to JSON
+                std::cout << parser.to_json() << std::endl;
             return 0;
         }
     } catch (toycc::Diagnostic const& diagnostic) {

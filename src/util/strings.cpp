@@ -1,5 +1,6 @@
 #include <cctype>
 #include <format>
+#include <sstream>
 
 #include "util/strings.h"
 
@@ -106,5 +107,39 @@ namespace toycc {
         std::string result = str;
         to_printable_inplace(result);
         return result;
+    }
+
+    std::string& escape_inplace(std::string& str) {
+        to_printable_inplace(str);
+
+        size_t position = 0;
+        while (position < str.length()) {
+            switch (str[position]) {
+                case '"':  str.replace(position, position + 1, "\\\"");  position += 2;  break;
+                default:                                                 position += 1;  break;
+            }
+        }
+
+        return str;
+    }
+
+    std::string escape(const std::string& str) {
+        std::string result = str;
+        escape_inplace(result);
+        return result;
+    }
+
+    std::string indent(const std::string& str, bool indent_first_line, std::string prefix) {
+        std::stringstream indented;
+        std::vector<std::string> lines = split(str, "\n");
+        for (unsigned line_index = 0; line_index < lines.size(); line_index++) {
+            if (indent_first_line || line_index > 0)
+                indented << prefix;
+            indented << lines[line_index];
+            if (line_index < lines.size() - 1)
+                indented << "\n";
+        }
+
+        return indented.str();
     }
 }

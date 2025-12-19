@@ -28,7 +28,8 @@ namespace toycc {
         public:
             Parser(std::istream& code, SourceMap source_map);
 
-            std::string to_tree_string();
+            std::string to_lisp();
+            std::string to_json();
 
         private:
             SourceMap source_map;
