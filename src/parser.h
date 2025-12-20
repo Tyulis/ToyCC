@@ -29,15 +29,16 @@ namespace toycc {
             Parser(std::istream& code, SourceMap source_map);
 
             std::string to_lisp();
-            std::string to_json();
+            std::string to_xml();
+            std::string to_ir();
 
         private:
             SourceMap source_map;
             ErrorHandler error_handler;
 
             antlr4::ANTLRInputStream input;
-            parser::CLexer lexer;
+            CLexer lexer;
             antlr4::CommonTokenStream tokens;
-            parser::CParser parser;
+            CParser parser;
     };
 }

@@ -167,8 +167,8 @@ constantExpression
     ;
 
 declaration
-    : declarationSpecifiers initDeclaratorList? ';'
-    | staticAssertDeclaration
+    : declarationSpecifiers initDeclaratorList? ';'  #declarationDeclaration
+    | staticAssertDeclaration                        #declarationStaticAssert
     ;
 
 declarationSpecifiers
@@ -506,7 +506,7 @@ translationUnit
 externalDeclaration
     : functionDefinition
     | declaration
-    | ';' // stray ;
+    | ';'
     ;
 
 functionDefinition

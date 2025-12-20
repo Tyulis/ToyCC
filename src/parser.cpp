@@ -1,12 +1,14 @@
 #include <format>
 #include <string>
 
+#include "ParseTreeWalker.h"
 #include "Recognizer.h"
 #include "Token.h"
 
 #include "parser.h"
-#include "json_output.h"
+#include "xml_output.h"
 #include "diagnostic.h"
+#include "ir_generator.h"
 #include "util/strings.h"
 
 namespace toycc {
@@ -38,19 +40,28 @@ namespace toycc {
     }
 
     std::string Parser::to_lisp() {
-        toycc::parser::CParser::CompilationUnitContext* unit = parser.compilationUnit();
+        toycc::CParser::CompilationUnitContext* unit = parser.compilationUnit();
         const std::string tree_lisp = unit->toStringTree(true);
 
         error_handler.check();
         return tree_lisp;
     }
 
-    std::string Parser::to_json() {
-        toycc::parser::CParser::CompilationUnitContext* unit = parser.compilationUnit();
-        JSONOutputVisitor visitor;
-        const std::string tree_json = std::any_cast<std::string>(visitor.visit(unit));
+    std::string Parser::to_xml() {
+        toycc::CParser::CompilationUnitContext* unit = parser.compilationUnit();
+        XMLOutput listener(&parser);
+        antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, unit);
 
         error_handler.check();
-        return tree_json;
+        return listener.result();
+    }
+
+    std::string Parser::to_ir() {
+        toycc::CParser::CompilationUnitContext* unit = parser.compilationUnit();
+        IRGenerator listener(source_map);
+        antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, unit);
+
+        error_handler.check();
+        return "";
     }
 }

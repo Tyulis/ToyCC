@@ -129,6 +129,29 @@ namespace toycc {
         return result;
     }
 
+    std::string& xml_escape_inplace(std::string& str) {
+        to_printable_inplace(str);
+        size_t position = 0;
+        while (position < str.length()) {
+            switch (str[position]) {
+                case '"':  str.replace(position, position + 1, "&quot;");  position += 6;  break;
+                case '&':  str.replace(position, position + 1, "&amp;");   position += 5;  break;
+                case '\'': str.replace(position, position + 1, "&apos;");  position += 6;  break;
+                case '<':  str.replace(position, position + 1, "&lt;");    position += 4;  break;
+                case '>':  str.replace(position, position + 1, "&gt;");    position += 4;  break;
+                default:                                                   position += 1;  break;
+            }
+        }
+
+        return str;
+    }
+
+    std::string xml_escape(const std::string& str) {
+        std::string result = str;
+        xml_escape_inplace(result);
+        return result;
+    }
+
     std::string indent(const std::string& str, bool indent_first_line, std::string prefix) {
         std::stringstream indented;
         std::vector<std::string> lines = split(str, "\n");

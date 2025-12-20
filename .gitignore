@@ -41,3 +41,4 @@ src/parser/
 # Project files
 compile_commands.json
 .kateproject.*
+*.kate-swp

@@ -26,5 +26,8 @@ namespace toycc {
     std::string& escape_inplace(std::string& str);
     std::string escape(const std::string& str);
 
+    std::string& xml_escape_inplace(std::string& str);
+    std::string xml_escape(const std::string& str);
+
     std::string indent(const std::string& str, bool indent_first_line=true, std::string prefix="\t");
 }

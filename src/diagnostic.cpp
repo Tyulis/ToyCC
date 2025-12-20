@@ -1,12 +1,32 @@
 #include <format>
 #include <string>
 #include <fstream>
+#include <sstream>
 
 #include "diagnostic.h"
+#include "util/strings.h"
 
 namespace toycc {
     Diagnostic::Diagnostic(Level level, std::string base_message, std::optional<std::string> filename, std::optional<size_t> line, std::optional<size_t> character)
         : _level(level), _base_message(base_message), _filename(filename), _line(line), _character(character) {}
+
+    Diagnostic::Diagnostic(Level level, std::string base_message, CodeLocation location)
+        : _level(level), _base_message(base_message), _filename(location.filename), _line(location.line), _character(location.character) {}
+
+    Diagnostic& Diagnostic::add_note(Diagnostic note) {
+        notes.push_back(note);
+        return *this;
+    }
+
+    Diagnostic& Diagnostic::add_note(Level level, std::string base_message, std::optional<std::string> filename, std::optional<size_t> line, std::optional<size_t> character) {
+        notes.emplace_back(level, base_message, filename, line, character);
+        return *this;
+    }
+
+    Diagnostic& Diagnostic::add_note(Level level, std::string base_message, CodeLocation location) {
+        notes.emplace_back(level, base_message, location);
+        return *this;
+    }
 
     Diagnostic::Level          Diagnostic::level()        const { return _level;        }
     std::string                Diagnostic::base_message() const { return _base_message; }
@@ -39,7 +59,7 @@ namespace toycc {
         return *this;
     }
 
-    std::string Diagnostic::message() const {
+    std::string Diagnostic::own_message() const {
         std::string level_text;
         switch (_level) {
             case Level::DEBUG:           level_text = "DEBUG";           break;
@@ -47,6 +67,7 @@ namespace toycc {
             case Level::WARNING:         level_text = "WARNING";         break;
             case Level::ERROR:           level_text = "ERROR";           break;
             case Level::INTERNAL_ERROR:  level_text = "INTERNAL_ERROR";  break;
+            case Level::NOT_IMPLEMENTED: level_text = "NOT_IMPLEMENTED"; break;
         }
 
         if (!_filename.has_value() && !_line.has_value()) {  // No location information -> don't print it'
@@ -81,6 +102,14 @@ namespace toycc {
         message += "^";
 
         return message;
+    }
+
+    std::string Diagnostic::message() const {
+        std::stringstream full_message;
+        full_message << own_message();
+        for (const Diagnostic& note : notes)
+            full_message << "\n" << indent(note.message());
+        return full_message.str();
     }
 
     std::ostream& operator<< (std::ostream& stream, Diagnostic diagnostic) {
