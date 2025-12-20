@@ -7,7 +7,7 @@ namespace toycc {
     template <typename T> requires(std::is_scoped_enum<T>::value)
     class Flags {
         private:
-            T value = 0;
+            T value = static_cast<T>(0);
 
         public:
             constexpr Flags() = default;

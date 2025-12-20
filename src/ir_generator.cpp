@@ -82,7 +82,8 @@ namespace toycc {
             target << specifier->getText();  // FIXME
         }
 
-        scope_stack.back()->typedefs[name] = std::make_shared<ir::Typedef>(name, location, target.str());
+        ir::TypeSpecification spec;
+        scope_stack.back()->typedefs[name] = std::make_shared<ir::Typedef>(name, location, spec, target.str());
     }
 
     // ------------ Internals

@@ -41,9 +41,10 @@ namespace toycc {
     SourceMap::SourceMap(std::istream& code, std::ostream& stripped_code) {
         std::string preprocessed_line;
         size_t preprocessed_line_number = 1;
+        size_t preprocessed_lines_since_last_marker = 0;
 
         LineMarker last_marker;
-        size_t stripped_lines_since_last_marker = 0;
+
 
         while (!code.eof()) {
             std::getline(code, preprocessed_line);
@@ -51,28 +52,28 @@ namespace toycc {
             std::string stripped_line = trim(preprocessed_line);
 
             if (stripped_line.empty()) {
-                // Skip
+                preprocessed_lines_since_last_marker += 1;  // Skip
             } else if (stripped_line[0] == '#' && !stripped_line.substr(stripped_line.find_first_not_of("#" + WHITESPACE)).starts_with("pragma")) {
                 try {
                     last_marker = LineMarker(stripped_line);
-                    stripped_lines_since_last_marker = 0;
+                    preprocessed_lines_since_last_marker = 0;
                 } catch (Diagnostic& diagnostic) {
                     diagnostic.line(preprocessed_line_number);
                     throw diagnostic;
                 }
             } else {
-                positions.push_back(last_marker.position(stripped_lines_since_last_marker));
+                positions.push_back(last_marker.position(preprocessed_lines_since_last_marker));
                 stripped_code << preprocessed_line << "\n";  // Keep the leading whitespace in the parsed line, so the character positions stay consistent with the source code
-                stripped_lines_since_last_marker += 1;
+                preprocessed_lines_since_last_marker += 1;
             }
             preprocessed_line_number += 1;
         }
     }
 
     LinePosition SourceMap::at(unsigned stripped_line) const {
-        if (stripped_line >= positions.size())
-            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Attempted to access non-existing stripped line {}/{}", stripped_line+1, positions.size()));
-        return positions.at(stripped_line);
+        if (stripped_line == 0 || stripped_line >= positions.size())
+            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Attempted to access non-existing stripped line {}/{}", stripped_line, positions.size()));
+        return positions.at(stripped_line - 1);
     }
 
     void SourceMap::annotate(std::istream& stripped_code, std::ostream& annotated_code) const {

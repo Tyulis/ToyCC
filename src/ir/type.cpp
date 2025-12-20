@@ -18,15 +18,18 @@ namespace toycc::ir {
 
 
     size_t QualifiedType::size() const {
-        if (pointer_level > 0)
+        if (spec.pointer_level > 0)
             return POINTER_SIZE;
 
+        size_t array_length = 1;
+        for (size_t dimension : spec.array_spec)
+            array_length *= dimension;
         return array_length * base_type->size();
     }
 
     size_t QualifiedType::alignment() const {
-        if (custom_alignment.has_value())
-            return custom_alignment.value();
+        if (spec.custom_alignment.has_value())
+            return spec.custom_alignment.value();
         else
             return base_type->alignment();
     }
