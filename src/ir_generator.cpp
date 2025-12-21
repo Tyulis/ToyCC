@@ -1,5 +1,6 @@
 #include "diagnostic.h"
 #include "ir_generator.h"
+#include "ir/declaration.h"
 #include "ir/type.h"
 #include "arch/x86_64.h"
 
@@ -27,66 +28,296 @@ namespace toycc {
         global_scope->types["double"]                 = make_primitive_type("double",                 true,  ir::PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT);
         global_scope->types["long double"]            = make_primitive_type("long double",            true,  ir::PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT);
 
-        // Aliases to the primitive types
-        global_scope->types["char"] = global_scope->types["signed char"];
-        global_scope->types["short"] = global_scope->types["signed short int"];
-        global_scope->types["short int"] = global_scope->types["signed short int"];
-        global_scope->types["signed short"] = global_scope->types["signed short int"];
-        global_scope->types["unsigned short"] = global_scope->types["unsigned short int"];
-        global_scope->types["int"] = global_scope->types["signed int"];
-        global_scope->types["signed"] = global_scope->types["signed int"];
-        global_scope->types["unsigned"] = global_scope->types["unsigned int"];
-        global_scope->types["long"] = global_scope->types["signed long int"];
-        global_scope->types["long int"] = global_scope->types["signed long int"];
-        global_scope->types["signed long"] = global_scope->types["signed long int"];
-        global_scope->types["unsigned long"] = global_scope->types["unsigned long int"];
-        global_scope->types["long long"] = global_scope->types["signed long long int"];
-        global_scope->types["long long int"] = global_scope->types["signed long long int"];
-        global_scope->types["signed long long"] = global_scope->types["signed long long int"];
-        global_scope->types["unsigned long long"] = global_scope->types["unsigned long long int"];
-
         scope_stack.push_back(global_scope);
     }
 
     // ------------ Listener
 
     void IRGenerator::exitDeclarationDeclaration(CParser::DeclarationDeclarationContext* context) {
-        std::vector<CParser::DeclarationSpecifierContext*> specifiers = context->declarationSpecifiers()->declarationSpecifier();
-        if (specifiers[0]->storageClassSpecifier() && specifiers[0]->storageClassSpecifier()->Typedef())
-            return register_typedef(context);
-
-        throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, std::format("Unsupported declaration"), get_location(context));
+        decode_declaration(context);
     }
 
 
     // ------------ IR generation functions
-    void IRGenerator::register_typedef(CParser::DeclarationDeclarationContext* context) {
-        CodeLocation location = get_location(context);
-        std::vector<CParser::DeclarationSpecifierContext*> specifiers = context->declarationSpecifiers()->declarationSpecifier();
 
-        if (!specifiers.front()->storageClassSpecifier() || !specifiers.front()->storageClassSpecifier()->Typedef())
-            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "Typedef declaration doesn't start with the `typedef` specifier", location);
-        specifiers.erase(specifiers.begin());
+    // Decode a declaration and push it to the current scope
+    void IRGenerator::decode_declaration(CParser::DeclarationDeclarationContext* context) {
+        ir::Declaration base_declaration;
+        decode_declaration_specifier(base_declaration, context->declarationSpecifiers());
 
-        if (!specifiers.back()->typeSpecifier() || !specifiers.back()->typeSpecifier()->typedefName())
-            throw Diagnostic(Diagnostic::Level::ERROR, "The last specifier in a typedef declaration must be an identifier", location);
-
-        std::string name = specifiers.back()->typeSpecifier()->typedefName()->Identifier()->getText();
-        specifiers.pop_back();
-
-        std::stringstream target;
-        for (CParser::DeclarationSpecifierContext* specifier : specifiers) {
-            if (!specifier->typeSpecifier())
-                throw Diagnostic(Diagnostic::Level::ERROR, std::format("Specifier `{}` is forbidden in a typedef declaration", specifier->getText()), location);
-
-            target << specifier->getText();  // FIXME
+        // First, only process the declarations
+        std::vector<ir::Declaration> declarations;
+        if (context->initDeclaratorList()) {
+            for (CParser::InitDeclaratorContext* declarator : context->initDeclaratorList()->initDeclarator()) {
+                declarations.push_back(base_declaration);
+                decode_declarator(declarations.back(), declarator->declarator());
+            }
+        } else {
+            declarations.push_back(base_declaration);
         }
 
-        ir::TypeSpecification spec;
-        scope_stack.back()->typedefs[name] = std::make_shared<ir::Typedef>(name, location, spec, target.str());
+        for (const ir::Declaration& declaration : declarations) {
+            declaration.check(false);
+
+            std::optional<CodeLocation> duplicate = get_name_location(declaration.name, true);
+            if (duplicate.has_value())
+                throw Diagnostic(Diagnostic::Level::ERROR, std::format("Attempted to redefine `{}`", declaration.name), declaration.location)
+                       .add_note(Diagnostic::Level::NOTE,  "Previously defined here", duplicate.value());
+
+            if (declaration.storage & ir::StorageClass::TYPEDEF)
+                current_scope()->typedefs[declaration.name] = std::make_shared<ir::Declaration>(declaration);
+            else
+                current_scope()->locals[declaration.name] = std::make_shared<ir::Declaration>(declaration);
+        }
+
+        // Then the initializations
+        if (context->initDeclaratorList()) {
+            for (unsigned decl_index = 0; decl_index < declarations.size(); decl_index++) {
+                const ir::Declaration& declaration = declarations[decl_index];
+                CParser::InitDeclaratorContext* declarator = context->initDeclaratorList()->initDeclarator()[decl_index];
+                if (declarator->initializer()) {
+                    if (declaration.storage & ir::StorageClass::TYPEDEF)
+                        throw Diagnostic(Diagnostic::Level::ERROR, "Initializers are not allowed in typedef declarations", get_location(declarator->initializer()));
+                    throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Implement initializers here");
+                }
+            }
+        }
+    }
+
+    void IRGenerator::decode_declaration_specifier(ir::Declaration& declaration, CParser::DeclarationSpecifiersContext* context) {
+        std::vector<CParser::DeclarationSpecifierContext*> specifiers = context->declarationSpecifier();
+        std::vector<CParser::TypeSpecifierContext*> type_specifiers;
+        for (CParser::DeclarationSpecifierContext* specifier : specifiers) {
+            if (specifier->storageClassSpecifier())
+                declaration.storage |= decode_storage_class(specifier->storageClassSpecifier());
+            else if (specifier->typeSpecifier())
+                type_specifiers.push_back(specifier->typeSpecifier());
+            else if (specifier->typeQualifier())
+                declaration.spec.qualifiers |= decode_type_qualifier(specifier->typeQualifier());
+            else if (specifier->functionSpecifier())
+                declaration.spec.function_spec |= decode_function_specifier(specifier->functionSpecifier());
+            else if (specifier->alignmentSpecifier())
+                declaration.spec.custom_alignment = resolve_alignment_specifier(specifier->alignmentSpecifier());
+            else
+                throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown declaration specifier `{}`", specifier->getText()), get_location(context));
+        }
+
+        // In typedefs like `unsigned int my_type_t`, everything is in the type specifiers, which is otherwise invalid - split those
+        if (declaration.storage & ir::StorageClass::TYPEDEF && type_specifiers.back()->typedefName()) {
+            declaration.name = type_specifiers.back()->typedefName()->Identifier()->getText();
+            type_specifiers.pop_back();
+        }
+
+        declaration.spec.type = decode_type_specifier(type_specifiers);
+        declaration.check(false);
+    }
+
+    Flags<ir::StorageClass> IRGenerator::decode_storage_class(CParser::StorageClassSpecifierContext* context) {
+        if      (context->Typedef())      return ir::StorageClass::TYPEDEF;
+        else if (context->Extern())       return ir::StorageClass::EXTERN;
+        else if (context->Static())       return ir::StorageClass::STATIC;
+        else if (context->ThreadLocal())  return ir::StorageClass::THREAD_LOCAL;
+        else if (context->Auto())         return ir::StorageClass::AUTO;
+        else if (context->Register())     return ir::StorageClass::REGISTER;
+        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown storage class `{}`", context->getText()), get_location(context));
+    }
+
+    Flags<ir::TypeQualifier> IRGenerator::decode_type_qualifier_list(CParser::TypeQualifierListContext* context) {
+        Flags<ir::TypeQualifier> qualifiers;
+        for (CParser::TypeQualifierContext* qualifier : context->typeQualifier())
+            qualifiers |= decode_type_qualifier(qualifier);
+        return qualifiers;
+    }
+
+    Flags<ir::TypeQualifier> IRGenerator::decode_type_qualifier(CParser::TypeQualifierContext* context) {
+        if      (context->Const())     return ir::TypeQualifier::CONST;
+        else if (context->Restrict())  return ir::TypeQualifier::RESTRICT;
+        else if (context->Volatile())  return ir::TypeQualifier::VOLATILE;
+        else if (context->Atomic())    return ir::TypeQualifier::ATOMIC;
+        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown type qualifier `{}`", context->getText()), get_location(context));
+    }
+
+    Flags<ir::FunctionSpecifier> IRGenerator::decode_function_specifier(CParser::FunctionSpecifierContext* context) {
+        if      (context->Inline())    return ir::FunctionSpecifier::INLINE;
+        else if (context->Noreturn())  return ir::FunctionSpecifier::NORETURN;
+        else if (context->gccAttributeSpecifier()) return {};  // Skip
+        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown function specifier `{}`", context->getText()), get_location(context));
+    }
+
+    size_t IRGenerator::resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context) {
+        throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Alignment specifiers are not implemented", get_location(context));
+    }
+
+    // Decode a type specifier, push eventual anonymous struct/enum/union declarations to the current scope and return the type name
+    // Don't check whether non-primitive named types exists
+    std::string IRGenerator::decode_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
+        if (type_specifiers.empty())
+            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "Empty type specifier list");
+
+        const CodeLocation base_location = get_location(type_specifiers[0]);
+
+        std::optional<std::string> sign_token;
+        std::multiset<std::string> primitive_type_tokens;
+        std::optional<std::string> typedef_token;
+
+        for (CParser::TypeSpecifierContext* specifier : type_specifiers) {
+            const std::string token = specifier->getText();
+            const CodeLocation location = get_location(specifier);
+
+            if (specifier->Void() || specifier->Char() || specifier->Bool() || specifier->Float() || specifier->Short() || specifier->Int() || specifier->Double() || specifier->Long()) {
+                primitive_type_tokens.insert(token);
+            } else if (specifier->Signed() || specifier->Unsigned()) {
+                if (sign_token.has_value())
+                    throw Diagnostic(Diagnostic::Level::ERROR, "Declaration can't have more than one sign specifier", location);
+                sign_token = token;
+            } else if (specifier->typedefName()) {
+                typedef_token = token;
+            }
+            else if (specifier->Complex())                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complex types are unsupported",                get_location(specifier));
+            else if (specifier->atomicTypeSpecifier())    throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Atomic type specifiers are unsupported",       get_location(specifier));
+            else if (specifier->structOrUnionSpecifier()) throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Struct or union declarations are unsupported", get_location(specifier));
+            else if (specifier->enumSpecifier())          throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Enums are unsupported",                        get_location(specifier));
+            else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown type specifier `{}`", specifier->getText()), get_location(specifier));
+        }
+
+        if (!typedef_token.has_value() && !sign_token.has_value() && primitive_type_tokens.empty())
+            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "No valid type specifier found", base_location);
+
+        if (typedef_token.has_value()) {
+            if (sign_token.has_value() || !primitive_type_tokens.empty())
+                throw Diagnostic(Diagnostic::Level::ERROR, "Non-primitive type name can't have primitive type specifiers", base_location);
+            return typedef_token.value();
+        }
+
+        // ---- Now resolve primitive types. From now on `typedef_token` is empty
+
+        // Void and bool are always alone
+        if (primitive_type_tokens.contains("_Bool") || primitive_type_tokens.contains("void")) {
+            if (primitive_type_tokens.size() > 1 || sign_token.has_value())
+                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive types _Bool and void can't have other type specifiers", base_location);
+            return *primitive_type_tokens.begin();
+        }
+
+        // Floating-point types
+        if (primitive_type_tokens.contains("float") || primitive_type_tokens.contains("double")) {
+            if (sign_token.has_value())
+                throw Diagnostic(Diagnostic::Level::ERROR, "Floating-point type can't have a sign specifier", base_location);
+
+            if (primitive_type_tokens.contains("float")) {
+                if (primitive_type_tokens.size() > 1)
+                    throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `float` can't have any other type specifiers", base_location);
+                return "float";
+            }
+
+            // From now on, only double remains
+            if (primitive_type_tokens.contains("long") && primitive_type_tokens.size() == 2)
+                return "long double";
+            else if (primitive_type_tokens.size() == 1)
+                return "double";
+            else
+                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `double` can't have any type specifiers other than `long`", base_location);
+        }
+
+        // From now on, only integer types remain and sign_token has a value
+        // signed / unsigned without a type -> implied int; type without a sign qualifier -> implied signed
+        if (sign_token.has_value() && primitive_type_tokens.empty())
+            primitive_type_tokens.insert("int");
+        else if (!sign_token.has_value() && !primitive_type_tokens.empty())
+            sign_token = "signed";
+
+        if (primitive_type_tokens.count("int") > 1)
+            throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type can't specify `int` more than once", base_location);
+
+        if (primitive_type_tokens.contains("char")) {
+            if (primitive_type_tokens.size() > 1)
+                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `char` can't have type specifiers other than `signed`/`unsigned`", base_location);
+            return std::format("{} char", sign_token.value());
+        }
+
+        // From now on, only short, int and long remain
+        if (primitive_type_tokens.contains("short")) {
+            if (primitive_type_tokens.contains("long"))
+                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `short` can't also be `long`", base_location);
+            return std::format("{} short int", sign_token.value());
+        }
+
+        // From now on, only long and int remain
+        const size_t nof_longs = primitive_type_tokens.count("long");
+        switch (nof_longs) {
+            case 0:  return std::format("{} int", sign_token.value());
+            case 1:  return std::format("{} long int", sign_token.value());
+            case 2:  return std::format("{} long long int", sign_token.value());
+            default: throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type specifier `long` can't be given more than twice", base_location);
+        }
+    }
+
+    void IRGenerator::decode_declarator(ir::Declaration& declaration, CParser::DeclaratorContext* context) {
+        if (context->pointer())
+            declaration.spec.pointer_spec = decode_pointer_spec(context->pointer());
+
+        decode_direct_declarator(declaration, context->directDeclarator());
+
+        if (!context->gccDeclaratorExtension().empty())
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", get_location(context));
+    }
+
+    void IRGenerator::decode_direct_declarator(ir::Declaration& declaration, CParser::DirectDeclaratorContext* context) {
+        if (CParser::DirectDeclaratorIdentifierContext::is(context)) {
+            declaration.name = static_cast<CParser::DirectDeclaratorIdentifierContext*>(context)->Identifier()->getText();
+        } else if (CParser::DirectDeclaratorParenthesizedContext::is(context)) {
+            decode_declarator(declaration, static_cast<CParser::DirectDeclaratorParenthesizedContext*>(context)->declarator());
+        } else if (CParser::DirectDeclaratorBitFieldContext::is(context)) {
+            CParser::DirectDeclaratorBitFieldContext* declarator = static_cast<CParser::DirectDeclaratorBitFieldContext*>(context);
+            declaration.name = declarator->Identifier()->getText();
+            declaration.spec.bitfield_length = std::stoll(declarator->DigitSequence()->getText());
+        } else if (CParser::DirectDeclaratorVCExtensionContext::is(context)) {
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "VC declarator extensions are not supported", get_location(context));
+        } else {
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "This type of declarator is not implemented", get_location(context));
+        }
+    }
+
+    void IRGenerator::decode_initializer(ir::Declaration const&, CParser::InitializerContext* context) {
+        throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Initializers are not implemented", get_location(context));
+    }
+
+    std::vector<Flags<ir::TypeQualifier>> IRGenerator::decode_pointer_spec(CParser::PointerContext* context) {
+        std::vector<Flags<ir::TypeQualifier>> pointer_spec(context->pointerLevel().size());
+        for (CParser::PointerLevelContext* level : context->pointerLevel()) {
+            if (level->Caret())
+                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Carets in pointer specification are not supported", get_location(level));
+
+            if (level->typeQualifierList())
+                pointer_spec.push_back(decode_type_qualifier_list(level->typeQualifierList()));
+            else
+                pointer_spec.emplace_back();
+        }
+
+        return pointer_spec;
     }
 
     // ------------ Internals
+    std::shared_ptr<ir::Scope> IRGenerator::current_scope() {
+        return scope_stack.back();
+    }
+
+    std::optional<CodeLocation> IRGenerator::get_name_location(std::string name, bool current_scope_only) {
+        for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
+            std::shared_ptr<ir::Scope> scope = *it;
+            if (scope->types.contains(name))
+                return scope->types.at(name)->location;
+            else if (scope->locals.contains(name))
+                return scope->locals.at(name)->location;
+            else if (scope->typedefs.contains(name))
+                return scope->typedefs.at(name)->location;
+
+            if (current_scope_only)
+                break;
+        }
+
+        return {};
+    }
+
     CodeLocation IRGenerator::get_location(antlr4::ParserRuleContext* context) const {
         antlr4::Token* start_token = context->getStart();
         LinePosition line = source_map.at(start_token->getLine());
@@ -95,41 +326,5 @@ namespace toycc {
 
     std::string IRGenerator::anonymous_identifier() {
         return std::format("<anonymous_{}>", unique_id++);
-    }
-
-    std::shared_ptr<ir::Type> IRGenerator::resolve_type(std::string name) noexcept {
-        for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
-            std::shared_ptr<ir::Scope> scope = *it;
-
-            while (scope->typedefs.contains(name))
-                name = scope->typedefs.at(name)->target;
-
-            if (scope->types.contains(name))
-                return scope->types.at(name);
-        }
-
-        return nullptr;
-    }
-
-    std::shared_ptr<ir::Type> IRGenerator::get_type(std::string name, CodeLocation location) {
-        std::deque<std::shared_ptr<ir::Typedef>> typedef_stack;
-
-        for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
-            std::shared_ptr<ir::Scope> scope = *it;
-
-            while (scope->typedefs.contains(name)) {
-                std::shared_ptr<ir::Typedef> definition = scope->typedefs.at(name);
-                typedef_stack.push_back(definition);
-                name = definition->target;
-            }
-
-            if (scope->types.contains(name))
-                return scope->types.at(name);
-        }
-
-        Diagnostic diagnostic(Diagnostic::Level::ERROR, std::format("Type with name {} is undefined", name), location);
-        for (std::shared_ptr<ir::Typedef> definition : typedef_stack)
-            diagnostic.add_note(Diagnostic::Level::NOTE, std::format("Typedef redirects {} to {}", definition->name, definition->target), definition->location);
-        throw diagnostic;
     }
 }

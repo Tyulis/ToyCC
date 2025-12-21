@@ -44,7 +44,7 @@ add_executable(${PROJECT_NAME}
 	src/source_map.cpp
 	src/xml_output.cpp
 
-	src/ir/compound_type.cpp
+	src/ir/declaration.cpp
 	src/ir/type.cpp
 
 	src/util/strings.cpp

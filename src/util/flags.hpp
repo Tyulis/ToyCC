@@ -33,8 +33,31 @@ namespace toycc {
             constexpr Flags operator& (Flags<T> rhs) const { Flags<T> result = *this;  result &= rhs;  return result; }
             constexpr Flags operator^ (Flags<T> rhs) const { Flags<T> result = *this;  result ^= rhs;  return result; }
 
+            constexpr bool operator== (Flags<T> rhs) const { return std::to_underlying(value) == std::to_underlying(rhs.value); }
+            constexpr bool operator== (T rhs)        const { return std::to_underlying(value) == std::to_underlying(rhs); }
+            constexpr bool operator!= (Flags<T> rhs) const { return std::to_underlying(value) != std::to_underlying(rhs.value); }
+            constexpr bool operator!= (T rhs)        const { return std::to_underlying(value) != std::to_underlying(rhs); }
+
+            constexpr Flags& set(T rhs) {
+                return *this |= rhs;
+            }
+
+            constexpr Flags& clear(T rhs) {
+                value = static_cast<T>(std::to_underlying(value) & ~(std::to_underlying(rhs)));
+                return *this;
+            }
+
+            constexpr Flags without(T rhs) const {
+                return Flags {static_cast<T>(std::to_underlying(value) & ~(std::to_underlying(rhs)))};
+            }
+
             constexpr operator bool() const {
-                return value != 0;
+                return std::to_underlying(value) != 0;
             }
     };
+
+    template <typename T> requires(std::is_scoped_enum<T>::value)
+    Flags<T> operator| (T lhs, T rhs) {
+        return Flags<T> {lhs} | rhs;
+    }
 }

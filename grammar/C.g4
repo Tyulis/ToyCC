@@ -306,17 +306,17 @@ declarator
     ;
 
 directDeclarator
-    : Identifier
-    | '(' declarator ')'
-    | directDeclarator '[' typeQualifierList? assignmentExpression? ']'
-    | directDeclarator '[' 'static' typeQualifierList? assignmentExpression ']'
-    | directDeclarator '[' typeQualifierList 'static' assignmentExpression ']'
-    | directDeclarator '[' typeQualifierList? '*' ']'
-    | directDeclarator '(' parameterTypeList ')'
-    | directDeclarator '(' identifierList? ')'
-    | Identifier ':' DigitSequence         // bit field
-    | vcSpecificModifier Identifier         // Visual C Extension
-    | '(' vcSpecificModifier declarator ')' // Visual C Extension
+    : Identifier                                                                # directDeclaratorIdentifier
+    | '(' declarator ')'                                                        # directDeclaratorParenthesized
+    | directDeclarator '[' typeQualifierList? assignmentExpression? ']'         # directDeclaratorArray
+    | directDeclarator '[' 'static' typeQualifierList? assignmentExpression ']' # directDeclaratorArrayWithSizeDecl
+    | directDeclarator '[' typeQualifierList 'static' assignmentExpression ']'  # directDeclaratorArrayWithSizeDecl
+    | directDeclarator '[' typeQualifierList? '*' ']'                           # directDeclaratorUnspecifiedVLA
+    | directDeclarator '(' parameterTypeList ')'                                # directDeclaratorFunction
+    | directDeclarator '(' identifierList? ')'                                  # directDeclaratorFunctionIdentifiers
+    | Identifier ':' DigitSequence                                              # directDeclaratorBitField
+    | vcSpecificModifier Identifier                                             # directDeclaratorVCExtension
+    | '(' vcSpecificModifier declarator ')'                                     # directDeclaratorVCExtension
     ;
 
 vcSpecificModifier
@@ -347,7 +347,11 @@ gccAttribute
     ;
 
 pointer
-    : (('*' | '^') typeQualifierList?)+ // ^ - Blocks language extension
+    : pointerLevel+
+    ;
+
+pointerLevel
+    : ('*' | '^') typeQualifierList?  // ^ - Blocks language extension
     ;
 
 typeQualifierList
