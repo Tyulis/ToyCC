@@ -150,7 +150,7 @@ namespace toycc {
 
     // Decode a type specifier, push eventual anonymous struct/enum/union declarations to the current scope and return the type name
     // Don't check whether non-primitive named types exists
-    std::string IRGenerator::decode_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
+    ir::TypeIdentifier IRGenerator::decode_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
         if (type_specifiers.empty())
             throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "Empty type specifier list");
 
@@ -158,7 +158,7 @@ namespace toycc {
 
         std::optional<std::string> sign_token;
         std::multiset<std::string> primitive_type_tokens;
-        std::optional<std::string> typedef_token;
+        std::optional<ir::TypeIdentifier> identifier;
 
         for (CParser::TypeSpecifierContext* specifier : type_specifiers) {
             const std::string token = specifier->getText();
@@ -171,22 +171,26 @@ namespace toycc {
                     throw Diagnostic(Diagnostic::Level::ERROR, "Declaration can't have more than one sign specifier", location);
                 sign_token = token;
             } else if (specifier->typedefName()) {
-                typedef_token = token;
+                if (identifier.has_value())
+                    throw Diagnostic(Diagnostic::Level::ERROR, "Non-primitive types can't have more than one identifier", location);
+                identifier = ir::TypeIdentifier {.category = ir::TypeCategory::TYPEDEF, .name = token};
             }
             else if (specifier->Complex())                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complex types are unsupported",                get_location(specifier));
             else if (specifier->atomicTypeSpecifier())    throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Atomic type specifiers are unsupported",       get_location(specifier));
-            else if (specifier->structOrUnionSpecifier()) throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Struct or union declarations are unsupported", get_location(specifier));
+            else if (specifier->structOrUnionSpecifier()) {
+                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Struct or union declarations are unsupported", get_location(specifier));
+            }
             else if (specifier->enumSpecifier())          throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Enums are unsupported",                        get_location(specifier));
             else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown type specifier `{}`", specifier->getText()), get_location(specifier));
         }
 
-        if (!typedef_token.has_value() && !sign_token.has_value() && primitive_type_tokens.empty())
+        if (!identifier.has_value() && !sign_token.has_value() && primitive_type_tokens.empty())
             throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "No valid type specifier found", base_location);
 
-        if (typedef_token.has_value()) {
+        if (identifier.has_value()) {
             if (sign_token.has_value() || !primitive_type_tokens.empty())
                 throw Diagnostic(Diagnostic::Level::ERROR, "Non-primitive type name can't have primitive type specifiers", base_location);
-            return typedef_token.value();
+            return identifier.value();
         }
 
         // ---- Now resolve primitive types. From now on `typedef_token` is empty
@@ -195,7 +199,7 @@ namespace toycc {
         if (primitive_type_tokens.contains("_Bool") || primitive_type_tokens.contains("void")) {
             if (primitive_type_tokens.size() > 1 || sign_token.has_value())
                 throw Diagnostic(Diagnostic::Level::ERROR, "Primitive types _Bool and void can't have other type specifiers", base_location);
-            return *primitive_type_tokens.begin();
+            return {ir::TypeCategory::PRIMITIVE, *primitive_type_tokens.begin()};
         }
 
         // Floating-point types
@@ -206,14 +210,14 @@ namespace toycc {
             if (primitive_type_tokens.contains("float")) {
                 if (primitive_type_tokens.size() > 1)
                     throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `float` can't have any other type specifiers", base_location);
-                return "float";
+                return {ir::TypeCategory::PRIMITIVE, "float"};
             }
 
             // From now on, only double remains
             if (primitive_type_tokens.contains("long") && primitive_type_tokens.size() == 2)
-                return "long double";
+                return {ir::TypeCategory::PRIMITIVE, "long double"};
             else if (primitive_type_tokens.size() == 1)
-                return "double";
+                return {ir::TypeCategory::PRIMITIVE, "double"};
             else
                 throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `double` can't have any type specifiers other than `long`", base_location);
         }
@@ -231,22 +235,22 @@ namespace toycc {
         if (primitive_type_tokens.contains("char")) {
             if (primitive_type_tokens.size() > 1)
                 throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `char` can't have type specifiers other than `signed`/`unsigned`", base_location);
-            return std::format("{} char", sign_token.value());
+            return {ir::TypeCategory::PRIMITIVE, std::format("{} char", sign_token.value())};
         }
 
         // From now on, only short, int and long remain
         if (primitive_type_tokens.contains("short")) {
             if (primitive_type_tokens.contains("long"))
                 throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `short` can't also be `long`", base_location);
-            return std::format("{} short int", sign_token.value());
+            return {ir::TypeCategory::PRIMITIVE, std::format("{} short int", sign_token.value())};
         }
 
         // From now on, only long and int remain
         const size_t nof_longs = primitive_type_tokens.count("long");
         switch (nof_longs) {
-            case 0:  return std::format("{} int", sign_token.value());
-            case 1:  return std::format("{} long int", sign_token.value());
-            case 2:  return std::format("{} long long int", sign_token.value());
+            case 0:  return {ir::TypeCategory::PRIMITIVE, std::format("{} int", sign_token.value())};
+            case 1:  return {ir::TypeCategory::PRIMITIVE, std::format("{} long int", sign_token.value())};
+            case 2:  return {ir::TypeCategory::PRIMITIVE, std::format("{} long long int", sign_token.value())};
             default: throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type specifier `long` can't be given more than twice", base_location);
         }
     }
@@ -310,6 +314,7 @@ namespace toycc {
                 return scope->locals.at(name)->location;
             else if (scope->typedefs.contains(name))
                 return scope->typedefs.at(name)->location;
+            // Structs, unions and enums aren't single names, they have `struct` / `union` / `enum` in front
 
             if (current_scope_only)
                 break;

@@ -6,7 +6,7 @@
 namespace toycc::ir {
     // Throw diagnostics if the specifications's semantics are inconsistent
     void TypeSpecification::check(bool in_struct, CodeLocation location) const {
-        if (type.empty())
+        if (type.name.empty())
             throw Diagnostic(Diagnostic::Level::ERROR, "No base type name in declaration", location);
         if (!in_struct && bitfield_length.has_value())
             throw Diagnostic(Diagnostic::Level::ERROR, "Bitfield types can't appear outside of structure declarations", location);

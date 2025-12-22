@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "code_location.h"
+#include "ir/type.h"
 #include "util/flags.hpp"
 
 namespace toycc::ir {
@@ -37,7 +38,7 @@ namespace toycc::ir {
     };
 
     struct TypeSpecification {
-        std::string type;
+        TypeIdentifier type;
         Flags<TypeQualifier> qualifiers;
         std::vector<Flags<TypeQualifier>> pointer_spec;
         std::vector<size_t> array_spec;
