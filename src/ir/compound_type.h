@@ -15,19 +15,13 @@ namespace toycc::ir {
         TypeSpecification spec;
     };
 
-    struct Struct : public Type {
+    struct CompoundType : public Type {  // Struct or union
         std::vector<StructMember> members;
         std::optional<size_t> struct_alignment;
+        bool is_complete = false;
 
-        Struct() = default;
-        Struct(std::string name, CodeLocation location);
-    };
-
-    struct Union : public Type {
-        std::vector<StructMember> members;
-
-        Union() = default;
-        Union(std::string name, CodeLocation location);
+        CompoundType() = default;
+        CompoundType(TypeIdentifier identifier, CodeLocation location);
     };
 
     struct Enum : public Type {

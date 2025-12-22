@@ -11,8 +11,8 @@
 namespace toycc::ir {
     struct Scope {
         std::vector<std::shared_ptr<Statement>> statements;
-        std::map<std::string, std::shared_ptr<Type>> types;
-        std::map<std::string, std::shared_ptr<Declaration>>   locals;
-        std::map<std::string, std::shared_ptr<Declaration>>   typedefs;
+        std::map<ir::TypeIdentifier, std::shared_ptr<Type>> types;
+        std::map<std::string, std::shared_ptr<Declaration>> locals;
+        std::map<std::string, std::shared_ptr<Declaration>> typedefs;
     };
 }

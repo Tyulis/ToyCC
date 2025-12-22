@@ -6,12 +6,15 @@
 
 namespace toycc::ir {
     enum class TypeCategory {
-        PRIMITIVE, TYPEDEF, STRUCT, UNION, ENUM,
+        PRIMITIVE, TYPEDEF, STRUCT, UNION, ENUM, BUILTIN,
     };
 
     struct TypeIdentifier {
         TypeCategory category;
         std::string name;
+
+        std::string text() const;
+        bool operator< (TypeIdentifier rhs) const;
     };
 
     struct Type {

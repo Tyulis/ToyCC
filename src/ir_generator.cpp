@@ -1,34 +1,51 @@
 #include "diagnostic.h"
 #include "ir_generator.h"
-#include "ir/declaration.h"
 #include "ir/type.h"
+#include "ir/declaration.h"
+#include "ir/compound_type.h"
 #include "arch/x86_64.h"
 
 namespace toycc {
-    static inline std::shared_ptr<ir::PrimitiveType> make_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment) {
-        return std::make_shared<ir::PrimitiveType> (name, is_signed, semantic, size, alignment);
+    void IRGenerator::add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment) {
+        ir::TypeIdentifier identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = name};
+        current_scope()->types[identifier] = std::make_shared<ir::PrimitiveType>(name, is_signed, semantic, size, alignment);
     }
 
-    IRGenerator::IRGenerator(const SourceMap& source_map) : source_map(source_map), global_scope(std::make_shared<ir::Scope>()) {
-        // Initialize the global scope
-        using namespace toycc::arch;
-        global_scope->types["void"]                   = make_primitive_type("void",                   false, ir::PrimitiveSemantic::VOID,    0,                0);
-        global_scope->types["_Bool"]                  = make_primitive_type("_Bool",                  false, ir::PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT);
-        global_scope->types["signed char"]            = make_primitive_type("signed char",            true,  ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
-        global_scope->types["unsigned char"]          = make_primitive_type("unsigned char",          false, ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
-        global_scope->types["signed short int"]       = make_primitive_type("signed short int",       true,  ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
-        global_scope->types["unsigned short int"]     = make_primitive_type("unsigned short int",     false, ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
-        global_scope->types["signed int"]             = make_primitive_type("signed int",             true,  ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
-        global_scope->types["unsigned int"]           = make_primitive_type("unsigned int",           false, ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
-        global_scope->types["signed long int"]        = make_primitive_type("signed long int",        true,  ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
-        global_scope->types["unsigned long int"]      = make_primitive_type("unsigned long int",      false, ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
-        global_scope->types["signed long long int"]   = make_primitive_type("signed long long int",   false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
-        global_scope->types["unsigned long long int"] = make_primitive_type("unsigned long long int", false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
-        global_scope->types["float"]                  = make_primitive_type("float",                  true,  ir::PrimitiveSemantic::FLOAT,   FLOAT_SIZE,       FLOAT_ALIGNMENT);
-        global_scope->types["double"]                 = make_primitive_type("double",                 true,  ir::PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT);
-        global_scope->types["long double"]            = make_primitive_type("long double",            true,  ir::PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT);
+    void IRGenerator::add_builtin_type(std::string name) {
+        ir::TypeIdentifier identifier = {.category = ir::TypeCategory::BUILTIN, .name = name};
+        CodeLocation location = {.filename = "<built-in>", .line = 1, .character = 1};
+        std::shared_ptr<ir::Type> type_decl = std::make_shared<ir::Type> (identifier, location);
+        current_scope()->types[identifier] = type_decl;
 
-        scope_stack.push_back(global_scope);
+        // Built-in types will be identifier as typedef names in the syntax, define them as such
+        std::shared_ptr<ir::Declaration> typedef_decl = std::make_shared<ir::Declaration>
+                (ir::Declaration {.name = name, .location = location, .storage = ir::StorageClass::TYPEDEF, .spec = {}});
+        typedef_decl->spec.type = type_decl;
+        current_scope()->typedefs[name] = typedef_decl;
+    }
+
+    IRGenerator::IRGenerator(const SourceMap& source_map) : source_map(source_map) {
+        // Initialize the global scope
+        scope_stack.push_back(std::make_shared<ir::Scope>());
+
+        using namespace toycc::arch;
+        add_primitive_type("void",                   false, ir::PrimitiveSemantic::VOID,    0,                0);
+        add_primitive_type("_Bool",                  false, ir::PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT);
+        add_primitive_type("signed char",            true,  ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
+        add_primitive_type("unsigned char",          false, ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
+        add_primitive_type("signed short int",       true,  ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
+        add_primitive_type("unsigned short int",     false, ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
+        add_primitive_type("signed int",             true,  ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
+        add_primitive_type("unsigned int",           false, ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
+        add_primitive_type("signed long int",        true,  ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
+        add_primitive_type("unsigned long int",      false, ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
+        add_primitive_type("signed long long int",   false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
+        add_primitive_type("unsigned long long int", false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
+        add_primitive_type("float",                  true,  ir::PrimitiveSemantic::FLOAT,   FLOAT_SIZE,       FLOAT_ALIGNMENT);
+        add_primitive_type("double",                 true,  ir::PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT);
+        add_primitive_type("long double",            true,  ir::PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT);
+
+        add_builtin_type("__builtin_va_list");
     }
 
     // ------------ Listener
@@ -103,12 +120,14 @@ namespace toycc {
         }
 
         // In typedefs like `unsigned int my_type_t`, everything is in the type specifiers, which is otherwise invalid - split those
-        if (declaration.storage & ir::StorageClass::TYPEDEF && type_specifiers.back()->typedefName()) {
+        const bool is_typedef = declaration.storage & ir::StorageClass::TYPEDEF;
+        if (is_typedef && type_specifiers.back()->typedefName()) {
             declaration.name = type_specifiers.back()->typedefName()->Identifier()->getText();
             type_specifiers.pop_back();
         }
 
-        declaration.spec.type = decode_type_specifier(type_specifiers);
+        ir::TypeSpecification initial_spec = resolve_type_specifier(type_specifiers, is_typedef);
+        declaration.spec = initial_spec.merge(declaration.spec, get_location(context));
         declaration.check(false);
     }
 
@@ -148,7 +167,24 @@ namespace toycc {
         throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Alignment specifiers are not implemented", get_location(context));
     }
 
-    // Decode a type specifier, push eventual anonymous struct/enum/union declarations to the current scope and return the type name
+    ir::TypeSpecification IRGenerator::resolve_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers, bool is_typedef) {
+        const CodeLocation location = get_location(type_specifiers[0]);
+
+        ir::TypeIdentifier identifier = decode_type_specifier(type_specifiers);
+        std::optional<ir::TypeSpecification> spec = resolve_type(identifier);
+
+        // Declare incomplete types in typedefs
+        if (!spec.has_value() && is_typedef && (identifier.category == ir::TypeCategory::STRUCT || identifier.category == ir::TypeCategory::UNION || identifier.category == ir::TypeCategory::ENUM)) {
+            current_scope()->types[identifier] = std::make_shared<ir::CompoundType>(identifier, location);
+            spec = resolve_type(identifier);
+        }
+
+        if (!spec.has_value())
+            throw Diagnostic(Diagnostic::Level::ERROR, std::format("Type `{}` is not defined", identifier.text()), location);
+        return spec.value();
+    }
+
+    // Decode a type specifier, push eventual anonymous struct/enum/union declarations to the current scope and return the type identifier
     // Don't check whether non-primitive named types exists
     ir::TypeIdentifier IRGenerator::decode_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
         if (type_specifiers.empty())
@@ -178,7 +214,9 @@ namespace toycc {
             else if (specifier->Complex())                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complex types are unsupported",                get_location(specifier));
             else if (specifier->atomicTypeSpecifier())    throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Atomic type specifiers are unsupported",       get_location(specifier));
             else if (specifier->structOrUnionSpecifier()) {
-                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Struct or union declarations are unsupported", get_location(specifier));
+                if (identifier.has_value())
+                    throw Diagnostic(Diagnostic::Level::ERROR, "Non-primitive types can't have more than one identifier", location);
+                identifier = decode_struct_or_union_specifier(specifier->structOrUnionSpecifier());
             }
             else if (specifier->enumSpecifier())          throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Enums are unsupported",                        get_location(specifier));
             else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown type specifier `{}`", specifier->getText()), get_location(specifier));
@@ -255,6 +293,31 @@ namespace toycc {
         }
     }
 
+    // Decode a struct or union specifier, push struct/enum/union definitions to the current scope and return the type identifier
+    // Don't check whether named struct / unions exists
+    ir::TypeIdentifier IRGenerator::decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context) {
+        const CodeLocation location = get_location(context);
+        ir::TypeIdentifier identifier;
+
+        if (context->Identifier()) identifier.name = context->Identifier()->getText();
+        else                       identifier.name = anonymous_identifier();
+
+        if      (context->structOrUnion()->Struct())  identifier.category = ir::TypeCategory::STRUCT;
+        else if (context->structOrUnion()->Union())   identifier.category = ir::TypeCategory::UNION;
+        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown struct or union keyword `{}`", context->structOrUnion()->getText()), location);
+
+        if (context->structDeclarationList()) {
+            std::shared_ptr<ir::CompoundType> definition = std::make_shared<ir::CompoundType>(identifier, location);
+            current_scope()->types[identifier] = definition;  // Push the incomplete type to the current scope to allow struct members to use it
+
+            for (CParser::StructDeclarationContext* declaration : context->structDeclarationList()->structDeclaration()) {
+                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complete structure declarations are not implemented", get_location(declaration));
+            }
+        }
+
+        return identifier;
+    }
+
     void IRGenerator::decode_declarator(ir::Declaration& declaration, CParser::DeclaratorContext* context) {
         if (context->pointer())
             declaration.spec.pointer_spec = decode_pointer_spec(context->pointer());
@@ -306,10 +369,11 @@ namespace toycc {
     }
 
     std::optional<CodeLocation> IRGenerator::get_name_location(std::string name, bool current_scope_only) {
+        ir::TypeIdentifier type_identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = name};
         for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
             std::shared_ptr<ir::Scope> scope = *it;
-            if (scope->types.contains(name))
-                return scope->types.at(name)->location;
+            if (scope->types.contains(type_identifier))
+                return scope->types.at(type_identifier)->location;
             else if (scope->locals.contains(name))
                 return scope->locals.at(name)->location;
             else if (scope->typedefs.contains(name))
@@ -331,5 +395,25 @@ namespace toycc {
 
     std::string IRGenerator::anonymous_identifier() {
         return std::format("<anonymous_{}>", unique_id++);
+    }
+
+    std::optional<ir::TypeSpecification> IRGenerator::resolve_type(ir::TypeIdentifier identifier) {
+        for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
+            std::shared_ptr<ir::Scope> scope = *it;
+            if (identifier.category == ir::TypeCategory::TYPEDEF) {
+                if (scope->typedefs.contains(identifier.name)) {
+                    std::shared_ptr<ir::Declaration> typedef_decl = scope->typedefs.at(identifier.name);
+                    return typedef_decl->spec;
+                }
+            } else {
+                if (scope->types.contains(identifier)) {
+                    ir::TypeSpecification spec;
+                    spec.type = scope->types.at(identifier);
+                    return spec;
+                }
+            }
+        }
+
+        return {};
     }
 }

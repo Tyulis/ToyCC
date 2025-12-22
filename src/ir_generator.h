@@ -31,7 +31,11 @@ namespace toycc {
             Flags<ir::TypeQualifier> decode_type_qualifier_list(CParser::TypeQualifierListContext* context);
             Flags<ir::TypeQualifier> decode_type_qualifier(CParser::TypeQualifierContext* context);
             Flags<ir::FunctionSpecifier> decode_function_specifier(CParser::FunctionSpecifierContext* context);
+
+            ir::TypeSpecification resolve_type_specifier(std::vector<CParser::TypeSpecifierContext*> specifiers, bool is_typedef);
             ir::TypeIdentifier decode_type_specifier(std::vector<CParser::TypeSpecifierContext*> specifiers);
+            ir::TypeIdentifier decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context);
+
             size_t resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context);
             void decode_declarator(ir::Declaration& declaration, CParser::DeclaratorContext* context);
             void decode_direct_declarator(ir::Declaration& declaration, CParser::DirectDeclaratorContext* context);
@@ -44,6 +48,8 @@ namespace toycc {
             CodeLocation get_location(antlr4::ParserRuleContext* context) const;
             std::string anonymous_identifier();
 
-
+            void add_builtin_type(std::string name);
+            void add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment);
+            std::optional<ir::TypeSpecification> resolve_type(ir::TypeIdentifier identifier);
     };
 }

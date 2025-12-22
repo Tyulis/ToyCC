@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 #include <optional>
@@ -38,7 +39,7 @@ namespace toycc::ir {
     };
 
     struct TypeSpecification {
-        TypeIdentifier type;
+        std::shared_ptr<ir::Type> type;
         Flags<TypeQualifier> qualifiers;
         std::vector<Flags<TypeQualifier>> pointer_spec;
         std::vector<size_t> array_spec;
@@ -48,6 +49,7 @@ namespace toycc::ir {
         std::optional<size_t> bitfield_length;
 
         void check(bool in_struct, CodeLocation location) const;
+        TypeSpecification merge (TypeSpecification overriding, CodeLocation location) const;
     };
 
     struct Declaration {
