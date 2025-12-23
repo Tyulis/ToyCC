@@ -42,7 +42,7 @@ namespace toycc::ir {
         std::shared_ptr<ir::Type> type;
         Flags<TypeQualifier> qualifiers;
         std::vector<Flags<TypeQualifier>> pointer_spec;
-        std::vector<size_t> array_spec;
+        std::vector<std::string> array_spec;
         Flags<FunctionSpecifier> function_spec;
         std::optional<FunctionPrototype> prototype;
         std::optional<size_t> custom_alignment;

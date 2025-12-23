@@ -1,5 +1,6 @@
 #include "diagnostic.h"
 #include "ir_generator.h"
+#include "ir/statement.h"
 #include "ir/type.h"
 #include "ir/declaration.h"
 #include "ir/compound_type.h"
@@ -55,7 +56,7 @@ namespace toycc {
     }
 
 
-    // ------------ IR generation functions
+    // ------------ Declarations
 
     // Decode a declaration and push it to the current scope
     void IRGenerator::decode_declaration(CParser::DeclarationDeclarationContext* context) {
@@ -66,8 +67,11 @@ namespace toycc {
         std::vector<ir::Declaration> declarations;
         if (context->initDeclaratorList()) {
             for (CParser::InitDeclaratorContext* declarator : context->initDeclaratorList()->initDeclarator()) {
-                declarations.push_back(base_declaration);
-                decode_declarator(declarations.back(), declarator->declarator());
+                ir::Declaration declaration = base_declaration;
+                std::optional<std::string> name = decode_declarator(declaration.spec, declarator->declarator());
+                if (name.has_value())
+                    declaration.name = name.value();
+                declarations.push_back(declaration);
             }
         } else {
             declarations.push_back(base_declaration);
@@ -129,6 +133,24 @@ namespace toycc {
         ir::TypeSpecification initial_spec = resolve_type_specifier(type_specifiers, is_typedef);
         declaration.spec = initial_spec.merge(declaration.spec, get_location(context));
         declaration.check(false);
+    }
+
+    ir::TypeSpecification IRGenerator::decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context) {
+        ir::TypeSpecification spec;
+
+        std::vector<CParser::SpecifierQualifierContext*> specifiers = context->specifierQualifier();
+        std::vector<CParser::TypeSpecifierContext*> type_specifiers;
+        for (CParser::SpecifierQualifierContext* specifier : specifiers) {
+            if (specifier->typeSpecifier())
+                type_specifiers.push_back(specifier->typeSpecifier());
+            else if (specifier->typeQualifier())
+                spec.qualifiers |= decode_type_qualifier(specifier->typeQualifier());
+            else
+                throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown specifier qualifier `{}`", specifier->getText()), get_location(context));
+        }
+
+        ir::TypeSpecification initial_spec = resolve_type_specifier(type_specifiers, false);
+        return initial_spec.merge(spec, get_location(context));
     }
 
     Flags<ir::StorageClass> IRGenerator::decode_storage_class(CParser::StorageClassSpecifierContext* context) {
@@ -310,38 +332,79 @@ namespace toycc {
             std::shared_ptr<ir::CompoundType> definition = std::make_shared<ir::CompoundType>(identifier, location);
             current_scope()->types[identifier] = definition;  // Push the incomplete type to the current scope to allow struct members to use it
 
-            for (CParser::StructDeclarationContext* declaration : context->structDeclarationList()->structDeclaration()) {
-                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complete structure declarations are not implemented", get_location(declaration));
-            }
+            for (CParser::StructDeclarationContext* declaration : context->structDeclarationList()->structDeclaration())
+                definition->members.append_range(decode_struct_declaration(declaration));
+
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complete structure declaration are not implemented", location);
         }
 
         return identifier;
     }
 
-    void IRGenerator::decode_declarator(ir::Declaration& declaration, CParser::DeclaratorContext* context) {
-        if (context->pointer())
-            declaration.spec.pointer_spec = decode_pointer_spec(context->pointer());
 
-        decode_direct_declarator(declaration, context->directDeclarator());
+    std::vector<ir::StructMember> IRGenerator::decode_struct_declaration(CParser::StructDeclarationContext* context) {
+        const CodeLocation location = get_location(context);
 
-        if (!context->gccDeclaratorExtension().empty())
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", get_location(context));
+        if (context->staticAssertDeclaration())
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Static assertions are not supported", location);
+
+        ir::TypeSpecification base_spec = decode_specifier_qualifier_list(context->specifierQualifierList());
+        if (!context->structDeclaratorList()) {
+            ir::StructMember member = {.name = anonymous_identifier(), .location = location, .spec = base_spec};
+            return {member};
+        }
+
+        std::vector<ir::StructMember> members;
+        for (CParser::StructDeclaratorContext* declarator : context->structDeclaratorList()->structDeclarator()) {
+            const CodeLocation declarator_location = get_location(declarator);
+            if (declarator->constantExpression())
+                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Bitfields are not implemented", declarator_location);
+            else if (!declarator->declarator())
+                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Anonymous bitfields are not implemented", declarator_location);
+
+            ir::TypeSpecification member_spec = base_spec;
+            std::optional<std::string> name = decode_declarator(member_spec, declarator->declarator());
+            std::string member_name = name.value_or(anonymous_identifier());
+            members.push_back(ir::StructMember {.name = member_name, .location = declarator_location, .spec = member_spec});
+        }
+
+        return members;
     }
 
-    void IRGenerator::decode_direct_declarator(ir::Declaration& declaration, CParser::DirectDeclaratorContext* context) {
-        if (CParser::DirectDeclaratorIdentifierContext::is(context)) {
-            declaration.name = static_cast<CParser::DirectDeclaratorIdentifierContext*>(context)->Identifier()->getText();
-        } else if (CParser::DirectDeclaratorParenthesizedContext::is(context)) {
-            decode_declarator(declaration, static_cast<CParser::DirectDeclaratorParenthesizedContext*>(context)->declarator());
-        } else if (CParser::DirectDeclaratorBitFieldContext::is(context)) {
-            CParser::DirectDeclaratorBitFieldContext* declarator = static_cast<CParser::DirectDeclaratorBitFieldContext*>(context);
-            declaration.name = declarator->Identifier()->getText();
-            declaration.spec.bitfield_length = std::stoll(declarator->DigitSequence()->getText());
-        } else if (CParser::DirectDeclaratorVCExtensionContext::is(context)) {
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "VC declarator extensions are not supported", get_location(context));
+    std::optional<std::string> IRGenerator::decode_declarator(ir::TypeSpecification& spec, CParser::DeclaratorContext* context) {
+        if (!context->gccDeclaratorExtension().empty())
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", get_location(context));
+
+        if (context->pointer())
+            spec.pointer_spec = decode_pointer_spec(context->pointer());
+
+        return decode_direct_declarator(spec, context->directDeclarator());
+    }
+
+    std::optional<std::string> IRGenerator::decode_direct_declarator(ir::TypeSpecification& spec, CParser::DirectDeclaratorContext* context) {
+        const CodeLocation location = get_location(context);
+        std::optional<std::string> name;
+
+        if (context->DigitSequence()) {  // Bitfield alternative
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Bitfields are not implemented", location);
+        } else if (context->vcSpecificModifier()) {  // VC-specific alternatives
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "VC declarator extensions are not supported", location);
+        } else if (context->declarator()) {  // Parenthesized alternative
+            name = decode_declarator(spec, context->declarator());
+        } else if (context->Identifier()) {  // Identifier alternative
+            name = context->Identifier()->getText();
+        } else if (context->parameterTypeList() || context->identifierList()) {  // Function alternatives
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Function declarators are not implemented", location);
+        } else if (context->typeQualifierList() || context->Static() || context->Star()) {  // Array alternatives with inner declarations
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "This type of array declarator is not implemented", location);
+        } else if (context->assignmentExpression()) {  // Array alternative
+            name = decode_direct_declarator(spec, context->directDeclarator());
+            spec.array_spec.push_back(decode_assignment_expression(context->assignmentExpression()));
         } else {
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "This type of declarator is not implemented", get_location(context));
+            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "Unknown declarator type", location);
         }
+
+        return name;
     }
 
     void IRGenerator::decode_initializer(ir::Declaration const&, CParser::InitializerContext* context) {
@@ -363,7 +426,42 @@ namespace toycc {
         return pointer_spec;
     }
 
-    // ------------ Internals
+
+    // ------------ Expressions
+    std::string IRGenerator::decode_assignment_expression(CParser::AssignmentExpressionContext* context) {
+        // if (context->conditionalExpression())
+            return decode_conditional_expression(context->conditionalExpression());
+
+        if (context->DigitSequence())
+            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", get_location(context));
+
+        const std::optional<ir::BinaryOperator> op = decode_assignment_operator(context->assignmentOperator());
+        std::string right_operand = decode_assignment_expression(context->assignmentExpression());
+
+        if (op.has_value()) {
+
+        } else {
+            add_statement(ir::stmt::Copy {.source = right_operand, .destination = })
+            current_scope()->statements.push_back(std::make_)
+        }
+    }
+
+    std::optional<ir::BinaryOperator> IRGenerator::decode_assignment_operator(CParser::AssignmentOperatorContext* context) {
+        if      (context->Assign())            return {};
+        else if (context->StarAssign())        return ir::BinaryOperator::MUL;
+        else if (context->DivAssign())         return ir::BinaryOperator::DIV;
+        else if (context->ModAssign())         return ir::BinaryOperator::MOD;
+        else if (context->PlusAssign())        return ir::BinaryOperator::PLUS;
+        else if (context->MinusAssign())       return ir::BinaryOperator::MINUS;
+        else if (context->LeftShiftAssign())   return ir::BinaryOperator::LSHIFT;
+        else if (context->RightShiftAssign())  return ir::BinaryOperator::RSHIFT;
+        else if (context->AndAssign())         return ir::BinaryOperator::BITWISE_AND;
+        else if (context->XorAssign())         return ir::BinaryOperator::BITWISE_XOR;
+        else if (context->OrAssign())          return ir::BinaryOperator::BITWISE_OR;
+        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown assignment operator {}", context->getText()), get_location(context));
+    }
+
+    // ------------ Utilities
     std::shared_ptr<ir::Scope> IRGenerator::current_scope() {
         return scope_stack.back();
     }
@@ -415,5 +513,10 @@ namespace toycc {
         }
 
         return {};
+    }
+
+    std::shared_ptr<ir::Statement> IRGenerator::add_statement(ir::Statement& statement) {
+        current_scope()->statements.push_back(std::make_shared<ir::Statement>(statement));
+        return current_scope()->statements.back();
     }
 }

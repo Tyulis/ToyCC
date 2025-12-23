@@ -26,7 +26,7 @@
  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-/** C 2011 grammar built from the C11 Spec */
+/** C 2011 grammar built from the C11 Spec, with modifications for ToyCC*/
 
 // $antlr-format alignTrailingComments true, columnLimit 150, minEmptyLines 1, maxEmptyLinesToKeep 1, reflowComments false, useTab false
 // $antlr-format allowShortRulesOnASingleLine false, allowShortBlocksOnASingleLine true, alignSemicolons hanging, alignColons hanging
@@ -248,7 +248,12 @@ structDeclaration // The first two rules have priority order and cannot be simpl
     ;
 
 specifierQualifierList
-    : (typeSpecifier | typeQualifier) specifierQualifierList?
+    : specifierQualifier+
+    ;
+
+specifierQualifier
+    : typeSpecifier
+    | typeQualifier
     ;
 
 structDeclaratorList
@@ -306,17 +311,17 @@ declarator
     ;
 
 directDeclarator
-    : Identifier                                                                # directDeclaratorIdentifier
-    | '(' declarator ')'                                                        # directDeclaratorParenthesized
-    | directDeclarator '[' typeQualifierList? assignmentExpression? ']'         # directDeclaratorArray
-    | directDeclarator '[' 'static' typeQualifierList? assignmentExpression ']' # directDeclaratorArrayWithSizeDecl
-    | directDeclarator '[' typeQualifierList 'static' assignmentExpression ']'  # directDeclaratorArrayWithSizeDecl
-    | directDeclarator '[' typeQualifierList? '*' ']'                           # directDeclaratorUnspecifiedVLA
-    | directDeclarator '(' parameterTypeList ')'                                # directDeclaratorFunction
-    | directDeclarator '(' identifierList? ')'                                  # directDeclaratorFunctionIdentifiers
-    | Identifier ':' DigitSequence                                              # directDeclaratorBitField
-    | vcSpecificModifier Identifier                                             # directDeclaratorVCExtension
-    | '(' vcSpecificModifier declarator ')'                                     # directDeclaratorVCExtension
+    : Identifier ':' DigitSequence
+    | vcSpecificModifier Identifier
+    | '(' vcSpecificModifier declarator ')'
+    | '(' declarator ')'
+    | Identifier
+    | directDeclarator '(' parameterTypeList ')'
+    | directDeclarator '(' identifierList? ')'
+    | directDeclarator '[' typeQualifierList? assignmentExpression? ']'
+    | directDeclarator '[' 'static' typeQualifierList? assignmentExpression ']'
+    | directDeclarator '[' typeQualifierList 'static' assignmentExpression ']'
+    | directDeclarator '[' typeQualifierList? '*' ']'
     ;
 
 vcSpecificModifier
