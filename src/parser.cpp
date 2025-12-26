@@ -20,7 +20,7 @@ namespace toycc {
         const LinePosition source = source_map.at(line);
         std::string message = (offendingSymbol == nullptr)? std::format("Lexer error : {}", msg)
                                                           : std::format("Syntax error near `{}` : {}", to_printable(offendingSymbol->getText()), msg);
-        Diagnostic diagnostic(Diagnostic::Level::ERROR, message, source.filename, source.line, charPositionInLine);
+        Diagnostic diagnostic(DiagnosticLevel::ERROR, message, source.filename, source.line, charPositionInLine);
         std::cerr << diagnostic << std::endl;
 
         nof_errors += 1;
@@ -28,7 +28,7 @@ namespace toycc {
 
     void ErrorHandler::check() const {
         if (nof_errors > 0)
-            throw Diagnostic(Diagnostic::Level::ERROR, std::format("{} parsing error(s) found", nof_errors));
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("{} parsing error(s) found", nof_errors));
     }
 
     Parser::Parser(std::istream& code, SourceMap source_map) : source_map(source_map), error_handler(this->source_map), input(code), lexer(&input), tokens(&lexer), parser(&tokens) {
@@ -58,10 +58,9 @@ namespace toycc {
 
     std::string Parser::to_ir() {
         toycc::CParser::CompilationUnitContext* unit = parser.compilationUnit();
-        IRGenerator listener(source_map);
-        antlr4::tree::ParseTreeWalker::DEFAULT.walk(&listener, unit);
+        std::shared_ptr<ir::Scope> ir = generate_ir(source_map, unit);
 
         error_handler.check();
-        return "";
+        return ir->ir_code();
     }
 }

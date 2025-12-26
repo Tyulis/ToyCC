@@ -18,7 +18,7 @@ namespace toycc {
             constexpr Flags &operator=(Flags &&) = default;
 
             constexpr Flags& operator|= (T rhs) { value = static_cast<T>(std::to_underlying(value) | std::to_underlying(rhs));  return *this; }
-            constexpr Flags& operator&= (T rhs) { value = static_cast<T>(std::to_underlying(value) | std::to_underlying(rhs));  return *this; }
+            constexpr Flags& operator&= (T rhs) { value = static_cast<T>(std::to_underlying(value) & std::to_underlying(rhs));  return *this; }
             constexpr Flags& operator^= (T rhs) { value = static_cast<T>(std::to_underlying(value) ^ std::to_underlying(rhs));  return *this; }
 
             constexpr Flags& operator|= (Flags<T> rhs) {  return this->operator|=(rhs.value);  }

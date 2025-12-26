@@ -8,7 +8,7 @@ namespace toycc {
         std::vector<std::string> tokens = split_one_of(marker);
 
         if (tokens[0] != "#")
-            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "Invalid line marker format : the line should start with a `#`");
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid line marker format : the line should start with a `#`");
 
         _line = std::stoi(tokens[1]);
         _filename = trim(tokens[2], "\"");
@@ -20,7 +20,7 @@ namespace toycc {
                 case '3':  _system   = true;  break;
                 case '4':  _extern_c = true;  break;
                 default:
-                    throw Diagnostic(Diagnostic::Level::ERROR, std::format("Unknown flag {} in the line marker", *it));
+                    throw Diagnostic(DiagnosticLevel::ERROR, std::format("Unknown flag {} in the line marker", *it));
             }
         }
     }
@@ -72,7 +72,7 @@ namespace toycc {
 
     LinePosition SourceMap::at(unsigned stripped_line) const {
         if (stripped_line == 0 || stripped_line >= positions.size())
-            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Attempted to access non-existing stripped line {}/{}", stripped_line, positions.size()));
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Attempted to access non-existing stripped line {}/{}", stripped_line, positions.size()));
         return positions.at(stripped_line - 1);
     }
 

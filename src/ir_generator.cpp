@@ -1,3 +1,4 @@
+#include "TerminalNode.h"
 #include "diagnostic.h"
 #include "ir_generator.h"
 #include "ir/statement.h"
@@ -5,8 +6,14 @@
 #include "ir/declaration.h"
 #include "ir/compound_type.h"
 #include "arch/x86_64.h"
+#include "util/strings.h"
 
 namespace toycc {
+    std::shared_ptr<ir::Scope> generate_ir(const SourceMap& source_map, CParser::CompilationUnitContext* context) {
+        IRGenerator generator(source_map, context);
+        return generator.get();
+    }
+
     void IRGenerator::add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment) {
         ir::TypeIdentifier identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = name};
         current_scope()->types[identifier] = std::make_shared<ir::PrimitiveType>(name, is_signed, semantic, size, alignment);
@@ -18,19 +25,21 @@ namespace toycc {
         std::shared_ptr<ir::Type> type_decl = std::make_shared<ir::Type> (identifier, location);
         current_scope()->types[identifier] = type_decl;
 
-        // Built-in types will be identifier as typedef names in the syntax, define them as such
+        // Built-in types will be identified as typedef names in the syntax, define them as such
         std::shared_ptr<ir::Declaration> typedef_decl = std::make_shared<ir::Declaration>
                 (ir::Declaration {.name = name, .location = location, .storage = ir::StorageClass::TYPEDEF, .spec = {}});
         typedef_decl->spec.type = type_decl;
         current_scope()->typedefs[name] = typedef_decl;
     }
 
-    IRGenerator::IRGenerator(const SourceMap& source_map) : source_map(source_map) {
+    void IRGenerator::init_global_scope() {
         // Initialize the global scope
         scope_stack.push_back(std::make_shared<ir::Scope>());
 
         using namespace toycc::arch;
-        add_primitive_type("void",                   false, ir::PrimitiveSemantic::VOID,    0,                0);
+        ir::TypeIdentifier void_identifier = {.category = ir::TypeCategory::VOID, .name = "void"};
+        current_scope()->types[void_identifier] = std::make_shared<ir::Type> (void_identifier, CodeLocation {.filename = "<built-in>", .line = 1, .character = 1});
+
         add_primitive_type("_Bool",                  false, ir::PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT);
         add_primitive_type("signed char",            true,  ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
         add_primitive_type("unsigned char",          false, ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
@@ -49,19 +58,134 @@ namespace toycc {
         add_builtin_type("__builtin_va_list");
     }
 
-    // ------------ Listener
-
-    void IRGenerator::exitDeclarationDeclaration(CParser::DeclarationDeclarationContext* context) {
-        decode_declaration(context);
+    IRGenerator::IRGenerator(const SourceMap& source_map, CParser::CompilationUnitContext* context) : source_map(source_map) {
+        init_global_scope();
+        decode_compilation_unit(context);
     }
+
+    std::shared_ptr<ir::Scope> IRGenerator::get() {
+        if (scope_stack.size() != 1)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Found scopes other than the global scope in the scope stack after decoding ended");
+        return scope_stack[0];
+    }
+
+    // ------------ Visitor
+
+    void IRGenerator::decode_compilation_unit(CParser::CompilationUnitContext* context) {
+        return decode_translation_unit(context->translationUnit());
+    }
+
+    void IRGenerator::decode_translation_unit(CParser::TranslationUnitContext* context) {
+        for (CParser::ExternalDeclarationContext* declaration : context->externalDeclaration())
+            decode_external_declaration(declaration);
+    }
+
+    void IRGenerator::decode_external_declaration(CParser::ExternalDeclarationContext* context) {
+        if (context->declaration())
+            decode_declaration(context->declaration());
+        else if (context->functionDefinition())
+            decode_function_definition(context->functionDefinition());
+        else if (!context->Semi())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown external declaration `{}`", context->getText()), locate(context));
+    }
+
+    void IRGenerator::decode_function_definition(CParser::FunctionDefinitionContext* context) {
+        if (context->declarationList())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Parameter declarations outside of the prototype are not supported", locate(context));
+
+        ir::Declaration declaration;
+        decode_declaration_specifiers(declaration, context->declarationSpecifiers()->declarationSpecifier());
+        std::optional<std::string> name = decode_declarator(declaration.spec, context->declarator());
+
+        if (!name.has_value())
+            throw Diagnostic(DiagnosticLevel::ERROR, "Anonymous functions are not allowed", locate(context));
+        declaration.name = name.value();
+
+        if (!declaration.spec.is_function_type)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Function definition does not contain a function declaration", locate(context));
+
+        std::shared_ptr<ir::Scope> function_scope = create_function_scope(declaration);
+        add_statement(std::make_shared<ir::stmt::Function>(locate(context), function_scope, declare(declaration)));
+        decode_compound_statement(context->compoundStatement(), function_scope);
+    }
+
+
+    // ------------ Statements
+    std::shared_ptr<ir::Scope> IRGenerator::decode_compound_statement(CParser::CompoundStatementContext* context) {
+        std::shared_ptr<ir::Scope> scope = std::make_shared<ir::Scope>();
+
+        add_statement(std::make_shared<ir::stmt::Block>(locate(context), scope));
+        decode_compound_statement(context, scope);
+
+        return scope;
+    }
+
+    void IRGenerator::decode_compound_statement(CParser::CompoundStatementContext* context, std::shared_ptr<ir::Scope> scope) {
+        ScopeFrame frame = in_scope(scope);
+
+        if (context->blockItemList())
+            decode_block_item_list(context->blockItemList());
+    }
+
+    void IRGenerator::decode_block_item_list(CParser::BlockItemListContext* context) {
+        for (CParser::BlockItemContext* item : context->blockItem()) {
+            if (item->declaration())
+                decode_declaration(item->declaration());
+            else if (item->statement())
+                decode_statement(item->statement());
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown block item type `{}`", item->getText()), locate(item));
+        }
+    }
+
+    void IRGenerator::decode_statement(CParser::StatementContext* context) {
+        if (context->labeledStatement())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Labeled statements are not implemented", locate(context));
+        else if (context->compoundStatement())
+            decode_compound_statement(context->compoundStatement());
+        else if (context->expressionStatement())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Expression statements are not implemented", locate(context));
+        else if (context->selectionStatement())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Selection statements are not implemented", locate(context));
+        else if (context->iterationStatement())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Iteration statements are not implemented", locate(context));
+        else if (context->jumpStatement())
+            decode_jump_statement(context->jumpStatement());
+        else if (!context->logicalOrExpression().empty())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inline assembly is not supported", locate(context));
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown statement `{}`", context->getText()), locate(context));
+    }
+
+    void IRGenerator::decode_jump_statement(CParser::JumpStatementContext* context) {
+        if (context->Goto())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "`goto` statements are not implemented", locate(context));
+        else if (context->Continue())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "`continue` statements are not implemented", locate(context));
+        else if (context->Break())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "`break` statements are not implemented", locate(context));
+        else if (context->Return())
+            decode_return_statement(context);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown jump statement `{}`", context->getText()), locate(context));
+    }
+
+    void IRGenerator::decode_return_statement(CParser::JumpStatementContext* context) {
+        if (context->expression())
+            add_statement(std::make_shared<ir::stmt::Return>(locate(context), decode_expression(context->expression())));
+        else
+            add_statement(std::make_shared<ir::stmt::Return>(locate(context)));
+    }
+
+
 
 
     // ------------ Declarations
 
     // Decode a declaration and push it to the current scope
-    void IRGenerator::decode_declaration(CParser::DeclarationDeclarationContext* context) {
+    void IRGenerator::decode_declaration(CParser::DeclarationContext* context) {
+        if (context->staticAssertDeclaration())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Static assertions are not implemented", locate(context));
+
         ir::Declaration base_declaration;
-        decode_declaration_specifier(base_declaration, context->declarationSpecifiers());
+        decode_declaration_specifiers(base_declaration, context->declarationSpecifiers()->declarationSpecifier());
 
         // First, only process the declarations
         std::vector<ir::Declaration> declarations;
@@ -79,16 +203,7 @@ namespace toycc {
 
         for (const ir::Declaration& declaration : declarations) {
             declaration.check(false);
-
-            std::optional<CodeLocation> duplicate = get_name_location(declaration.name, true);
-            if (duplicate.has_value())
-                throw Diagnostic(Diagnostic::Level::ERROR, std::format("Attempted to redefine `{}`", declaration.name), declaration.location)
-                       .add_note(Diagnostic::Level::NOTE,  "Previously defined here", duplicate.value());
-
-            if (declaration.storage & ir::StorageClass::TYPEDEF)
-                current_scope()->typedefs[declaration.name] = std::make_shared<ir::Declaration>(declaration);
-            else
-                current_scope()->locals[declaration.name] = std::make_shared<ir::Declaration>(declaration);
+            declare(declaration);
         }
 
         // Then the initializations
@@ -98,15 +213,14 @@ namespace toycc {
                 CParser::InitDeclaratorContext* declarator = context->initDeclaratorList()->initDeclarator()[decl_index];
                 if (declarator->initializer()) {
                     if (declaration.storage & ir::StorageClass::TYPEDEF)
-                        throw Diagnostic(Diagnostic::Level::ERROR, "Initializers are not allowed in typedef declarations", get_location(declarator->initializer()));
-                    throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Implement initializers here");
+                        throw Diagnostic(DiagnosticLevel::ERROR, "Initializers are not allowed in typedef declarations", locate(declarator->initializer()));
+                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implement initializers here");
                 }
             }
         }
     }
 
-    void IRGenerator::decode_declaration_specifier(ir::Declaration& declaration, CParser::DeclarationSpecifiersContext* context) {
-        std::vector<CParser::DeclarationSpecifierContext*> specifiers = context->declarationSpecifier();
+    void IRGenerator::decode_declaration_specifiers(ir::Declaration& declaration, std::vector<CParser::DeclarationSpecifierContext*> specifiers) {
         std::vector<CParser::TypeSpecifierContext*> type_specifiers;
         for (CParser::DeclarationSpecifierContext* specifier : specifiers) {
             if (specifier->storageClassSpecifier())
@@ -120,7 +234,7 @@ namespace toycc {
             else if (specifier->alignmentSpecifier())
                 declaration.spec.custom_alignment = resolve_alignment_specifier(specifier->alignmentSpecifier());
             else
-                throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown declaration specifier `{}`", specifier->getText()), get_location(context));
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declaration specifier `{}`", specifier->getText()), locate(specifier));
         }
 
         // In typedefs like `unsigned int my_type_t`, everything is in the type specifiers, which is otherwise invalid - split those
@@ -131,8 +245,7 @@ namespace toycc {
         }
 
         ir::TypeSpecification initial_spec = resolve_type_specifier(type_specifiers, is_typedef);
-        declaration.spec = initial_spec.merge(declaration.spec, get_location(context));
-        declaration.check(false);
+        declaration.spec = initial_spec.merge(declaration.spec, locate(specifiers[0]));
     }
 
     ir::TypeSpecification IRGenerator::decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context) {
@@ -146,11 +259,11 @@ namespace toycc {
             else if (specifier->typeQualifier())
                 spec.qualifiers |= decode_type_qualifier(specifier->typeQualifier());
             else
-                throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown specifier qualifier `{}`", specifier->getText()), get_location(context));
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown specifier qualifier `{}`", specifier->getText()), locate(context));
         }
 
         ir::TypeSpecification initial_spec = resolve_type_specifier(type_specifiers, false);
-        return initial_spec.merge(spec, get_location(context));
+        return initial_spec.merge(spec, locate(context));
     }
 
     Flags<ir::StorageClass> IRGenerator::decode_storage_class(CParser::StorageClassSpecifierContext* context) {
@@ -160,7 +273,7 @@ namespace toycc {
         else if (context->ThreadLocal())  return ir::StorageClass::THREAD_LOCAL;
         else if (context->Auto())         return ir::StorageClass::AUTO;
         else if (context->Register())     return ir::StorageClass::REGISTER;
-        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown storage class `{}`", context->getText()), get_location(context));
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown storage class `{}`", context->getText()), locate(context));
     }
 
     Flags<ir::TypeQualifier> IRGenerator::decode_type_qualifier_list(CParser::TypeQualifierListContext* context) {
@@ -175,34 +288,32 @@ namespace toycc {
         else if (context->Restrict())  return ir::TypeQualifier::RESTRICT;
         else if (context->Volatile())  return ir::TypeQualifier::VOLATILE;
         else if (context->Atomic())    return ir::TypeQualifier::ATOMIC;
-        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown type qualifier `{}`", context->getText()), get_location(context));
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown type qualifier `{}`", context->getText()), locate(context));
     }
 
     Flags<ir::FunctionSpecifier> IRGenerator::decode_function_specifier(CParser::FunctionSpecifierContext* context) {
         if      (context->Inline())    return ir::FunctionSpecifier::INLINE;
         else if (context->Noreturn())  return ir::FunctionSpecifier::NORETURN;
         else if (context->gccAttributeSpecifier()) return {};  // Skip
-        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown function specifier `{}`", context->getText()), get_location(context));
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown function specifier `{}`", context->getText()), locate(context));
     }
 
     size_t IRGenerator::resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context) {
-        throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Alignment specifiers are not implemented", get_location(context));
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Alignment specifiers are not implemented", locate(context));
     }
 
     ir::TypeSpecification IRGenerator::resolve_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers, bool is_typedef) {
-        const CodeLocation location = get_location(type_specifiers[0]);
+        const CodeLocation location = locate(type_specifiers[0]);
 
         ir::TypeIdentifier identifier = decode_type_specifier(type_specifiers);
-        std::optional<ir::TypeSpecification> spec = resolve_type(identifier);
+        std::optional<ir::TypeSpecification> spec = resolve_type_without_error(identifier);
 
         // Declare incomplete types in typedefs
         if (!spec.has_value() && is_typedef && (identifier.category == ir::TypeCategory::STRUCT || identifier.category == ir::TypeCategory::UNION || identifier.category == ir::TypeCategory::ENUM)) {
             current_scope()->types[identifier] = std::make_shared<ir::CompoundType>(identifier, location);
-            spec = resolve_type(identifier);
+            spec = resolve_type(identifier, location);
         }
 
-        if (!spec.has_value())
-            throw Diagnostic(Diagnostic::Level::ERROR, std::format("Type `{}` is not defined", identifier.text()), location);
         return spec.value();
     }
 
@@ -210,9 +321,9 @@ namespace toycc {
     // Don't check whether non-primitive named types exists
     ir::TypeIdentifier IRGenerator::decode_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
         if (type_specifiers.empty())
-            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "Empty type specifier list");
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Empty type specifier list");
 
-        const CodeLocation base_location = get_location(type_specifiers[0]);
+        const CodeLocation base_location = locate(type_specifiers[0]);
 
         std::optional<std::string> sign_token;
         std::multiset<std::string> primitive_type_tokens;
@@ -220,36 +331,36 @@ namespace toycc {
 
         for (CParser::TypeSpecifierContext* specifier : type_specifiers) {
             const std::string token = specifier->getText();
-            const CodeLocation location = get_location(specifier);
+            const CodeLocation location = locate(specifier);
 
             if (specifier->Void() || specifier->Char() || specifier->Bool() || specifier->Float() || specifier->Short() || specifier->Int() || specifier->Double() || specifier->Long()) {
                 primitive_type_tokens.insert(token);
             } else if (specifier->Signed() || specifier->Unsigned()) {
                 if (sign_token.has_value())
-                    throw Diagnostic(Diagnostic::Level::ERROR, "Declaration can't have more than one sign specifier", location);
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Declaration can't have more than one sign specifier", location);
                 sign_token = token;
             } else if (specifier->typedefName()) {
                 if (identifier.has_value())
-                    throw Diagnostic(Diagnostic::Level::ERROR, "Non-primitive types can't have more than one identifier", location);
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Non-primitive types can't have more than one identifier", location);
                 identifier = ir::TypeIdentifier {.category = ir::TypeCategory::TYPEDEF, .name = token};
             }
-            else if (specifier->Complex())                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complex types are unsupported",                get_location(specifier));
-            else if (specifier->atomicTypeSpecifier())    throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Atomic type specifiers are unsupported",       get_location(specifier));
+            else if (specifier->Complex())                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Complex types are unsupported",                locate(specifier));
+            else if (specifier->atomicTypeSpecifier())    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Atomic type specifiers are unsupported",       locate(specifier));
             else if (specifier->structOrUnionSpecifier()) {
                 if (identifier.has_value())
-                    throw Diagnostic(Diagnostic::Level::ERROR, "Non-primitive types can't have more than one identifier", location);
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Non-primitive types can't have more than one identifier", location);
                 identifier = decode_struct_or_union_specifier(specifier->structOrUnionSpecifier());
             }
-            else if (specifier->enumSpecifier())          throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Enums are unsupported",                        get_location(specifier));
-            else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown type specifier `{}`", specifier->getText()), get_location(specifier));
+            else if (specifier->enumSpecifier())          throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Enums are unsupported",                        locate(specifier));
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown type specifier `{}`", specifier->getText()), locate(specifier));
         }
 
         if (!identifier.has_value() && !sign_token.has_value() && primitive_type_tokens.empty())
-            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "No valid type specifier found", base_location);
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No valid type specifier found", base_location);
 
         if (identifier.has_value()) {
             if (sign_token.has_value() || !primitive_type_tokens.empty())
-                throw Diagnostic(Diagnostic::Level::ERROR, "Non-primitive type name can't have primitive type specifiers", base_location);
+                throw Diagnostic(DiagnosticLevel::ERROR, "Non-primitive type name can't have primitive type specifiers", base_location);
             return identifier.value();
         }
 
@@ -258,18 +369,18 @@ namespace toycc {
         // Void and bool are always alone
         if (primitive_type_tokens.contains("_Bool") || primitive_type_tokens.contains("void")) {
             if (primitive_type_tokens.size() > 1 || sign_token.has_value())
-                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive types _Bool and void can't have other type specifiers", base_location);
+                throw Diagnostic(DiagnosticLevel::ERROR, "Primitive types _Bool and void can't have other type specifiers", base_location);
             return {ir::TypeCategory::PRIMITIVE, *primitive_type_tokens.begin()};
         }
 
         // Floating-point types
         if (primitive_type_tokens.contains("float") || primitive_type_tokens.contains("double")) {
             if (sign_token.has_value())
-                throw Diagnostic(Diagnostic::Level::ERROR, "Floating-point type can't have a sign specifier", base_location);
+                throw Diagnostic(DiagnosticLevel::ERROR, "Floating-point type can't have a sign specifier", base_location);
 
             if (primitive_type_tokens.contains("float")) {
                 if (primitive_type_tokens.size() > 1)
-                    throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `float` can't have any other type specifiers", base_location);
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `float` can't have any other type specifiers", base_location);
                 return {ir::TypeCategory::PRIMITIVE, "float"};
             }
 
@@ -279,7 +390,7 @@ namespace toycc {
             else if (primitive_type_tokens.size() == 1)
                 return {ir::TypeCategory::PRIMITIVE, "double"};
             else
-                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `double` can't have any type specifiers other than `long`", base_location);
+                throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `double` can't have any type specifiers other than `long`", base_location);
         }
 
         // From now on, only integer types remain and sign_token has a value
@@ -290,18 +401,18 @@ namespace toycc {
             sign_token = "signed";
 
         if (primitive_type_tokens.count("int") > 1)
-            throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type can't specify `int` more than once", base_location);
+            throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type can't specify `int` more than once", base_location);
 
         if (primitive_type_tokens.contains("char")) {
             if (primitive_type_tokens.size() > 1)
-                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `char` can't have type specifiers other than `signed`/`unsigned`", base_location);
+                throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `char` can't have type specifiers other than `signed`/`unsigned`", base_location);
             return {ir::TypeCategory::PRIMITIVE, std::format("{} char", sign_token.value())};
         }
 
         // From now on, only short, int and long remain
         if (primitive_type_tokens.contains("short")) {
             if (primitive_type_tokens.contains("long"))
-                throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type `short` can't also be `long`", base_location);
+                throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `short` can't also be `long`", base_location);
             return {ir::TypeCategory::PRIMITIVE, std::format("{} short int", sign_token.value())};
         }
 
@@ -311,14 +422,14 @@ namespace toycc {
             case 0:  return {ir::TypeCategory::PRIMITIVE, std::format("{} int", sign_token.value())};
             case 1:  return {ir::TypeCategory::PRIMITIVE, std::format("{} long int", sign_token.value())};
             case 2:  return {ir::TypeCategory::PRIMITIVE, std::format("{} long long int", sign_token.value())};
-            default: throw Diagnostic(Diagnostic::Level::ERROR, "Primitive type specifier `long` can't be given more than twice", base_location);
+            default: throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type specifier `long` can't be given more than twice", base_location);
         }
     }
 
     // Decode a struct or union specifier, push struct/enum/union definitions to the current scope and return the type identifier
     // Don't check whether named struct / unions exists
     ir::TypeIdentifier IRGenerator::decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context) {
-        const CodeLocation location = get_location(context);
+        const CodeLocation location = locate(context);
         ir::TypeIdentifier identifier;
 
         if (context->Identifier()) identifier.name = context->Identifier()->getText();
@@ -326,7 +437,7 @@ namespace toycc {
 
         if      (context->structOrUnion()->Struct())  identifier.category = ir::TypeCategory::STRUCT;
         else if (context->structOrUnion()->Union())   identifier.category = ir::TypeCategory::UNION;
-        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown struct or union keyword `{}`", context->structOrUnion()->getText()), location);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown struct or union keyword `{}`", context->structOrUnion()->getText()), location);
 
         if (context->structDeclarationList()) {
             std::shared_ptr<ir::CompoundType> definition = std::make_shared<ir::CompoundType>(identifier, location);
@@ -335,7 +446,7 @@ namespace toycc {
             for (CParser::StructDeclarationContext* declaration : context->structDeclarationList()->structDeclaration())
                 definition->members.append_range(decode_struct_declaration(declaration));
 
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Complete structure declaration are not implemented", location);
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Complete structure declaration are not implemented", location);
         }
 
         return identifier;
@@ -343,10 +454,10 @@ namespace toycc {
 
 
     std::vector<ir::StructMember> IRGenerator::decode_struct_declaration(CParser::StructDeclarationContext* context) {
-        const CodeLocation location = get_location(context);
+        const CodeLocation location = locate(context);
 
         if (context->staticAssertDeclaration())
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Static assertions are not supported", location);
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Static assertions are not supported", location);
 
         ir::TypeSpecification base_spec = decode_specifier_qualifier_list(context->specifierQualifierList());
         if (!context->structDeclaratorList()) {
@@ -356,11 +467,11 @@ namespace toycc {
 
         std::vector<ir::StructMember> members;
         for (CParser::StructDeclaratorContext* declarator : context->structDeclaratorList()->structDeclarator()) {
-            const CodeLocation declarator_location = get_location(declarator);
+            const CodeLocation declarator_location = locate(declarator);
             if (declarator->constantExpression())
-                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Bitfields are not implemented", declarator_location);
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfields are not implemented", declarator_location);
             else if (!declarator->declarator())
-                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Anonymous bitfields are not implemented", declarator_location);
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Anonymous bitfields are not implemented", declarator_location);
 
             ir::TypeSpecification member_spec = base_spec;
             std::optional<std::string> name = decode_declarator(member_spec, declarator->declarator());
@@ -373,7 +484,7 @@ namespace toycc {
 
     std::optional<std::string> IRGenerator::decode_declarator(ir::TypeSpecification& spec, CParser::DeclaratorContext* context) {
         if (!context->gccDeclaratorExtension().empty())
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", get_location(context));
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
 
         if (context->pointer())
             spec.pointer_spec = decode_pointer_spec(context->pointer());
@@ -382,40 +493,96 @@ namespace toycc {
     }
 
     std::optional<std::string> IRGenerator::decode_direct_declarator(ir::TypeSpecification& spec, CParser::DirectDeclaratorContext* context) {
-        const CodeLocation location = get_location(context);
-        std::optional<std::string> name;
+        const CodeLocation location = locate(context);
 
         if (context->DigitSequence()) {  // Bitfield alternative
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Bitfields are not implemented", location);
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfields are not implemented", location);
         } else if (context->vcSpecificModifier()) {  // VC-specific alternatives
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "VC declarator extensions are not supported", location);
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "VC declarator extensions are not supported", location);
         } else if (context->declarator()) {  // Parenthesized alternative
-            name = decode_declarator(spec, context->declarator());
+            return decode_declarator(spec, context->declarator());
         } else if (context->Identifier()) {  // Identifier alternative
-            name = context->Identifier()->getText();
-        } else if (context->parameterTypeList() || context->identifierList()) {  // Function alternatives
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Function declarators are not implemented", location);
+            return context->Identifier()->getText();
+        } else if (context->directDeclarator() && context->LeftParen() && context->RightParen()) {  // Function alternatives
+            return decode_function_direct_declarator(spec, context);
         } else if (context->typeQualifierList() || context->Static() || context->Star()) {  // Array alternatives with inner declarations
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "This type of array declarator is not implemented", location);
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "This type of array declarator is not implemented", location);
         } else if (context->assignmentExpression()) {  // Array alternative
-            name = decode_direct_declarator(spec, context->directDeclarator());
-            spec.array_spec.push_back(decode_assignment_expression(context->assignmentExpression()));
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Array declarators are not implemented", location);
         } else {
-            throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, "Unknown declarator type", location);
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown declarator type", location);
         }
+
+        return {};
+    }
+
+    std::optional<std::string> IRGenerator::decode_function_direct_declarator(ir::TypeSpecification& spec, CParser::DirectDeclaratorContext* context) {
+        spec.is_function_type = true;
+        std::optional<std::string> name = decode_direct_declarator(spec, context->directDeclarator());
+
+        if (context->identifierList())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Function declarators with untyped parameters are not supported", locate(context));
+        else if (context->parameterTypeList())
+            spec.parameters.append_range(decode_parameter_type_list(context->parameterTypeList()));
+        // Otherwise, no parameters
 
         return name;
     }
 
+    std::vector<ir::Declaration> IRGenerator::decode_parameter_type_list(CParser::ParameterTypeListContext* context) {
+        if (context->Ellipsis())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Variadic functions are not implemented", locate(context));
+
+        return decode_parameter_list(context->parameterList());
+    }
+
+    std::vector<ir::Declaration> IRGenerator::decode_parameter_list(CParser::ParameterListContext* context) {
+        std::vector<ir::Declaration> parameters;
+        for (CParser::ParameterDeclarationContext* parameter : context->parameterDeclaration()) {
+            ir::Declaration declaration = decode_parameter_declaration(parameter);
+            if (declaration.spec.is_void()) {
+                if (!declaration.name.empty() || context->parameterDeclaration().size() > 1)
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Invalid void parameter declaration", locate(parameter));
+            } else {
+                parameters.push_back(declaration);  // Only add non-void parameters
+            }
+        }
+
+        return parameters;
+    }
+
+    ir::Declaration IRGenerator::decode_parameter_declaration(CParser::ParameterDeclarationContext* context) {
+        ir::Declaration parameter;
+
+        if (context->declarationSpecifiers())
+            decode_declaration_specifiers(parameter, context->declarationSpecifiers()->declarationSpecifier());
+        else if (context->declarationSpecifiers2())
+            decode_declaration_specifiers(parameter, context->declarationSpecifiers2()->declarationSpecifier());
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No declaration specifiers found in parameter declaration", locate(context));
+
+        std::optional<std::string> name;
+        if (context->declarator())
+            name = decode_declarator(parameter.spec, context->declarator());
+        else if (context->abstractDeclarator())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Abstract parameter declarators are not implemented", locate(context));
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No declarator found in parameter declaration", locate(context));
+
+        if (name.has_value())
+            parameter.name = name.value();
+
+        parameter.storage |= ir::StorageClass::PARAMETER;
+        return parameter;
+    }
+
     void IRGenerator::decode_initializer(ir::Declaration const&, CParser::InitializerContext* context) {
-        throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Initializers are not implemented", get_location(context));
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Initializers are not implemented", locate(context));
     }
 
     std::vector<Flags<ir::TypeQualifier>> IRGenerator::decode_pointer_spec(CParser::PointerContext* context) {
         std::vector<Flags<ir::TypeQualifier>> pointer_spec(context->pointerLevel().size());
         for (CParser::PointerLevelContext* level : context->pointerLevel()) {
             if (level->Caret())
-                throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Carets in pointer specification are not supported", get_location(level));
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Carets in pointer specification are not supported", locate(level));
 
             if (level->typeQualifierList())
                 pointer_spec.push_back(decode_type_qualifier_list(level->typeQualifierList()));
@@ -428,37 +595,246 @@ namespace toycc {
 
 
     // ------------ Expressions
-    std::string IRGenerator::decode_assignment_expression(CParser::AssignmentExpressionContext* context) {
-        // if (context->conditionalExpression())
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_expression(CParser::ExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result;
+        for (CParser::AssignmentExpressionContext* expression : context->assignmentExpression())
+            result = decode_assignment_expression(expression);
+        return result;  // In a comma-separated list of expressions, return the last one
+    }
+
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_assignment_expression(CParser::AssignmentExpressionContext* context) {
+        if (context->conditionalExpression())
             return decode_conditional_expression(context->conditionalExpression());
 
         if (context->DigitSequence())
-            throw Diagnostic(Diagnostic::Level::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", get_location(context));
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", locate(context));
 
-        const std::optional<ir::BinaryOperator> op = decode_assignment_operator(context->assignmentOperator());
-        std::string right_operand = decode_assignment_expression(context->assignmentExpression());
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Assignment expressions are not implemented", locate(context));
+        //const std::optional<ir::stmt::BinaryOperator> op = decode_assignment_operator(context->assignmentOperator());
+        //std::shared_ptr<ir::Declaration> right_operand = decode_assignment_expression(context->assignmentExpression());
+    }
 
-        if (op.has_value()) {
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_conditional_expression(CParser::ConditionalExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> predicate = decode_logical_or_expression(context->logicalOrExpression());
 
+        if (!context->Question())
+            return predicate;
+
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Conditional expressions are not implemented", locate(context));
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_logical_or_expression(CParser::LogicalOrExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_logical_and_expression(context->logicalAndExpression()[0]);
+        if (context->logicalAndExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Logical OR expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_logical_and_expression(CParser::LogicalAndExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_inclusive_or_expression(context->inclusiveOrExpression()[0]);
+        if (context->inclusiveOrExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Logical AND expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_inclusive_or_expression(CParser::InclusiveOrExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_exclusive_or_expression(context->exclusiveOrExpression()[0]);
+        if (context->exclusiveOrExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inclusive OR expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_exclusive_or_expression(CParser::ExclusiveOrExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_and_expression(context->andExpression()[0]);
+        if (context->andExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Exclusive OR expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_and_expression(CParser::AndExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_equality_expression(context->equalityExpression()[0]);
+        if (context->equalityExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "AND expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_equality_expression(CParser::EqualityExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_relational_expression(context->relationalExpression()[0]);
+        if (context->relationalExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Equality expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_relational_expression(CParser::RelationalExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_shift_expression(context->shiftExpression()[0]);
+        if (context->shiftExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Relational expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_shift_expression(CParser::ShiftExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_additive_expression(context->additiveExpression()[0]);
+        if (context->additiveExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Shift expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_additive_expression(CParser::AdditiveExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_multiplicative_expression(context->multiplicativeExpression()[0]);
+        if (context->multiplicativeExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Additive expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context) {
+        std::shared_ptr<ir::Declaration> result = decode_cast_expression(context->castExpression()[0]);
+        if (context->castExpression().size() > 1)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Multiplicative expressions are not implemented", locate(context));
+        return result;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_cast_expression(CParser::CastExpressionContext* context) {
+        if (context->DigitSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences as cast expressions are not implemented", locate(context));
+        else if (context->typeName())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Cast expressions are not implemented");
+        else if (context->unaryExpression())
+            return decode_unary_expression(context->unaryExpression());
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown cast expression `{}`", context->getText()), locate(context));
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_unary_expression(CParser::UnaryExpressionContext* context) {
+        if (!context->PlusPlus().empty() || !context->MinusMinus().empty() || !context->Sizeof().empty() || context->Alignof() || context->AndAnd() || context->unaryOperator() || context->castExpression())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary expressions are not implemented", locate(context));
+
+        return decode_postfix_expression(context->postfixExpression());
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_postfix_expression(CParser::PostfixExpressionContext* context) {
+        if (!context->primaryExpression() || !context->LeftParen().empty() || !context->LeftBracket().empty() || !context->Dot().empty() || !context->Arrow().empty() || !context->PlusPlus().empty() || !context->MinusMinus().empty())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Postfix expressions are not implemented", locate(context));
+
+        return decode_primary_expression(context->primaryExpression());
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_primary_expression(CParser::PrimaryExpressionContext* context) {
+        if (context->Identifier())
+            return resolve(context->Identifier()->getText(), locate(context->Identifier()));
+        else if (context->Constant())
+            return decode_constant(context->Constant());
+        else if (!context->StringLiteral().empty())
+            return decode_string_literal(context->StringLiteral());
+        else if (context->LeftParen() && context->expression() && context->RightParen())
+            return decode_expression(context->expression());
+        else if (context->genericSelection())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Generics are not implemented", locate(context));
+        else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Unknown primary expression `{}`", context->getText()), locate(context));
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_constant(antlr4::tree::TerminalNode* terminal) {
+        const std::string text = terminal->getText();
+        if (text.starts_with("'") || text.starts_with("L'") || text.starts_with("u'") || text.starts_with("U'"))
+            return decode_character_constant(terminal);
+        else if (text.contains("."))
+            return decode_floating_constant(terminal);
+        else
+            return decode_integer_constant(terminal);
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_character_constant(antlr4::tree::TerminalNode* terminal) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Character constants are not implemented", locate(terminal));
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_floating_constant(antlr4::tree::TerminalNode* terminal) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Floating constants are not implemented", locate(terminal));
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_integer_constant(antlr4::tree::TerminalNode* terminal) {
+        const std::string text = terminal->getText();
+        if (text.at(0) == '0') {
+            if (text.length() == 1)
+                return decode_decimal_constant(terminal);  // Literal 0
+            else if (text.at(1) == 'x' || text.at(1) == 'X')
+                return decode_hexadecimal_constant(terminal);
+            else if (text.at(1) == 'b' || text.at(1) == 'B')
+                return decode_binary_constant(terminal);
+            else
+                return decode_octal_constant(terminal);
         } else {
-            add_statement(ir::stmt::Copy {.source = right_operand, .destination = })
-            current_scope()->statements.push_back(std::make_)
+            return decode_decimal_constant(terminal);
         }
     }
 
-    std::optional<ir::BinaryOperator> IRGenerator::decode_assignment_operator(CParser::AssignmentOperatorContext* context) {
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_decimal_constant(antlr4::tree::TerminalNode* terminal) {
+        const std::string text = terminal->getText();
+        const size_t suffix_position = text.find_first_not_of("0123456789");
+
+        size_t decimal_end;
+        const size_t value = std::stoull(text, &decimal_end);
+        if (decimal_end != text.length() && decimal_end != suffix_position)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Found garbage in decimal constant `{}`", text), locate(terminal));
+
+        std::string suffix;
+        if (suffix_position != std::string::npos)
+            suffix = text.substr(suffix_position);
+        return declare_integer_constant(value, suffix, locate(terminal));
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_hexadecimal_constant(antlr4::tree::TerminalNode* terminal) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Hexadecimal constants are not implemented", locate(terminal));
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_binary_constant(antlr4::tree::TerminalNode* terminal) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Binary constants are not implemented", locate(terminal));
+    }
+
+    std::shared_ptr<ir::Declaration>IRGenerator::decode_octal_constant(antlr4::tree::TerminalNode* terminal) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Octal constants are not implemented", locate(terminal));
+    }
+
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "String literals are not implemented", locate(terminals[0]));
+    }
+
+
+    std::shared_ptr<ir::Declaration> IRGenerator::declare_integer_constant(size_t base_value, std::string suffix, CodeLocation location) {
+        to_lower_inplace(suffix);
+        ir::TypeIdentifier type_identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = ""};
+        ir::stmt::LoadConst::Constant value;
+
+        if      (suffix.empty())                     { value = static_cast<int>               (base_value); type_identifier.name = "signed int";             }
+        else if (suffix == "u")                      { value = static_cast<unsigned int>      (base_value); type_identifier.name = "unsigned int";           }
+        else if (suffix == "l")                      { value = static_cast<long>              (base_value); type_identifier.name = "signed long int";        }
+        else if (suffix == "ll")                     { value = static_cast<unsigned long>     (base_value); type_identifier.name = "signed long long int";   }
+        else if (suffix == "ul" || suffix == "lu")   { value = static_cast<long long>         (base_value); type_identifier.name = "unsigned long int";      }
+        else if (suffix == "ull" || suffix == "llu") { value = static_cast<unsigned long long>(base_value); type_identifier.name = "unsigned long long int"; }
+        else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Unknown integer literal suffix `{}`", suffix), location);
+
+        ir::TypeSpecification spec = resolve_type(type_identifier, location);
+        std::shared_ptr<ir::Declaration> declaration = declare(ir::Declaration
+                {.name = anonymous_identifier(), .location = location, .storage = ir::StorageClass::AUTO | ir::StorageClass::TEMPORARY, .spec = spec});
+
+        add_statement(std::make_shared<ir::stmt::LoadConst> (location, declaration, value));
+        return declaration;
+    }
+
+
+    std::optional<ir::stmt::BinaryOperator> IRGenerator::decode_assignment_operator(CParser::AssignmentOperatorContext* context) {
         if      (context->Assign())            return {};
-        else if (context->StarAssign())        return ir::BinaryOperator::MUL;
-        else if (context->DivAssign())         return ir::BinaryOperator::DIV;
-        else if (context->ModAssign())         return ir::BinaryOperator::MOD;
-        else if (context->PlusAssign())        return ir::BinaryOperator::PLUS;
-        else if (context->MinusAssign())       return ir::BinaryOperator::MINUS;
-        else if (context->LeftShiftAssign())   return ir::BinaryOperator::LSHIFT;
-        else if (context->RightShiftAssign())  return ir::BinaryOperator::RSHIFT;
-        else if (context->AndAssign())         return ir::BinaryOperator::BITWISE_AND;
-        else if (context->XorAssign())         return ir::BinaryOperator::BITWISE_XOR;
-        else if (context->OrAssign())          return ir::BinaryOperator::BITWISE_OR;
-        else throw Diagnostic(Diagnostic::Level::INTERNAL_ERROR, std::format("Unknown assignment operator {}", context->getText()), get_location(context));
+        else if (context->StarAssign())        return ir::stmt::BinaryOperator::MUL;
+        else if (context->DivAssign())         return ir::stmt::BinaryOperator::DIV;
+        else if (context->ModAssign())         return ir::stmt::BinaryOperator::MOD;
+        else if (context->PlusAssign())        return ir::stmt::BinaryOperator::PLUS;
+        else if (context->MinusAssign())       return ir::stmt::BinaryOperator::MINUS;
+        else if (context->LeftShiftAssign())   return ir::stmt::BinaryOperator::LSHIFT;
+        else if (context->RightShiftAssign())  return ir::stmt::BinaryOperator::RSHIFT;
+        else if (context->AndAssign())         return ir::stmt::BinaryOperator::BITWISE_AND;
+        else if (context->XorAssign())         return ir::stmt::BinaryOperator::BITWISE_XOR;
+        else if (context->OrAssign())          return ir::stmt::BinaryOperator::BITWISE_OR;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown assignment operator {}", context->getText()), locate(context));
     }
 
     // ------------ Utilities
@@ -466,7 +842,7 @@ namespace toycc {
         return scope_stack.back();
     }
 
-    std::optional<CodeLocation> IRGenerator::get_name_location(std::string name, bool current_scope_only) {
+    std::optional<CodeLocation> IRGenerator::locate_name(std::string name, bool current_scope_only) {
         ir::TypeIdentifier type_identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = name};
         for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
             std::shared_ptr<ir::Scope> scope = *it;
@@ -485,17 +861,66 @@ namespace toycc {
         return {};
     }
 
-    CodeLocation IRGenerator::get_location(antlr4::ParserRuleContext* context) const {
+    CodeLocation IRGenerator::locate(antlr4::ParserRuleContext* context) const {
         antlr4::Token* start_token = context->getStart();
         LinePosition line = source_map.at(start_token->getLine());
         return {.filename = line.filename, .line = line.line, .character = start_token->getCharPositionInLine()};
+    }
+
+    CodeLocation IRGenerator::locate(antlr4::tree::TerminalNode* token) const {
+        LinePosition line = source_map.at(token->getSymbol()->getLine());
+        return {.filename = line.filename, .line = line.line, .character = token->getSymbol()->getCharPositionInLine()};
     }
 
     std::string IRGenerator::anonymous_identifier() {
         return std::format("<anonymous_{}>", unique_id++);
     }
 
-    std::optional<ir::TypeSpecification> IRGenerator::resolve_type(ir::TypeIdentifier identifier) {
+    std::shared_ptr<ir::Scope> IRGenerator::create_function_scope(const ir::Declaration& declaration) {
+        std::shared_ptr<ir::Scope> scope = std::make_shared<ir::Scope>();
+        for (const ir::Declaration& parameter : declaration.spec.parameters)
+            if (!parameter.name.empty())
+                scope->locals[parameter.name] = std::make_shared<ir::Declaration>(parameter);
+
+        return scope;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::declare(ir::Declaration declaration) {
+        std::optional<CodeLocation> existing_location = locate_name(declaration.name);
+        if (existing_location.has_value())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name {} was already declared", declaration.name), declaration.location)
+                   .add_note(DiagnosticLevel::NOTE, "Previously declared here", existing_location.value());
+
+        if (declaration.storage & ir::StorageClass::TYPEDEF)
+            return (current_scope()->typedefs[declaration.name] = std::make_shared<ir::Declaration>(declaration));
+        else
+            return (current_scope()->locals[declaration.name] = std::make_shared<ir::Declaration>(declaration));
+    }
+
+    std::shared_ptr<ir::Statement> IRGenerator::add_statement(std::shared_ptr<ir::Statement> statement) {
+        current_scope()->statements.push_back(statement);
+        return current_scope()->statements.back();
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::resolve_without_error(std::string name) {
+        for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
+            std::shared_ptr<ir::Scope> scope = *it;
+            if (scope->locals.contains(name))
+                return scope->locals.at(name);
+        }
+
+        return nullptr;
+    }
+
+    std::shared_ptr<ir::Declaration> IRGenerator::resolve(std::string name, CodeLocation location) {
+        std::shared_ptr<ir::Declaration> declaration = resolve_without_error(name);
+
+        if (declaration.get() == nullptr)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name `{}` was not declared", name), location);
+        return declaration;
+    }
+
+    std::optional<ir::TypeSpecification> IRGenerator::resolve_type_without_error(ir::TypeIdentifier identifier) {
         for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
             std::shared_ptr<ir::Scope> scope = *it;
             if (identifier.category == ir::TypeCategory::TYPEDEF) {
@@ -515,8 +940,25 @@ namespace toycc {
         return {};
     }
 
-    std::shared_ptr<ir::Statement> IRGenerator::add_statement(ir::Statement& statement) {
-        current_scope()->statements.push_back(std::make_shared<ir::Statement>(statement));
-        return current_scope()->statements.back();
+    ir::TypeSpecification IRGenerator::resolve_type(ir::TypeIdentifier identifier, CodeLocation location) {
+        std::optional<ir::TypeSpecification> spec = resolve_type_without_error(identifier);
+        if (!spec.has_value())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` was not declared", identifier.text()), location);
+        return spec.value();
+    }
+
+
+
+    // ------------ ScopeFrame
+    IRGenerator::ScopeFrame::ScopeFrame(std::deque<std::shared_ptr<ir::Scope>>& scope_stack, std::shared_ptr<ir::Scope> scope) : scope_stack(scope_stack) {
+        scope_stack.push_back(scope);
+    }
+
+    IRGenerator::ScopeFrame::~ScopeFrame() {
+        scope_stack.pop_back();
+    }
+
+    IRGenerator::ScopeFrame IRGenerator::in_scope(std::shared_ptr<ir::Scope> scope) {
+        return {scope_stack, scope};
     }
 }

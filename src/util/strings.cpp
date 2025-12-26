@@ -165,4 +165,16 @@ namespace toycc {
 
         return indented.str();
     }
+
+    std::string& to_lower_inplace(std::string& str) {
+        for (char& character : str)
+            character = std::tolower(character);
+        return str;
+    }
+
+    std::string to_lower(const std::string& str) {
+        std::string result = str;
+        to_lower_inplace(result);
+        return result;
+    }
 }

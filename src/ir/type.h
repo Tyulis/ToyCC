@@ -6,7 +6,7 @@
 
 namespace toycc::ir {
     enum class TypeCategory {
-        PRIMITIVE, TYPEDEF, STRUCT, UNION, ENUM, BUILTIN,
+        VOID, PRIMITIVE, TYPEDEF, STRUCT, UNION, ENUM, BUILTIN,
     };
 
     struct TypeIdentifier {
@@ -14,6 +14,7 @@ namespace toycc::ir {
         std::string name;
 
         std::string text() const;
+        std::string ir_code() const;
         bool operator< (TypeIdentifier rhs) const;
     };
 
@@ -23,10 +24,12 @@ namespace toycc::ir {
 
         Type() = default;
         Type(TypeIdentifier identifier, CodeLocation location);
+
+        virtual std::string ir_code() const;
     };
 
     enum class PrimitiveSemantic {
-        VOID, BOOL, INTEGER, FLOAT,
+        BOOL, INTEGER, FLOAT,
     };
 
     struct PrimitiveType : public Type {
@@ -37,5 +40,7 @@ namespace toycc::ir {
 
         PrimitiveType() = default;
         PrimitiveType(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment);
+
+        virtual std::string ir_code() const override;
     };
 }

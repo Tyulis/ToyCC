@@ -13,6 +13,8 @@ namespace toycc::ir {
         std::string name;
         CodeLocation location;
         TypeSpecification spec;
+
+        std::string ir_code() const;
     };
 
     struct CompoundType : public Type {  // Struct or union
@@ -22,6 +24,8 @@ namespace toycc::ir {
 
         CompoundType() = default;
         CompoundType(TypeIdentifier identifier, CodeLocation location);
+
+        virtual std::string ir_code() const override;
     };
 
     struct Enum : public Type {
@@ -29,5 +33,7 @@ namespace toycc::ir {
 
         Enum() = default;
         Enum(std::string name, CodeLocation location);
+
+        virtual std::string ir_code() const override;
     };
 }

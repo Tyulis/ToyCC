@@ -3,7 +3,7 @@ project(toycc VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
-set(CMAKE_CXX_FLAGS "-g -Wall -Wextra")
+set(CMAKE_CXX_FLAGS "-g -Wall -Wextra -Werror=switch")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)  # For clangd
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -28,7 +28,7 @@ set(GRAMMAR_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/C.g4)
 antlr_target(CParser ${GRAMMAR_G4}
              PACKAGE "toycc"
              OUTPUT_DIRECTORY ${PARSER_SRC}
-             LEXER PARSER LISTENER)
+             LEXER PARSER LISTENER VISITOR)
 
 
 # Copy the prologues
@@ -46,6 +46,8 @@ add_executable(${PROJECT_NAME}
 
 	src/ir/compound_type.cpp
 	src/ir/declaration.cpp
+	src/ir/scope.cpp
+	src/ir/statement.cpp
 	src/ir/type.cpp
 
 	src/util/strings.cpp

@@ -7,10 +7,10 @@
 #include "util/strings.h"
 
 namespace toycc {
-    Diagnostic::Diagnostic(Level level, std::string base_message, std::optional<std::string> filename, std::optional<size_t> line, std::optional<size_t> character)
+    Diagnostic::Diagnostic(DiagnosticLevel level, std::string base_message, std::optional<std::string> filename, std::optional<size_t> line, std::optional<size_t> character)
         : _level(level), _base_message(base_message), _filename(filename), _line(line), _character(character) {}
 
-    Diagnostic::Diagnostic(Level level, std::string base_message, CodeLocation location)
+    Diagnostic::Diagnostic(DiagnosticLevel level, std::string base_message, CodeLocation location)
         : _level(level), _base_message(base_message), _filename(location.filename), _line(location.line), _character(location.character) {}
 
     Diagnostic& Diagnostic::add_note(Diagnostic note) {
@@ -18,23 +18,23 @@ namespace toycc {
         return *this;
     }
 
-    Diagnostic& Diagnostic::add_note(Level level, std::string base_message, std::optional<std::string> filename, std::optional<size_t> line, std::optional<size_t> character) {
+    Diagnostic& Diagnostic::add_note(DiagnosticLevel level, std::string base_message, std::optional<std::string> filename, std::optional<size_t> line, std::optional<size_t> character) {
         notes.emplace_back(level, base_message, filename, line, character);
         return *this;
     }
 
-    Diagnostic& Diagnostic::add_note(Level level, std::string base_message, CodeLocation location) {
+    Diagnostic& Diagnostic::add_note(DiagnosticLevel level, std::string base_message, CodeLocation location) {
         notes.emplace_back(level, base_message, location);
         return *this;
     }
 
-    Diagnostic::Level          Diagnostic::level()        const { return _level;        }
+    DiagnosticLevel            Diagnostic::level()        const { return _level;        }
     std::string                Diagnostic::base_message() const { return _base_message; }
     std::optional<std::string> Diagnostic::filename()     const { return _filename;     }
     std::optional<size_t>      Diagnostic::line()         const { return _line;         }
     std::optional<size_t>      Diagnostic::character()    const { return _character;    }
 
-    Diagnostic& Diagnostic::level(Diagnostic::Level level) {
+    Diagnostic& Diagnostic::level(DiagnosticLevel level) {
         _level = level;
         return *this;
     }
@@ -62,12 +62,12 @@ namespace toycc {
     std::string Diagnostic::own_message() const {
         std::string level_text;
         switch (_level) {
-            case Level::DEBUG:           level_text = "DEBUG";           break;
-            case Level::NOTE:            level_text = "NOTE";            break;
-            case Level::WARNING:         level_text = "WARNING";         break;
-            case Level::ERROR:           level_text = "ERROR";           break;
-            case Level::INTERNAL_ERROR:  level_text = "INTERNAL_ERROR";  break;
-            case Level::NOT_IMPLEMENTED: level_text = "NOT_IMPLEMENTED"; break;
+            case DiagnosticLevel::DEBUG:           level_text = "DEBUG";           break;
+            case DiagnosticLevel::NOTE:            level_text = "NOTE";            break;
+            case DiagnosticLevel::WARNING:         level_text = "WARNING";         break;
+            case DiagnosticLevel::ERROR:           level_text = "ERROR";           break;
+            case DiagnosticLevel::INTERNAL_ERROR:  level_text = "INTERNAL_ERROR";  break;
+            case DiagnosticLevel::NOT_IMPLEMENTED: level_text = "NOT_IMPLEMENTED"; break;
         }
 
         if (!_filename.has_value() && !_line.has_value()) {  // No location information -> don't print it'

@@ -30,4 +30,7 @@ namespace toycc {
     std::string xml_escape(const std::string& str);
 
     std::string indent(const std::string& str, bool indent_first_line=true, std::string prefix="\t");
+
+    std::string& to_lower_inplace(std::string& str);
+    std::string to_lower(const std::string& str);
 }

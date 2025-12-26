@@ -167,8 +167,8 @@ constantExpression
     ;
 
 declaration
-    : declarationSpecifiers initDeclaratorList? ';'  #declarationDeclaration
-    | staticAssertDeclaration                        #declarationStaticAssert
+    : declarationSpecifiers initDeclaratorList? ';'
+    | staticAssertDeclaration
     ;
 
 declarationSpecifiers
