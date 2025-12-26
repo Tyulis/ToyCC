@@ -55,6 +55,27 @@ namespace toycc::ir {
         return type->identifier.category == TypeCategory::VOID && pointer_spec.empty() && !is_function_type;
     }
 
+    // Get the return type of a function declaration
+    TypeSpecification TypeSpecification::return_type() const {
+        if (!is_function_type)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to get the return type of a non-function type");
+
+        return TypeSpecification {.type = type, .qualifiers = qualifiers, .pointer_spec = pointer_spec,
+            .array_spec = {}, .is_function_type = false, .function_spec = {}, .parameters = {},
+            .custom_alignment = custom_alignment, .bitfield_length = bitfield_length};
+    }
+
+    bool TypeSpecification::operator== (const TypeSpecification& spec) const {
+        return (type.get() == spec.type.get()
+             && qualifiers == spec.qualifiers
+             && pointer_spec == spec.pointer_spec
+             && array_spec == spec.array_spec
+             && is_function_type == spec.is_function_type
+             && (!is_function_type || (function_spec == spec.function_spec && parameters == spec.parameters))
+             && custom_alignment == spec.custom_alignment
+             && bitfield_length == spec.bitfield_length);
+    }
+
     static std::string type_qualifiers_repr(Flags<TypeQualifier> qualifiers) {
         if (!qualifiers)
             return "";
@@ -140,5 +161,9 @@ namespace toycc::ir {
 
     std::string Declaration::ir_code() const {
         return std::format("#decl {}{} : {}", storage_classes_repr(storage), name, spec.ir_code());
+    }
+
+    bool Declaration::operator== (const Declaration& decl) const {
+        return (name == decl.name && storage == decl.storage && spec == decl.spec);
     }
 }

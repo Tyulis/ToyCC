@@ -109,7 +109,7 @@ namespace toycc {
             void add_builtin_type(std::string name);
             void add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment);
             void init_global_scope();
-            std::shared_ptr<ir::Scope> create_function_scope(const ir::Declaration& declaration);
+            std::shared_ptr<ir::Scope> create_function_scope(std::shared_ptr<ir::Declaration> declaration);
             std::shared_ptr<ir::Declaration> declare(ir::Declaration declaration);
             std::shared_ptr<ir::Statement> add_statement(std::shared_ptr<ir::Statement> statement);
 

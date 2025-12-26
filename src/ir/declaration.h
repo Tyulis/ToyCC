@@ -52,6 +52,9 @@ namespace toycc::ir {
         TypeSpecification merge (TypeSpecification overriding, CodeLocation location) const;
         bool is_void() const;
         std::string ir_code() const;
+        TypeSpecification return_type() const;
+
+        bool operator== (const TypeSpecification& spec) const;
     };
 
     struct Declaration {
@@ -62,5 +65,7 @@ namespace toycc::ir {
 
         void check(bool is_struct) const;
         std::string ir_code() const;
+
+        bool operator== (const Declaration& decl) const;
     };
 }

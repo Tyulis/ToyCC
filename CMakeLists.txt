@@ -28,7 +28,7 @@ set(GRAMMAR_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/C.g4)
 antlr_target(CParser ${GRAMMAR_G4}
              PACKAGE "toycc"
              OUTPUT_DIRECTORY ${PARSER_SRC}
-             LEXER PARSER LISTENER VISITOR)
+             LEXER PARSER LISTENER)
 
 
 # Copy the prologues

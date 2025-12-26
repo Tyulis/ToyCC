@@ -35,6 +35,7 @@ namespace toycc {
     void IRGenerator::init_global_scope() {
         // Initialize the global scope
         scope_stack.push_back(std::make_shared<ir::Scope>());
+        current_scope()->function = nullptr;
 
         using namespace toycc::arch;
         ir::TypeIdentifier void_identifier = {.category = ir::TypeCategory::VOID, .name = "void"};
@@ -104,8 +105,9 @@ namespace toycc {
         if (!declaration.spec.is_function_type)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Function definition does not contain a function declaration", locate(context));
 
-        std::shared_ptr<ir::Scope> function_scope = create_function_scope(declaration);
-        add_statement(std::make_shared<ir::stmt::Function>(locate(context), function_scope, declare(declaration)));
+        std::shared_ptr<ir::Declaration> function_decl = declare(declaration);
+        std::shared_ptr<ir::Scope> function_scope = create_function_scope(function_decl);
+        add_statement(std::make_shared<ir::stmt::Function>(locate(context), function_scope, function_decl));
         decode_compound_statement(context->compoundStatement(), function_scope);
     }
 
@@ -113,6 +115,7 @@ namespace toycc {
     // ------------ Statements
     std::shared_ptr<ir::Scope> IRGenerator::decode_compound_statement(CParser::CompoundStatementContext* context) {
         std::shared_ptr<ir::Scope> scope = std::make_shared<ir::Scope>();
+        scope->function = current_scope()->function;
 
         add_statement(std::make_shared<ir::stmt::Block>(locate(context), scope));
         decode_compound_statement(context, scope);
@@ -168,10 +171,22 @@ namespace toycc {
     }
 
     void IRGenerator::decode_return_statement(CParser::JumpStatementContext* context) {
-        if (context->expression())
-            add_statement(std::make_shared<ir::stmt::Return>(locate(context), decode_expression(context->expression())));
-        else
+        std::shared_ptr<ir::Declaration> current_function = current_scope()->function;
+        if (current_function.get() == nullptr)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Return statement outside of a function definition", locate(context));
+
+        if (context->expression()) {
+            ir::TypeSpecification return_type_spec = current_function->spec.return_type();
+            std::shared_ptr<ir::Declaration> return_value = decode_expression(context->expression());
+            if (return_value->spec != return_type_spec)
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", locate(context));
+
+            add_statement(std::make_shared<ir::stmt::Return>(locate(context), return_value));
+        } else {
+            if (!current_function->spec.is_void())
+                throw Diagnostic(DiagnosticLevel::ERROR, "Return without a value within a function with a non-void return type", locate(context));
             add_statement(std::make_shared<ir::stmt::Return>(locate(context)));
+        }
     }
 
 
@@ -876,9 +891,10 @@ namespace toycc {
         return std::format("<anonymous_{}>", unique_id++);
     }
 
-    std::shared_ptr<ir::Scope> IRGenerator::create_function_scope(const ir::Declaration& declaration) {
+    std::shared_ptr<ir::Scope> IRGenerator::create_function_scope(std::shared_ptr<ir::Declaration> declaration) {
         std::shared_ptr<ir::Scope> scope = std::make_shared<ir::Scope>();
-        for (const ir::Declaration& parameter : declaration.spec.parameters)
+        scope->function = declaration;
+        for (const ir::Declaration& parameter : declaration->spec.parameters)
             if (!parameter.name.empty())
                 scope->locals[parameter.name] = std::make_shared<ir::Declaration>(parameter);
 
