@@ -1,4 +1,6 @@
+#include <boost/program_options/errors.hpp>
 #include <boost/program_options/positional_options.hpp>
+#include <fstream>
 #include <sstream>
 #include <iostream>
 
@@ -27,7 +29,8 @@ int main(int argc, char** argv) {
 
     boost::program_options::options_description generic_options("Generic options");
     generic_options.add_options()("help,h",        "Show this help message")
-                                 ("source-file,f", "Source files");
+                                 ("output,o",      boost::program_options::value<std::string>(), "Output file name")
+                                 ("source-file,f", boost::program_options::value<std::string>(), "Source files");
 
     boost::program_options::options_description all_options;
     all_options.add(generic_options).add(sequence_options);
@@ -38,9 +41,9 @@ int main(int argc, char** argv) {
     boost::program_options::variables_map options;
 
     try {
-        boost::program_options::store(boost::program_options::command_line_parser(argc, argv).positional(positional).options(all_options).run(), options);
+        boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(all_options).positional(positional).run(), options);
         boost::program_options::notify(options);
-    } catch (boost::program_options::unknown_option const& exc) {
+    } catch (boost::program_options::error const& exc) {
         std::cerr << exc.what() << std::endl;
         std::cout << all_options << std::endl;
         return 1;
@@ -63,12 +66,24 @@ int main(int argc, char** argv) {
     if (target_step == SequenceStep::NONE)
         return 0;
 
+    std::reference_wrapper<std::ostream> output_stream = std::cout;
+    std::ofstream output_file;
+    if (options.count("output")) {
+        const std::string output_file_name = options["output"].as<std::string>();
+        output_file = std::ofstream(output_file_name);
+        if (!output_file.is_open()) {
+            std::cerr << std::format("Can't open output file {}", output_file_name) << std::endl;
+            return 1;
+        }
+        output_stream = std::reference_wrapper(output_file);
+    }
+
     const std::string input_file_name = options["source-file"].as<std::string>();
 
     try {
         // -------- Preprocessing
         std::stringstream preprocessed_code;
-        std::ostream& preprocessing_output = (target_step == SequenceStep::PREPROCESS? std::cout : preprocessed_code);
+        std::ostream& preprocessing_output = (target_step == SequenceStep::PREPROCESS? output_stream : preprocessed_code);
         toycc::preprocess(input_file_name, preprocessing_output);
 
         if (target_step == SequenceStep::PREPROCESS)
@@ -79,7 +94,7 @@ int main(int argc, char** argv) {
         toycc::SourceMap source_map(preprocessed_code, stripped_code);
 
         if (target_step == SequenceStep::SOURCE_MAP) {
-            source_map.annotate(stripped_code, std::cout);
+            source_map.annotate(stripped_code, output_stream);
             return 0;
         }
 
@@ -89,11 +104,11 @@ int main(int argc, char** argv) {
 
         if (target_step == SequenceStep::PARSE) {
             if (options.count("parse-lisp"))
-                std::cout << parser.to_lisp() << std::endl;
+                output_stream.get() << parser.to_lisp() << std::endl;
             else if (options.count("parse-xml"))
-                std::cout << parser.to_xml() << std::endl;
+                output_stream.get() << parser.to_xml() << std::endl;
             else  // if (options.count("parse-ir"))  // Default to IR
-                std::cout << parser.to_ir() << std::endl;
+                output_stream.get() << parser.to_ir() << std::endl;
             return 0;
         }
     } catch (toycc::Diagnostic const& diagnostic) {

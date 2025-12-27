@@ -4,3 +4,6 @@
 [submodule "lib/antlr4"]
 	path = lib/antlr4
 	url = https://github.com/antlr/antlr4.git
+[submodule "lib/c-testsuite"]
+	path = lib/c-testsuite
+	url = ssh://git@gitea.tyulis.fr:2222/gmignerot/c-testsuite.git

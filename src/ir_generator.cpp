@@ -333,6 +333,9 @@ namespace toycc {
             spec = resolve_type(identifier, location);
         }
 
+        if (!spec.has_value())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` was not declared", identifier.text()), location);
+
         return spec.value();
     }
 
@@ -352,7 +355,11 @@ namespace toycc {
             const std::string token = specifier->getText();
             const CodeLocation location = locate(specifier);
 
-            if (specifier->Void() || specifier->Char() || specifier->Bool() || specifier->Float() || specifier->Short() || specifier->Int() || specifier->Double() || specifier->Long()) {
+            if (specifier->Void()) {
+                if (identifier.has_value())
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Void types can't have more than one identifier", location);
+                identifier = ir::TypeIdentifier {.category = ir::TypeCategory::VOID, .name = token};
+            } else if (specifier->Void() || specifier->Char() || specifier->Bool() || specifier->Float() || specifier->Short() || specifier->Int() || specifier->Double() || specifier->Long()) {
                 primitive_type_tokens.insert(token);
             } else if (specifier->Signed() || specifier->Unsigned()) {
                 if (sign_token.has_value())
