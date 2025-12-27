@@ -2,13 +2,14 @@
 
 #include <variant>
 #include "ir/declaration.h"
+#include "util/flags.hpp"
 
 
 namespace toycc::ir {
     namespace stmt {
         enum class Tag {
             NOP, BLOCK, FUNCTION,
-            LOAD_CONST, COPY,
+            LOAD_CONST, CONVERSION,
             BINARY_OP,
             RETURN,
         };
@@ -25,6 +26,24 @@ namespace toycc::ir {
             EQ, NE,
             BITWISE_AND, BITWISE_XOR, BITWISE_OR,
             LOGICAL_AND, LOGICAL_OR,
+        };
+
+        enum class ConversionOperation {
+            INTEGER_SIZE_UP    = 0x00001,
+            INTEGER_SIZE_DOWN  = 0x00002,
+            SIGNED_TO_UNSIGNED = 0x00004,
+            UNSIGNED_TO_SIGNED = 0x00008,
+
+            FLOAT_SIZE_UP      = 0x00100,
+            FLOAT_SIZE_DOWN    = 0x00200,
+
+            INT_TO_FLOAT       = 0x01000,
+            FLOAT_TO_INT       = 0x02000,
+
+            INT_TO_BOOL        = 0x10000,
+            BOOL_TO_INT        = 0x20000,
+            FLOAT_TO_BOOL      = 0x40000,
+            BOOL_TO_FLOAT      = 0x80000,
         };
     }
 
@@ -72,11 +91,13 @@ namespace toycc::ir {
             virtual std::string ir_code() const override;
         };
 
-        struct Copy : public Statement {
+        // Conversion operation, also serves as a copy operation when the `operation` is empty
+        struct Conversion : public Statement {
+            Flags<ConversionOperation> operation;
             std::shared_ptr<Declaration> destination;
             std::shared_ptr<Declaration> source;
 
-            Copy(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source);
+            Conversion(CodeLocation location, Flags<ConversionOperation> operation, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source);
             virtual std::string ir_code() const override;
         };
 

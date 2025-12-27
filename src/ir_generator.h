@@ -7,6 +7,7 @@
 #include "ir/declaration.h"
 #include "ir/scope.h"
 #include "ir/statement.h"
+#include "ir/type.h"
 #include "parser/CParser.h"
 #include "source_map.h"
 
@@ -101,9 +102,12 @@ namespace toycc {
             std::optional<ir::stmt::BinaryOperator> decode_assignment_operator(CParser::AssignmentOperatorContext* context);
 
             // -------- IR emission common functions
-            std::shared_ptr<ir::Declaration> emit_implicit_cast(ir::TypeSpecification target, std::shared_ptr<ir::Declaration> source, CodeLocation location);
+            std::shared_ptr<ir::Declaration> emit_implicit_conversion(ir::TypeSpecification target, std::shared_ptr<ir::Declaration> source, CodeLocation location);
             std::array<std::shared_ptr<ir::Declaration>, 2> emit_arithmetic_conversion(std::shared_ptr<ir::Declaration> left, std::shared_ptr<ir::Declaration> right, CodeLocation location);
             void emit_copy(std::shared_ptr<ir::Declaration> destination, std::shared_ptr<ir::Declaration> source, CodeLocation location, bool initialize);
+
+            Flags<ir::stmt::ConversionOperation> implicit_conversion_operation(ir::TypeSpecification destination, ir::TypeSpecification source, CodeLocation location);
+            Flags<ir::stmt::ConversionOperation> explicit_conversion_operation(ir::TypeSpecification destination, ir::TypeSpecification source, CodeLocation location);
 
             // -------- Utilities
             std::shared_ptr<ir::Scope> current_scope();
@@ -113,7 +117,7 @@ namespace toycc {
             std::string anonymous_identifier();
 
             void add_builtin_type(std::string name);
-            void add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment, size_t conversion_rank);
+            void add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment);
             void init_global_scope();
             std::shared_ptr<ir::Scope> create_function_scope(std::shared_ptr<ir::Declaration> declaration);
             std::shared_ptr<ir::Declaration> declare(ir::Declaration declaration);

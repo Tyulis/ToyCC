@@ -51,6 +51,14 @@ namespace toycc {
                 return Flags {static_cast<T>(std::to_underlying(value) & ~(std::to_underlying(rhs)))};
             }
 
+            constexpr bool includes(Flags<T> rhs) const {
+                return (*this & rhs) == rhs;
+            }
+
+            constexpr bool includes(T rhs) const {
+                return (*this & rhs);
+            }
+
             constexpr operator bool() const {
                 return std::to_underlying(value) != 0;
             }

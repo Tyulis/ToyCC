@@ -50,6 +50,7 @@ add_executable(${PROJECT_NAME}
 	src/ir/statement.cpp
 	src/ir/type.cpp
 
+	src/util/log.cpp
 	src/util/strings.cpp
 
 	${ANTLR_CParser_CXX_OUTPUTS})

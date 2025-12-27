@@ -55,14 +55,53 @@ namespace toycc::ir {
         return type->identifier.category == TypeCategory::VOID && pointer_spec.empty() && !is_function_type;
     }
 
+    bool TypeSpecification::is_array_type() const {
+        return !array_spec.empty();
+    }
+
+    bool TypeSpecification::is_pointer_type() const {
+        return !pointer_spec.empty() || is_function_type;
+    }
+
+    // Object type, so not a pointer, function or void
+    bool TypeSpecification::is_object_type() const {
+        return !is_void() && !is_pointer_type();
+    }
+
+    // Get the type of the elements of an array type
+    TypeSpecification TypeSpecification::element_type() const {
+        if (!is_array_type())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to get the element type of a non-array type");
+
+        return TypeSpecification {.array_spec = {},
+                                  .is_function_type = is_function_type, .function_spec = function_spec, .parameters = parameters,
+                                  .pointer_spec = pointer_spec,
+                                  .type = type, .qualifiers = qualifiers, .custom_alignment = custom_alignment, .bitfield_length = bitfield_length};
+    }
+
     // Get the return type of a function declaration
     TypeSpecification TypeSpecification::return_type() const {
         if (!is_function_type)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to get the return type of a non-function type");
 
-        return TypeSpecification {.type = type, .qualifiers = qualifiers, .pointer_spec = pointer_spec,
-            .array_spec = {}, .is_function_type = false, .function_spec = {}, .parameters = {},
-            .custom_alignment = custom_alignment, .bitfield_length = bitfield_length};
+        return TypeSpecification {.array_spec = {},
+                                  .is_function_type = false, .function_spec = {}, .parameters = {},
+                                  .pointer_spec = pointer_spec,
+                                  .type = type, .qualifiers = qualifiers, .custom_alignment = custom_alignment, .bitfield_length = bitfield_length};
+    }
+
+    // Get the type referenced by a pointer
+    TypeSpecification TypeSpecification::referenced_type() const {
+        if (!is_pointer_type())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to get the referenced type of a non-pointer type");
+
+        std::vector<Flags<TypeQualifier>> dereferenced_pointer_spec = pointer_spec;
+        dereferenced_pointer_spec.pop_back();
+
+        return TypeSpecification {.array_spec = {},
+                                  .is_function_type = false, .function_spec = {}, .parameters = {},
+                                  .pointer_spec = dereferenced_pointer_spec,
+                                  .type = type, .qualifiers = qualifiers, .custom_alignment = custom_alignment, .bitfield_length = bitfield_length};
     }
 
     // Check whether `spec` is the exact same type
@@ -77,15 +116,14 @@ namespace toycc::ir {
              && bitfield_length == spec.bitfield_length);
     }
 
-    // Check whether this type can be assigned from a value of the `spec` type
-    // Basically, qualifiers don't matter, alignment doesn't matter, and bitfield may go into bigger bitfields
-    bool TypeSpecification::can_be_assigned(const TypeSpecification& spec) const {
+    // Check whether `spec` can be assigned directly to this type without conversion
+    bool TypeSpecification::can_be_assigned_from(const TypeSpecification& spec) const {
         return (type.get() == spec.type.get()
              && pointer_spec == spec.pointer_spec
              && array_spec == spec.array_spec
              && is_function_type == spec.is_function_type
              && (!is_function_type || (function_spec == spec.function_spec && parameters == spec.parameters))
-             && bitfield_length >= spec.bitfield_length);
+             && bitfield_length == spec.bitfield_length);
     }
 
     static std::string type_qualifiers_repr(Flags<TypeQualifier> qualifiers) {

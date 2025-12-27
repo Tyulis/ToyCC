@@ -38,24 +38,34 @@ namespace toycc::ir {
     struct Declaration;
 
     struct TypeSpecification {
-        std::shared_ptr<ir::Type> type;
-        Flags<TypeQualifier> qualifiers;
-        std::vector<Flags<TypeQualifier>> pointer_spec;
         std::vector<std::shared_ptr<Declaration>> array_spec;
+
         bool is_function_type = false;
         Flags<FunctionSpecifier> function_spec;
         std::vector<Declaration> parameters;
+
+        std::vector<Flags<TypeQualifier>> pointer_spec;
+
+        std::shared_ptr<ir::Type> type;
+        Flags<TypeQualifier> qualifiers;
         std::optional<size_t> custom_alignment;
         std::optional<size_t> bitfield_length;
 
         void check(bool in_struct, CodeLocation location) const;
         TypeSpecification merge (TypeSpecification overriding, CodeLocation location) const;
         bool is_void() const;
+        bool is_pointer_type() const;
+        bool is_array_type() const;
+        bool is_object_type() const;
         std::string ir_code() const;
+
+        // The "priority" here is array > function > pointer > object
+        TypeSpecification element_type() const;
         TypeSpecification return_type() const;
+        TypeSpecification referenced_type() const;
 
         bool operator== (const TypeSpecification& spec) const;
-        bool can_be_assigned(const TypeSpecification& spec) const;
+        bool can_be_assigned_from(const TypeSpecification& spec) const;
     };
 
     struct Declaration {

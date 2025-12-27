@@ -1,5 +1,6 @@
 #include <format>
 #include <sstream>
+#include <variant>
 
 #include "diagnostic.h"
 #include "ir/statement.h"
@@ -15,7 +16,7 @@ namespace toycc::ir {
             case stmt::Tag::FUNCTION:    return "FUNCTION";
             case stmt::Tag::BINARY_OP:   return "BINARY_OP";
             case stmt::Tag::LOAD_CONST:  return "LOAD_CONST";
-            case stmt::Tag::COPY:        return "COPY";
+            case stmt::Tag::CONVERSION:  return "CONVERSION";
             case stmt::Tag::RETURN:      return "RETURN";
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid statement tag");
@@ -47,6 +48,24 @@ namespace toycc::ir::stmt {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid binary operator");
     }
 
+    static std::string conversion_operation_repr(Flags<ConversionOperation> operation) {
+        if (!operation)
+            return "";
+
+        std::string result;
+        if (operation & ConversionOperation::INTEGER_SIZE_UP)     result += "INTEGER_SIZE_UP ";
+        if (operation & ConversionOperation::INTEGER_SIZE_DOWN)   result += "INTEGER_SIZE_DOWN ";
+        if (operation & ConversionOperation::SIGNED_TO_UNSIGNED)  result += "SIGNED_TO_UNSIGNED ";
+        if (operation & ConversionOperation::UNSIGNED_TO_SIGNED)  result += "UNSIGNED_TO_SIGNED ";
+        if (operation & ConversionOperation::FLOAT_SIZE_UP)       result += "FLOAT_SIZE_UP ";
+        if (operation & ConversionOperation::FLOAT_SIZE_DOWN)     result += "FLOAT_SIZE_DOWN ";
+        if (operation & ConversionOperation::INT_TO_FLOAT)        result += "INT_TO_FLOAT ";
+        if (operation & ConversionOperation::FLOAT_TO_INT)        result += "FLOAT_TO_INT ";
+        if (operation & ConversionOperation::INT_TO_BOOL)         result += "INT_TO_BOOL ";
+        if (operation & ConversionOperation::FLOAT_TO_BOOL)       result += "FLOAT_TO_BOOL ";
+        return result;
+    }
+
 
     Block::Block(CodeLocation location, std::shared_ptr<Scope> scope) : Statement(Tag::BLOCK, location), scope(scope) {}
     Block::Block(Tag tag, CodeLocation location, std::shared_ptr<Scope> scope) : Statement(tag, location), scope(scope) {}
@@ -65,18 +84,30 @@ namespace toycc::ir::stmt {
         return std::format("{} {}", tag_repr(), declaration->name);
     }
 
+
+
     LoadConst::LoadConst(CodeLocation location, std::shared_ptr<Declaration> destination, Constant value)
             : Statement(Tag::LOAD_CONST, location), destination(destination), value(value) {}
     std::string LoadConst::ir_code() const {
         std::stringstream code;
-        code << tag_repr() << " " << destination->name << " ";
-        std::visit([&](auto&& val) { code << val; }, value);
+        code << tag_repr() << " " << destination->name << " = ";
+
+        if (std::holds_alternative<char>(value)) {
+            std::string character;
+            character.push_back(std::get<char>(value));
+            code << "'" << escape(character) << "'";
+        } else if (std::holds_alternative<std::string>(value)) {
+            code << "\"" << escape(std::get<std::string>(value)) << "\"";
+        } else {
+            std::visit([&](auto&& val) { code << val; }, value);
+        }
         return code.str();
     }
 
-    Copy::Copy(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source) : Statement(Tag::COPY, location), destination(destination), source(source) {}
-    std::string Copy::ir_code() const {
-        return std::format("{} {} {}", tag_repr(), destination->name, source->name);
+    Conversion::Conversion(CodeLocation location, Flags<ConversionOperation> operation, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source)
+        : Statement(Tag::CONVERSION, location), operation(operation), destination(destination), source(source) {}
+    std::string Conversion::ir_code() const {
+        return std::format("{} {} = {}{}", tag_repr(), destination->name, conversion_operation_repr(operation), source->name);
     }
 
     BinaryOp::BinaryOp(CodeLocation location, BinaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right)

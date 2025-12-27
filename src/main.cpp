@@ -8,6 +8,7 @@
 #include "source_map.h"
 #include "diagnostic.h"
 #include "preprocess.h"
+#include "util/log.h"
 
 enum class SequenceStep : unsigned int {
     NONE = 0,
@@ -96,7 +97,7 @@ int main(int argc, char** argv) {
             return 0;
         }
     } catch (toycc::Diagnostic const& diagnostic) {
-        std::cerr << diagnostic.message() << std::endl;
+        toycc::log(diagnostic);
         return 2;
     }
 

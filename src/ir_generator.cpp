@@ -14,9 +14,9 @@ namespace toycc {
         return generator.get();
     }
 
-    void IRGenerator::add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment, size_t conversion_rank) {
+    void IRGenerator::add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment) {
         ir::TypeIdentifier identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = name};
-        current_scope()->types[identifier] = std::make_shared<ir::PrimitiveType>(name, is_signed, semantic, size, alignment, conversion_rank);
+        current_scope()->types[identifier] = std::make_shared<ir::PrimitiveType>(name, is_signed, semantic, size, alignment);
     }
 
     void IRGenerator::add_builtin_type(std::string name) {
@@ -41,20 +41,20 @@ namespace toycc {
         ir::TypeIdentifier void_identifier = {.category = ir::TypeCategory::VOID, .name = "void"};
         current_scope()->types[void_identifier] = std::make_shared<ir::Type> (void_identifier, CodeLocation {.filename = "<built-in>", .line = 1, .character = 1});
 
-        add_primitive_type("_Bool",                  false, ir::PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT,        0);
-        add_primitive_type("signed char",            true,  ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT,        1);
-        add_primitive_type("unsigned char",          false, ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT,        1);
-        add_primitive_type("signed short int",       true,  ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT,       2);
-        add_primitive_type("unsigned short int",     false, ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT,       2);
-        add_primitive_type("signed int",             true,  ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT,         3);
-        add_primitive_type("unsigned int",           false, ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT,         3);
-        add_primitive_type("signed long int",        true,  ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT,        4);
-        add_primitive_type("unsigned long int",      false, ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT,        4);
-        add_primitive_type("signed long long int",   false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT,   5);
-        add_primitive_type("unsigned long long int", false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT,   5);
-        add_primitive_type("float",                  true,  ir::PrimitiveSemantic::FLOAT,   FLOAT_SIZE,       FLOAT_ALIGNMENT,       6);
-        add_primitive_type("double",                 true,  ir::PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT,      7);
-        add_primitive_type("long double",            true,  ir::PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT, 8);
+        add_primitive_type("_Bool",                  false, ir::PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT);
+        add_primitive_type("signed char",            true,  ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
+        add_primitive_type("unsigned char",          false, ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
+        add_primitive_type("signed short int",       true,  ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
+        add_primitive_type("unsigned short int",     false, ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
+        add_primitive_type("signed int",             true,  ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
+        add_primitive_type("unsigned int",           false, ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
+        add_primitive_type("signed long int",        true,  ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
+        add_primitive_type("unsigned long int",      false, ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
+        add_primitive_type("signed long long int",   false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
+        add_primitive_type("unsigned long long int", false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
+        add_primitive_type("float",                  true,  ir::PrimitiveSemantic::FLOAT,   FLOAT_SIZE,       FLOAT_ALIGNMENT);
+        add_primitive_type("double",                 true,  ir::PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT);
+        add_primitive_type("long double",            true,  ir::PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT);
 
         add_builtin_type("__builtin_va_list");
     }
@@ -178,7 +178,7 @@ namespace toycc {
         if (context->expression()) {
             ir::TypeSpecification return_type_spec = current_function->spec.return_type();
             std::shared_ptr<ir::Declaration> expression_result = decode_expression(context->expression());
-            std::shared_ptr<ir::Declaration> return_value = emit_implicit_cast(return_type_spec, expression_result, locate(context));
+            std::shared_ptr<ir::Declaration> return_value = emit_implicit_conversion(return_type_spec, expression_result, locate(context));
             add_statement(std::make_shared<ir::stmt::Return>(locate(context), return_value));
         } else {
             if (!current_function->spec.is_void())
@@ -908,28 +908,195 @@ namespace toycc {
 
     // ------------ IR emission common functions
     // Return a declaration compatible with the `target` type specification. If necessary, emit an implicit cast and declare a new temporary with that target type
-    std::shared_ptr<ir::Declaration> IRGenerator::emit_implicit_cast(ir::TypeSpecification target, std::shared_ptr<ir::Declaration> source, CodeLocation location) {
-        if (target.can_be_assigned(source->spec))  // Already the correct type, nothing to do
+    std::shared_ptr<ir::Declaration> IRGenerator::emit_implicit_conversion(ir::TypeSpecification target, std::shared_ptr<ir::Declaration> source, CodeLocation location) {
+        if (target.can_be_assigned_from(source->spec))  // Same type, no conversion necessary
             return source;
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", location);
+
+        const Flags<ir::stmt::ConversionOperation> operation = implicit_conversion_operation(target, source->spec, location);  // Throws if no implicit conversion is available
+        std::shared_ptr<ir::Declaration> destination = declare_temporary(target, location);
+        add_statement(std::make_shared<ir::stmt::Conversion>(location, operation, destination, source));
+        return destination;
     }
 
-
     std::array<std::shared_ptr<ir::Declaration>, 2> IRGenerator::emit_arithmetic_conversion(std::shared_ptr<ir::Declaration> left, std::shared_ptr<ir::Declaration> right, CodeLocation location) {
-        if (left->spec.can_be_assigned(right->spec))  // Already the correct type, nothing to do
-            return {left, right};
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", location);
+        try {
+            left = emit_implicit_conversion(right->spec, left, location);
+        } catch (const Diagnostic& left_conversion_diagnostic) {
+            try {
+                right = emit_implicit_conversion(left->spec, right, location);
+            } catch (const Diagnostic& right_conversion_diagnostic) {
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't perform any standard arithmetic conversions to make the operands compatible", location)
+                      .add_note(left_conversion_diagnostic).add_note(right_conversion_diagnostic);
+            }
+        }
+
+        return {left, right};
     }
 
     // Emit a copy statement from source to destination, adding an implicit cast if necessary
     void IRGenerator::emit_copy(std::shared_ptr<ir::Declaration> destination, std::shared_ptr<ir::Declaration> source, CodeLocation location, bool initialize) {
-        emit_implicit_cast(destination->spec, source, location);
-
         if (!initialize && (destination->spec.qualifiers & ir::TypeQualifier::CONST))
             throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to assign a value to a constant after initialization", location);
 
-        add_statement(std::make_shared<ir::stmt::Copy>(location, destination, source));
+        source = emit_implicit_conversion(destination->spec, source, location);
+        add_statement(std::make_shared<ir::stmt::Conversion>(location, Flags<ir::stmt::ConversionOperation>{}, destination, source));
     }
+
+
+    // Get the conversion operations to perform, or throw if no implicit conversion can be performed
+    Flags<ir::stmt::ConversionOperation> IRGenerator::implicit_conversion_operation(ir::TypeSpecification destination, ir::TypeSpecification source, CodeLocation location) {
+        if (destination.bitfield_length != source.bitfield_length)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfield conversions are not implemented", location);
+
+        if (destination.is_array_type() && source.is_array_type()) {
+            if (destination.element_type() != source.element_type())
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between array types with incompatible element types", location);
+            if (destination.array_spec != source.array_spec)
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible array dimensions", location);
+
+            return {};  // In practice those are just pointers, nothing to do
+        }
+
+        else if (destination.is_function_type && source.is_function_type) {
+            if (destination.return_type() != source.return_type())
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between function types with incompatible return types", location);
+            if (destination.parameters.size() != source.parameters.size())
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible function types", location);
+
+            for (size_t param = 0; param < destination.parameters.size(); param++) {
+                try {
+                    if (implicit_conversion_operation(destination.parameters[param].spec, source.parameters[param].spec, location))
+                        throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between function types with incompatible parameter types", location);
+                } catch (const Diagnostic&) {
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between function types with incompatible parameter types", location);
+                }
+            }
+
+            return {};  // In practice those are just pointers, nothing to do
+        }
+
+        else if (destination.is_pointer_type() && source.is_pointer_type()) {
+            if (destination.type.get() != source.type.get())
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between pointers to incompatible types", location);
+
+            if (destination.pointer_spec.size() != source.pointer_spec.size())
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible pointer types", location);
+
+            if (!destination.qualifiers.includes(source.qualifiers))
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a less cv-qualified pointer type", location);
+
+            for (size_t level = 0; level < destination.pointer_spec.size() - 1; level++)
+                if (!destination.pointer_spec[level].includes(source.pointer_spec[level]))
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a less cv-qualified pointer type", location);
+
+            return {};  // Those are both pointers, nothing to do
+        }
+
+        else if (destination.is_object_type() && source.is_object_type()) {
+            const ir::TypeCategory destination_category = destination.type->identifier.category;
+            const ir::TypeCategory source_category = source.type->identifier.category;
+
+            if (destination_category == ir::TypeCategory::VOID || source_category == ir::TypeCategory::VOID)
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between void and non-void types", location);
+            if (destination_category == ir::TypeCategory::TYPEDEF || source_category == ir::TypeCategory::TYPEDEF)
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted a cast with an unresolved typedef", location);
+            if (destination_category == ir::TypeCategory::BUILTIN || source_category == ir::TypeCategory::BUILTIN)
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Casting to or from built-in types is not supported", location);
+
+            if (destination_category == ir::TypeCategory::PRIMITIVE && source_category == ir::TypeCategory::ENUM) {
+                ir::PrimitiveType& primitive_destination = static_cast<ir::PrimitiveType&>(*destination.type);
+                if (primitive_destination.semantic != ir::PrimitiveSemantic::INTEGER)
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast an enumerated value to a non-integer primitive type", location);
+                if (!primitive_destination.is_signed)
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast an enumerated value to an unsigned integer type", location);
+
+                if (primitive_destination.primitive_size < toycc::arch::INT_SIZE)
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely convert an enumerated value to an integer type smaller than int", location);
+                else if (primitive_destination.primitive_size == toycc::arch::INT_SIZE)
+                    return {};
+                else
+                    return ir::stmt::ConversionOperation::INTEGER_SIZE_UP;
+            }
+
+            if (destination_category != source_category)  // Except enum -> int, implicit conversions across categories are forbidden
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible type categories", location);
+
+            if (destination_category == ir::TypeCategory::STRUCT && source_category == ir::TypeCategory::STRUCT) {
+                if (destination.type.get() != source.type.get())
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between incompatible structure types", location);
+                return {};
+            }
+
+            if (destination_category == ir::TypeCategory::UNION && source_category == ir::TypeCategory::UNION) {
+                if (destination.type.get() != source.type.get())
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between incompatible union types", location);
+                return {};
+            }
+
+            if (destination_category == ir::TypeCategory::ENUM && source_category == ir::TypeCategory::ENUM) {
+                if (destination.type.get() != source.type.get())
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between incompatible enum types", location);
+                return {};
+            }
+
+            // Now, only primitive types remain
+            ir::PrimitiveType& destination_primitive = static_cast<ir::PrimitiveType&>(*destination.type);
+            ir::PrimitiveType& source_primitive      = static_cast<ir::PrimitiveType&>(*source.type);
+
+            if (destination_primitive.semantic == ir::PrimitiveSemantic::FLOAT) {
+                if (source_primitive.semantic == ir::PrimitiveSemantic::FLOAT) {
+                    if (destination_primitive.primitive_size > source_primitive.primitive_size)
+                        return ir::stmt::ConversionOperation::FLOAT_SIZE_UP;
+                    else if (destination_primitive.primitive_size == source_primitive.primitive_size)
+                        return {};
+                    else throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a smaller floating-point type", location);
+                } else if (source_primitive.semantic == ir::PrimitiveSemantic::INTEGER) {
+                    return ir::stmt::ConversionOperation::INT_TO_FLOAT;
+                } else if (source_primitive.semantic == ir::PrimitiveSemantic::BOOL) {
+                    return ir::stmt::ConversionOperation::BOOL_TO_FLOAT;
+                }
+            }
+
+            else if (destination_primitive.semantic == ir::PrimitiveSemantic::INTEGER) {
+                if (source_primitive.semantic == ir::PrimitiveSemantic::INTEGER) {
+                    if (destination_primitive.is_signed == source_primitive.is_signed) {
+                        if (destination_primitive.primitive_size > source_primitive.primitive_size)
+                            return ir::stmt::ConversionOperation::INTEGER_SIZE_UP;
+                        else if (destination_primitive.primitive_size == source_primitive.primitive_size)
+                            return {};
+                        else if (destination_primitive.primitive_size < source_primitive.primitive_size)
+                            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a smaller integer type", location);
+                    } else if (!destination_primitive.is_signed && destination_primitive.primitive_size > source_primitive.primitive_size) {
+                        return ir::stmt::ConversionOperation::INTEGER_SIZE_UP | ir::stmt::ConversionOperation::SIGNED_TO_UNSIGNED;
+                    } else if (destination_primitive.is_signed && destination_primitive.primitive_size > source_primitive.primitive_size) {
+                        return ir::stmt::ConversionOperation::INTEGER_SIZE_UP | ir::stmt::ConversionOperation::UNSIGNED_TO_SIGNED;
+                    } else {
+                        throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a same-size or smaller type with different signedness", location);
+                    }
+                } else if (source_primitive.semantic == ir::PrimitiveSemantic::BOOL) {
+                    return ir::stmt::ConversionOperation::BOOL_TO_INT;
+                } else if (source_primitive.semantic == ir::PrimitiveSemantic::FLOAT) {
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast floating-point types to integers", location);
+                }
+            }
+
+            else if (destination_primitive.semantic == ir::PrimitiveSemantic::BOOL) {
+                if (source_primitive.semantic == ir::PrimitiveSemantic::BOOL)
+                    return {};
+                else if (source_primitive.semantic == ir::PrimitiveSemantic::INTEGER)
+                    return ir::stmt::ConversionOperation::INT_TO_BOOL;
+                else if (source_primitive.semantic == ir::PrimitiveSemantic::FLOAT)
+                    return ir::stmt::ConversionOperation::FLOAT_TO_BOOL;
+            }
+        }
+
+        throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible type classes", location);
+    }
+
+    Flags<ir::stmt::ConversionOperation> IRGenerator::explicit_conversion_operation(ir::TypeSpecification, ir::TypeSpecification, CodeLocation location) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Explicit conversions are not implemented", location);
+    }
+
 
 
     // ------------ Utilities
@@ -968,7 +1135,7 @@ namespace toycc {
     }
 
     std::string IRGenerator::anonymous_identifier() {
-        return std::format("<anonymous_{}>", unique_id++);
+        return std::format("@I{}", unique_id++);
     }
 
     std::shared_ptr<ir::Scope> IRGenerator::create_function_scope(std::shared_ptr<ir::Declaration> declaration) {
