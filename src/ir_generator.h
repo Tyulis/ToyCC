@@ -100,6 +100,9 @@ namespace toycc {
 
 
             std::optional<ir::stmt::BinaryOperator> decode_assignment_operator(CParser::AssignmentOperatorContext* context);
+            ir::stmt::BinaryOperator decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
+            ir::stmt::BinaryOperator decode_additive_operator(CParser::AdditiveOperatorContext* context);
+
 
             // -------- IR emission common functions
             std::shared_ptr<ir::Declaration> emit_implicit_conversion(ir::TypeSpecification target, std::shared_ptr<ir::Declaration> source, CodeLocation location);

@@ -710,23 +710,34 @@ namespace toycc {
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_additive_expression(CParser::AdditiveExpressionContext* context) {
         const std::vector<CParser::MultiplicativeExpressionContext*> operands = context->multiplicativeExpression();
-        std::shared_ptr<ir::Declaration> left = decode_multiplicative_expression(operands[0]);
-        for (auto it = operands.begin() + 1; it != operands.end(); it++) {
-            std::shared_ptr<ir::Declaration> right = decode_multiplicative_expression(*it);
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(left, right, locate(*it));
+        const std::vector<CParser::AdditiveOperatorContext*> operators = context->additiveOperator();
 
-            std::shared_ptr<ir::Declaration> result = declare_temporary(converted_left->spec, locate(*it));
-            add_statement(std::make_shared<ir::stmt::BinaryOp>(locate(context), ir::stmt::BinaryOperator::PLUS, result, converted_left, converted_right));
+        std::shared_ptr<ir::Declaration> left = decode_multiplicative_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(left, decode_multiplicative_expression(operands[operation_index + 1]), location);
+
+            std::shared_ptr<ir::Declaration> result = declare_temporary(converted_left->spec, location);
+            add_statement(std::make_shared<ir::stmt::BinaryOp>(locate(context), decode_additive_operator(operators[operation_index]), result, converted_left, converted_right));
             left = result;
         }
         return left;
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context) {
-        std::shared_ptr<ir::Declaration> result = decode_cast_expression(context->castExpression()[0]);
-        if (context->castExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Multiplicative expressions are not implemented", locate(context));
-        return result;
+        const std::vector<CParser::CastExpressionContext*> operands = context->castExpression();
+        const std::vector<CParser::MultiplicativeOperatorContext*> operators = context->multiplicativeOperator();
+
+        std::shared_ptr<ir::Declaration> left = decode_cast_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(left, decode_cast_expression(operands[operation_index + 1]), location);
+
+            std::shared_ptr<ir::Declaration> result = declare_temporary(converted_left->spec, location);
+            add_statement(std::make_shared<ir::stmt::BinaryOp>(locate(context), decode_multiplicative_operator(operators[operation_index]), result, converted_left, converted_right));
+            left = result;
+        }
+        return left;
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_cast_expression(CParser::CastExpressionContext* context) {
@@ -903,6 +914,19 @@ namespace toycc {
         else if (context->XorAssign())         return ir::stmt::BinaryOperator::BITWISE_XOR;
         else if (context->OrAssign())          return ir::stmt::BinaryOperator::BITWISE_OR;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown assignment operator {}", context->getText()), locate(context));
+    }
+
+    ir::stmt::BinaryOperator IRGenerator::decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context) {
+        if      (context->Star())  return ir::stmt::BinaryOperator::MUL;
+        else if (context->Div())   return ir::stmt::BinaryOperator::DIV;
+        else if (context->Mod())   return ir::stmt::BinaryOperator::MOD;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown multiplicative operator `{}`", context->getText()), locate(context));
+    }
+
+    ir::stmt::BinaryOperator IRGenerator::decode_additive_operator(CParser::AdditiveOperatorContext* context) {
+        if      (context->Plus())  return ir::stmt::BinaryOperator::PLUS;
+        else if (context->Minus()) return ir::stmt::BinaryOperator::MINUS;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown additive operator `{}`", context->getText()), locate(context));
     }
 
 

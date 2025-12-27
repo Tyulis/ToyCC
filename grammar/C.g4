@@ -95,11 +95,22 @@ castExpression
     ;
 
 multiplicativeExpression
-    : castExpression (('*' | '/' | '%') castExpression)*
+    : castExpression (multiplicativeOperator castExpression)*
+    ;
+
+multiplicativeOperator
+    : '*'
+    | '/'
+    | '%'
     ;
 
 additiveExpression
-    : multiplicativeExpression (('+' | '-') multiplicativeExpression)*
+    : multiplicativeExpression (additiveOperator multiplicativeExpression)*
+    ;
+
+additiveOperator
+    : '+'
+    | '-'
     ;
 
 shiftExpression

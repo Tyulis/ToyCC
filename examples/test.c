@@ -1,5 +1,7 @@
+int get_result(int argc) {
+    return 'a' + argc * 2;
+}
+
 int main(int argc, char** argv) {
-    const char c = 'a';
-    const int result = 1 + argc + c;
-    return result;
+    return 'a' + argc * 2;
 }
