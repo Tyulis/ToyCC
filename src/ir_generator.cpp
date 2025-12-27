@@ -216,20 +216,23 @@ namespace toycc {
             declarations.push_back(base_declaration);
         }
 
+        std::vector<std::shared_ptr<ir::Declaration>> declared_variables;
         for (const ir::Declaration& declaration : declarations) {
             declaration.check(false);
-            declare(declaration);
+            declared_variables.push_back(declare(declaration));
         }
 
         // Then the initializations
         if (context->initDeclaratorList()) {
             for (unsigned decl_index = 0; decl_index < declarations.size(); decl_index++) {
-                const ir::Declaration& declaration = declarations[decl_index];
+                std::shared_ptr<ir::Declaration> declaration = declared_variables[decl_index];
                 CParser::InitDeclaratorContext* declarator = context->initDeclaratorList()->initDeclarator()[decl_index];
                 if (declarator->initializer()) {
-                    if (declaration.storage & ir::StorageClass::TYPEDEF)
+                    if (declaration->storage & ir::StorageClass::TYPEDEF)
                         throw Diagnostic(DiagnosticLevel::ERROR, "Initializers are not allowed in typedef declarations", locate(declarator->initializer()));
-                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implement initializers here");
+
+                    std::shared_ptr<ir::Declaration> initializer = decode_initializer(declarator->initializer());
+                    emit_copy(declaration, initializer, locate(declarator->initializer()), true);
                 }
             }
         }
@@ -251,6 +254,9 @@ namespace toycc {
             else
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declaration specifier `{}`", specifier->getText()), locate(specifier));
         }
+
+        if (!declaration.storage)  // No specific keyword used -> auto storage duration
+            declaration.storage = ir::StorageClass::AUTO;
 
         // In typedefs like `unsigned int my_type_t`, everything is in the type specifiers, which is otherwise invalid - split those
         const bool is_typedef = declaration.storage & ir::StorageClass::TYPEDEF;
@@ -611,6 +617,14 @@ namespace toycc {
 
     // ------------ Expressions
 
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_initializer(CParser::InitializerContext* context) {
+        if (context->initializerList())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Initializer lists are not implemented", locate(context));
+        else if (context->assignmentExpression())
+            return decode_assignment_expression(context->assignmentExpression());
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown initializer `{}`", context->getText()), locate(context));
+    }
+
     std::shared_ptr<ir::Declaration> IRGenerator::decode_expression(CParser::ExpressionContext* context) {
         std::shared_ptr<ir::Declaration> result;
         for (CParser::AssignmentExpressionContext* expression : context->assignmentExpression())
@@ -851,6 +865,19 @@ namespace toycc {
         else if (context->OrAssign())          return ir::stmt::BinaryOperator::BITWISE_OR;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown assignment operator {}", context->getText()), locate(context));
     }
+
+
+    // ------------ IR emission common functions
+    void IRGenerator::emit_copy(std::shared_ptr<ir::Declaration> destination, std::shared_ptr<ir::Declaration> source, CodeLocation location, bool initialize) {
+        if (source->spec != destination->spec)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", location);
+
+        if (!initialize && (destination->spec.qualifiers & ir::TypeQualifier::CONST))
+            throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to assign a value to a constant after initialization", location);
+
+        add_statement(std::make_shared<ir::stmt::Copy>(location, destination, source));
+    }
+
 
     // ------------ Utilities
     std::shared_ptr<ir::Scope> IRGenerator::current_scope() {

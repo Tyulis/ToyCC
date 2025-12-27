@@ -14,6 +14,7 @@ namespace toycc::ir {
             case stmt::Tag::BLOCK:       return "BLOCK";
             case stmt::Tag::FUNCTION:    return "FUNCTION";
             case stmt::Tag::LOAD_CONST:  return "LOAD_CONST";
+            case stmt::Tag::COPY:        return "COPY";
             case stmt::Tag::RETURN:      return "RETURN";
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid statement tag");
@@ -45,5 +46,10 @@ namespace toycc::ir::stmt {
         code << tag_repr() << " " << destination->name << " ";
         std::visit([&](auto&& val) { code << val; }, value);
         return code.str();
+    }
+
+    Copy::Copy(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source) : Statement(Tag::COPY, location), destination(destination), source(source) {}
+    std::string Copy::ir_code() const {
+        return std::format("{} {} {}", tag_repr(), destination->name, source->name);
     }
 }

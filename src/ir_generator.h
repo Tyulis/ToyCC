@@ -67,6 +67,7 @@ namespace toycc {
             std::vector<Flags<ir::TypeQualifier>> decode_pointer_spec(CParser::PointerContext* context);
 
             // -------- Expressions
+            std::shared_ptr<ir::Declaration> decode_initializer(CParser::InitializerContext* context);
             std::shared_ptr<ir::Declaration> decode_expression(CParser::ExpressionContext* context);
             std::shared_ptr<ir::Declaration> decode_assignment_expression(CParser::AssignmentExpressionContext* context);
             std::shared_ptr<ir::Declaration> decode_conditional_expression(CParser::ConditionalExpressionContext* context);
@@ -98,6 +99,9 @@ namespace toycc {
 
 
             std::optional<ir::stmt::BinaryOperator> decode_assignment_operator(CParser::AssignmentOperatorContext* context);
+
+            // -------- IR emission common functions
+            void emit_copy(std::shared_ptr<ir::Declaration> destination, std::shared_ptr<ir::Declaration> source, CodeLocation location, bool initialize);
 
             // -------- Utilities
             std::shared_ptr<ir::Scope> current_scope();

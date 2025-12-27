@@ -8,7 +8,7 @@ namespace toycc::ir {
     namespace stmt {
         enum class Tag {
             NOP, BLOCK, FUNCTION,
-            LOAD_CONST,
+            LOAD_CONST, COPY,
             RETURN,
         };
 
@@ -43,7 +43,6 @@ namespace toycc::ir {
 
             Block(CodeLocation location, std::shared_ptr<Scope> scope);
             Block(Tag tag, CodeLocation location, std::shared_ptr<Scope> scope);
-
             virtual std::string ir_code() const override;
         };
 
@@ -51,7 +50,6 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> declaration;
 
             Function(CodeLocation location, std::shared_ptr<Scope> scope, std::shared_ptr<Declaration> declaration);
-
             virtual std::string ir_code() const override;
         };
 
@@ -60,18 +58,24 @@ namespace toycc::ir {
 
             Return(CodeLocation location);
             Return(CodeLocation location, std::shared_ptr<Declaration> declaration);
-
             virtual std::string ir_code() const override;
         };
 
-        struct LoadConst: public Statement {
+        struct LoadConst : public Statement {
             using Constant = std::variant<int, unsigned int, long, unsigned long, long long, unsigned long long, float, double, long double, char, std::string>;
 
             std::shared_ptr<Declaration> destination;
             Constant value;
 
             LoadConst(CodeLocation location, std::shared_ptr<Declaration> destination, Constant value);
+            virtual std::string ir_code() const override;
+        };
 
+        struct Copy : public Statement {
+            std::shared_ptr<Declaration> destination;
+            std::shared_ptr<Declaration> source;
+
+            Copy(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source);
             virtual std::string ir_code() const override;
         };
     }

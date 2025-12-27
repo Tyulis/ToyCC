@@ -153,7 +153,7 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::ERROR, "Unnamed declaration", location);
 
         if (!VALID_STORAGE_CLASSES.contains(storage))
-            throw Diagnostic(DiagnosticLevel::ERROR, "Invalid combination of storage class specifiers", location);
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid combination of storage class specifiers `{}`", storage_classes_repr(storage)), location);
 
         if (storage == StorageClass::TYPEDEF && spec.function_spec)
             throw Diagnostic(DiagnosticLevel::ERROR, "Typedef declaration can't have function specifiers", location);
