@@ -14,9 +14,13 @@ namespace toycc::ir {
             case stmt::Tag::NOP:         return "NOP";
             case stmt::Tag::BLOCK:       return "BLOCK";
             case stmt::Tag::FUNCTION:    return "FUNCTION";
-            case stmt::Tag::BINARY_OP:   return "BINARY_OP";
+
             case stmt::Tag::LOAD_CONST:  return "LOAD_CONST";
             case stmt::Tag::CONVERSION:  return "CONVERSION";
+
+            case stmt::Tag::BINARY_OP:   return "BINARY_OP";
+            case stmt::Tag::CALL:        return "CALL";
+
             case stmt::Tag::RETURN:      return "RETURN";
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid statement tag");
@@ -78,14 +82,6 @@ namespace toycc::ir::stmt {
         return std::format("{} {} {{\n{}\n}}", tag_repr(), declaration->name, indent(scope->ir_code(), true, "    "));
     }
 
-    Return::Return(CodeLocation location) : Statement(Tag::RETURN, location), declaration(nullptr) {}
-    Return::Return(CodeLocation location, std::shared_ptr<Declaration> declaration) : Statement(Tag::RETURN, location), declaration(declaration) {}
-    std::string Return::ir_code() const {
-        return std::format("{} {}", tag_repr(), declaration->name);
-    }
-
-
-
     LoadConst::LoadConst(CodeLocation location, std::shared_ptr<Declaration> destination, Constant value)
             : Statement(Tag::LOAD_CONST, location), destination(destination), value(value) {}
     std::string LoadConst::ir_code() const {
@@ -114,5 +110,25 @@ namespace toycc::ir::stmt {
         : Statement(Tag::BINARY_OP, location), op(op), destination(destination), left(left), right(right) {}
     std::string BinaryOp::ir_code() const {
         return std::format("{} {} = {} {} {}", tag_repr(), destination->name, left->name, binary_operator_repr(op), right->name);
+    }
+
+    Call::Call(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> function, std::vector<std::shared_ptr<Declaration>> parameters)
+        : Statement(Tag::CALL, location), destination(destination), function(function), parameters(parameters) {}
+    std::string Call::ir_code() const {
+        std::stringstream code;
+        code << tag_repr() << " " << destination->name << " = " << function->name << "(";
+        for (size_t param = 0; param < parameters.size(); param++) {
+            code << parameters[param]->name;
+            if (param < parameters.size() - 1)
+                code << ", ";
+        }
+        code << ")";
+        return code.str();
+    }
+
+    Return::Return(CodeLocation location) : Statement(Tag::RETURN, location), declaration(nullptr) {}
+    Return::Return(CodeLocation location, std::shared_ptr<Declaration> declaration) : Statement(Tag::RETURN, location), declaration(declaration) {}
+    std::string Return::ir_code() const {
+        return std::format("{} {}", tag_repr(), declaration->name);
     }
 }

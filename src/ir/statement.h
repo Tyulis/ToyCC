@@ -10,7 +10,7 @@ namespace toycc::ir {
         enum class Tag {
             NOP, BLOCK, FUNCTION,
             LOAD_CONST, CONVERSION,
-            BINARY_OP,
+            BINARY_OP, CALL,
             RETURN,
         };
 
@@ -73,14 +73,6 @@ namespace toycc::ir {
             virtual std::string ir_code() const override;
         };
 
-        struct Return : public Statement {
-            std::shared_ptr<Declaration> declaration;
-
-            Return(CodeLocation location);
-            Return(CodeLocation location, std::shared_ptr<Declaration> declaration);
-            virtual std::string ir_code() const override;
-        };
-
         struct LoadConst : public Statement {
             using Constant = std::variant<int, unsigned int, long, unsigned long, long long, unsigned long long, float, double, long double, char, std::string>;
 
@@ -108,6 +100,23 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> right;
 
             BinaryOp(CodeLocation location, BinaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right);
+            virtual std::string ir_code() const override;
+        };
+
+        struct Call : public Statement {
+            std::shared_ptr<Declaration> destination;
+            std::shared_ptr<Declaration> function;
+            std::vector<std::shared_ptr<Declaration>> parameters;
+
+            Call(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> function, std::vector<std::shared_ptr<Declaration>> parameters);
+            virtual std::string ir_code() const override;
+        };
+
+        struct Return : public Statement {
+            std::shared_ptr<Declaration> declaration;
+
+            Return(CodeLocation location);
+            Return(CodeLocation location, std::shared_ptr<Declaration> declaration);
             virtual std::string ir_code() const override;
         };
     }

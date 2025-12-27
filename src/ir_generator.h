@@ -96,8 +96,9 @@ namespace toycc {
             std::shared_ptr<ir::Declaration> decode_octal_constant(antlr4::tree::TerminalNode* terminal);
             std::shared_ptr<ir::Declaration> decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals);
 
-            std::shared_ptr<ir::Declaration> declare_integer_constant(size_t value, std::string suffix, CodeLocation location);
+            std::shared_ptr<ir::Declaration> decode_function_call(std::shared_ptr<ir::Declaration> function, CParser::PostfixOperatorContext* call);
 
+            std::shared_ptr<ir::Declaration> declare_integer_constant(size_t value, std::string suffix, CodeLocation location);
 
             std::optional<ir::stmt::BinaryOperator> decode_assignment_operator(CParser::AssignmentOperatorContext* context);
             ir::stmt::BinaryOperator decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);

@@ -3,5 +3,5 @@ int get_result(int argc) {
 }
 
 int main(int argc, char** argv) {
-    return 'a' + argc * 2;
+    return get_result(argc);
 }

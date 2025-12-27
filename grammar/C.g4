@@ -57,13 +57,15 @@ genericAssociation
     ;
 
 postfixExpression
-    : (primaryExpression | '__extension__'? '(' typeName ')' '{' initializerList ','? '}') (
-        '[' expression ']'
-        | '(' argumentExpressionList? ')'
-        | ('.' | '->') Identifier
-        | '++'
-        | '--'
-    )*
+    : (primaryExpression | '__extension__'? '(' typeName ')' '{' initializerList ','? '}') postfixOperator*
+    ;
+
+postfixOperator
+    : '[' expression ']'
+    | '(' argumentExpressionList? ')'
+    | ('.' | '->') Identifier
+    | '++'
+    | '--'
     ;
 
 argumentExpressionList

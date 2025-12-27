@@ -758,10 +758,22 @@ namespace toycc {
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_postfix_expression(CParser::PostfixExpressionContext* context) {
-        if (!context->primaryExpression() || !context->LeftParen().empty() || !context->LeftBracket().empty() || !context->Dot().empty() || !context->Arrow().empty() || !context->PlusPlus().empty() || !context->MinusMinus().empty())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Postfix expressions are not implemented", locate(context));
+        if (!context->primaryExpression())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inline rvalue initializers are not implemented");
 
-        return decode_primary_expression(context->primaryExpression());
+        std::shared_ptr<ir::Declaration> result = decode_primary_expression(context->primaryExpression());
+        for (CParser::PostfixOperatorContext* postfix : context->postfixOperator()) {
+            const CodeLocation location = locate(postfix);
+            if (postfix->LeftBracket() || postfix->RightBracket())
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Array indexing is not implemented", location);
+            else if (postfix->LeftParen() || postfix->RightParen())
+                result = decode_function_call(result, postfix);
+            else if (postfix->PlusPlus() || postfix->MinusMinus())
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Incrementation and decrementation operators are not implemented", location);
+            else if (postfix->Dot() || postfix->Arrow())
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Member access is not implemented", location);
+        }
+        return result;
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_primary_expression(CParser::PrimaryExpressionContext* context) {
@@ -877,6 +889,29 @@ namespace toycc {
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "String literals are not implemented", locate(terminals[0]));
+    }
+
+
+    std::shared_ptr<ir::Declaration> IRGenerator::decode_function_call(std::shared_ptr<ir::Declaration> function, CParser::PostfixOperatorContext* call) {
+        std::shared_ptr<ir::Declaration> destination = declare_temporary(function->spec.return_type(), locate(call));
+        std::vector<std::shared_ptr<ir::Declaration>> parameters;
+        if (call->argumentExpressionList()) {
+            std::vector<CParser::AssignmentExpressionContext*> parameter_expressions = call->argumentExpressionList()->assignmentExpression();
+            if (parameter_expressions.size() != function->spec.parameters.size())
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found {}, expected {}", parameter_expressions.size(), function->spec.parameters.size()), locate(call));
+
+            for (size_t param = 0; param < parameter_expressions.size(); param++) {
+                std::shared_ptr<ir::Declaration> expression_result = decode_assignment_expression(parameter_expressions[param]);
+                std::shared_ptr<ir::Declaration> parameter = emit_implicit_conversion(function->spec.parameters[param].spec, expression_result, locate(parameter_expressions[param]));
+                parameters.push_back(parameter);
+            }
+        } else {
+            if (!function->spec.parameters.empty())
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found 0, expected {}", function->spec.parameters.size()), locate(call));
+        }
+
+        add_statement(std::make_shared<ir::stmt::Call>(locate(call), destination, function, parameters));
+        return destination;
     }
 
 
