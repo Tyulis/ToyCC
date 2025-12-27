@@ -37,9 +37,10 @@ namespace toycc::ir {
         PrimitiveSemantic semantic;
         size_t primitive_size;
         size_t primitive_alignment;
+        size_t conversion_rank;
 
         PrimitiveType() = default;
-        PrimitiveType(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment);
+        PrimitiveType(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment, size_t conversion_rank);
 
         virtual std::string ir_code() const override;
     };

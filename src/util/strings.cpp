@@ -1,6 +1,7 @@
 #include <cctype>
 #include <format>
 #include <sstream>
+#include <stdexcept>
 
 #include "util/strings.h"
 
@@ -126,6 +127,73 @@ namespace toycc {
     std::string escape(const std::string& str) {
         std::string result = str;
         escape_inplace(result);
+        return result;
+    }
+
+
+    static void unescape_hex_sequence(std::string& str, size_t position) {
+        size_t start = position + 2;  // Skip the \x
+        size_t end = start;
+        while (std::isxdigit(str[end++]));
+        const std::string hex_sequence = str.substr(start, end - start);
+        const int character_value = std::stoi(hex_sequence, nullptr, 16);
+        if (character_value > 255)
+            throw std::runtime_error(std::format("Character value {} is out of range of `char`", character_value));
+        std::string replacement;
+        replacement.push_back(static_cast<char>(character_value));
+        str.replace(position, end, replacement);
+    }
+
+    constexpr static std::string octal_digits = "01234567";
+    static void unescape_octal_sequence(std::string& str, size_t position) {
+        size_t start = position + 1;  // Skip the backslash
+        size_t end = start;
+        while (octal_digits.contains(str[end++]));
+        const std::string oct_sequence = str.substr(start, end - start);
+        const int character_value = std::stoi(oct_sequence, nullptr, 8);
+        if (character_value > 255)
+            throw std::runtime_error(std::format("Character value {} is out of range of `char`", character_value));
+        std::string replacement;
+        replacement.push_back(static_cast<char>(character_value));
+        str.replace(position, end, replacement);
+    }
+
+    std::string& unescape_inplace(std::string& str) {
+        size_t position = 0;
+        while (position < str.length()) {
+            if (str[position] == '\\') {
+                switch (str[position + 1]) {
+                    case 'a':  str.replace(position, position + 2, "\a");  break;
+                    case 'b':  str.replace(position, position + 2, "\b");  break;
+                    case 'f':  str.replace(position, position + 2, "\f");  break;
+                    case 'n':  str.replace(position, position + 2, "\n");  break;
+                    case 'r':  str.replace(position, position + 2, "\r");  break;
+                    case 't':  str.replace(position, position + 2, "\t");  break;
+                    case 'v':  str.replace(position, position + 2, "\v");  break;
+                    case '\'': str.replace(position, position + 2, "'");   break;
+                    case '"':  str.replace(position, position + 2, "\"");  break;
+                    case '?':  str.replace(position, position + 2, "?");   break;
+                    case '\\': str.replace(position, position + 2, "\\");  break;
+                    case 'x':
+                        unescape_hex_sequence(str, position);
+                        break;
+                    case '0': case '1': case '2': case '3': case '4':
+                    case '5': case '6': case '7': case '8': case '9':
+                        unescape_octal_sequence(str, position);
+                        break;
+                    default:
+                        throw std::runtime_error(std::format("Invalid escape sequence '\\{}'", str[position + 1]));
+                }
+            }
+            position += 1;
+        }
+
+        return str;
+    }
+
+    std::string unescape(const std::string& str) {
+        std::string result = str;
+        unescape_inplace(result);
         return result;
     }
 

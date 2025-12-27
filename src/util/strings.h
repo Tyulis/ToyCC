@@ -26,6 +26,9 @@ namespace toycc {
     std::string& escape_inplace(std::string& str);
     std::string escape(const std::string& str);
 
+    std::string& unescape_inplace(std::string& str);
+    std::string unescape(const std::string& str);
+
     std::string& xml_escape_inplace(std::string& str);
     std::string xml_escape(const std::string& str);
 

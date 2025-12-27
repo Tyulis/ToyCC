@@ -55,6 +55,7 @@ namespace toycc::ir {
         TypeSpecification return_type() const;
 
         bool operator== (const TypeSpecification& spec) const;
+        bool can_be_assigned(const TypeSpecification& spec) const;
     };
 
     struct Declaration {

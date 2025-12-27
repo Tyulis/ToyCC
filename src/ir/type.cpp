@@ -63,9 +63,9 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid primitive semantic");
     }
 
-    PrimitiveType::PrimitiveType(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment)
+    PrimitiveType::PrimitiveType(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment, size_t conversion_rank)
         : Type(TypeIdentifier {.category = TypeCategory::PRIMITIVE, .name = name}, CodeLocation{.filename = "<built-in>", .line = 0, .character = 0}),
-          is_signed(is_signed), semantic(semantic), primitive_size(size), primitive_alignment(alignment) {}
+          is_signed(is_signed), semantic(semantic), primitive_size(size), primitive_alignment(alignment), conversion_rank(conversion_rank) {}
 
     std::string PrimitiveType::ir_code() const {
         return std::format("#type {} : {} {} size {} alignment {}",

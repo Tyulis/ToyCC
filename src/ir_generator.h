@@ -101,6 +101,8 @@ namespace toycc {
             std::optional<ir::stmt::BinaryOperator> decode_assignment_operator(CParser::AssignmentOperatorContext* context);
 
             // -------- IR emission common functions
+            std::shared_ptr<ir::Declaration> emit_implicit_cast(ir::TypeSpecification target, std::shared_ptr<ir::Declaration> source, CodeLocation location);
+            std::array<std::shared_ptr<ir::Declaration>, 2> emit_arithmetic_conversion(std::shared_ptr<ir::Declaration> left, std::shared_ptr<ir::Declaration> right, CodeLocation location);
             void emit_copy(std::shared_ptr<ir::Declaration> destination, std::shared_ptr<ir::Declaration> source, CodeLocation location, bool initialize);
 
             // -------- Utilities
@@ -111,7 +113,7 @@ namespace toycc {
             std::string anonymous_identifier();
 
             void add_builtin_type(std::string name);
-            void add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment);
+            void add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment, size_t conversion_rank);
             void init_global_scope();
             std::shared_ptr<ir::Scope> create_function_scope(std::shared_ptr<ir::Declaration> declaration);
             std::shared_ptr<ir::Declaration> declare(ir::Declaration declaration);

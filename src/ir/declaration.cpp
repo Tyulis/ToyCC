@@ -65,6 +65,7 @@ namespace toycc::ir {
             .custom_alignment = custom_alignment, .bitfield_length = bitfield_length};
     }
 
+    // Check whether `spec` is the exact same type
     bool TypeSpecification::operator== (const TypeSpecification& spec) const {
         return (type.get() == spec.type.get()
              && qualifiers == spec.qualifiers
@@ -74,6 +75,17 @@ namespace toycc::ir {
              && (!is_function_type || (function_spec == spec.function_spec && parameters == spec.parameters))
              && custom_alignment == spec.custom_alignment
              && bitfield_length == spec.bitfield_length);
+    }
+
+    // Check whether this type can be assigned from a value of the `spec` type
+    // Basically, qualifiers don't matter, alignment doesn't matter, and bitfield may go into bigger bitfields
+    bool TypeSpecification::can_be_assigned(const TypeSpecification& spec) const {
+        return (type.get() == spec.type.get()
+             && pointer_spec == spec.pointer_spec
+             && array_spec == spec.array_spec
+             && is_function_type == spec.is_function_type
+             && (!is_function_type || (function_spec == spec.function_spec && parameters == spec.parameters))
+             && bitfield_length >= spec.bitfield_length);
     }
 
     static std::string type_qualifiers_repr(Flags<TypeQualifier> qualifiers) {

@@ -14,9 +14,9 @@ namespace toycc {
         return generator.get();
     }
 
-    void IRGenerator::add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment) {
+    void IRGenerator::add_primitive_type(std::string name, bool is_signed, ir::PrimitiveSemantic semantic, size_t size, size_t alignment, size_t conversion_rank) {
         ir::TypeIdentifier identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = name};
-        current_scope()->types[identifier] = std::make_shared<ir::PrimitiveType>(name, is_signed, semantic, size, alignment);
+        current_scope()->types[identifier] = std::make_shared<ir::PrimitiveType>(name, is_signed, semantic, size, alignment, conversion_rank);
     }
 
     void IRGenerator::add_builtin_type(std::string name) {
@@ -41,20 +41,20 @@ namespace toycc {
         ir::TypeIdentifier void_identifier = {.category = ir::TypeCategory::VOID, .name = "void"};
         current_scope()->types[void_identifier] = std::make_shared<ir::Type> (void_identifier, CodeLocation {.filename = "<built-in>", .line = 1, .character = 1});
 
-        add_primitive_type("_Bool",                  false, ir::PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT);
-        add_primitive_type("signed char",            true,  ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
-        add_primitive_type("unsigned char",          false, ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
-        add_primitive_type("signed short int",       true,  ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
-        add_primitive_type("unsigned short int",     false, ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
-        add_primitive_type("signed int",             true,  ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
-        add_primitive_type("unsigned int",           false, ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
-        add_primitive_type("signed long int",        true,  ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
-        add_primitive_type("unsigned long int",      false, ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
-        add_primitive_type("signed long long int",   false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
-        add_primitive_type("unsigned long long int", false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
-        add_primitive_type("float",                  true,  ir::PrimitiveSemantic::FLOAT,   FLOAT_SIZE,       FLOAT_ALIGNMENT);
-        add_primitive_type("double",                 true,  ir::PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT);
-        add_primitive_type("long double",            true,  ir::PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT);
+        add_primitive_type("_Bool",                  false, ir::PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT,        0);
+        add_primitive_type("signed char",            true,  ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT,        1);
+        add_primitive_type("unsigned char",          false, ir::PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT,        1);
+        add_primitive_type("signed short int",       true,  ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT,       2);
+        add_primitive_type("unsigned short int",     false, ir::PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT,       2);
+        add_primitive_type("signed int",             true,  ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT,         3);
+        add_primitive_type("unsigned int",           false, ir::PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT,         3);
+        add_primitive_type("signed long int",        true,  ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT,        4);
+        add_primitive_type("unsigned long int",      false, ir::PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT,        4);
+        add_primitive_type("signed long long int",   false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT,   5);
+        add_primitive_type("unsigned long long int", false, ir::PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT,   5);
+        add_primitive_type("float",                  true,  ir::PrimitiveSemantic::FLOAT,   FLOAT_SIZE,       FLOAT_ALIGNMENT,       6);
+        add_primitive_type("double",                 true,  ir::PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT,      7);
+        add_primitive_type("long double",            true,  ir::PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT, 8);
 
         add_builtin_type("__builtin_va_list");
     }
@@ -177,10 +177,8 @@ namespace toycc {
 
         if (context->expression()) {
             ir::TypeSpecification return_type_spec = current_function->spec.return_type();
-            std::shared_ptr<ir::Declaration> return_value = decode_expression(context->expression());
-            if (return_value->spec != return_type_spec)
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", locate(context));
-
+            std::shared_ptr<ir::Declaration> expression_result = decode_expression(context->expression());
+            std::shared_ptr<ir::Declaration> return_value = emit_implicit_cast(return_type_spec, expression_result, locate(context));
             add_statement(std::make_shared<ir::stmt::Return>(locate(context), return_value));
         } else {
             if (!current_function->spec.is_void())
@@ -715,11 +713,10 @@ namespace toycc {
         std::shared_ptr<ir::Declaration> left = decode_multiplicative_expression(operands[0]);
         for (auto it = operands.begin() + 1; it != operands.end(); it++) {
             std::shared_ptr<ir::Declaration> right = decode_multiplicative_expression(*it);
-            if (left->spec != right->spec)
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", locate(context));
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(left, right, locate(*it));
 
-            std::shared_ptr<ir::Declaration> result = declare_temporary(left->spec, locate(*it));
-            add_statement(std::make_shared<ir::stmt::BinaryOp>(locate(context), ir::stmt::BinaryOperator::PLUS, result, left, right));
+            std::shared_ptr<ir::Declaration> result = declare_temporary(converted_left->spec, locate(*it));
+            add_statement(std::make_shared<ir::stmt::BinaryOp>(locate(context), ir::stmt::BinaryOperator::PLUS, result, converted_left, converted_right));
             left = result;
         }
         return left;
@@ -781,7 +778,42 @@ namespace toycc {
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_character_constant(antlr4::tree::TerminalNode* terminal) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Character constants are not implemented", locate(terminal));
+        const CodeLocation location = locate(terminal);
+        std::string text = terminal->getText();
+
+        // Remove the quote
+        switch (text[0]) {
+            case 'u':
+            case 'U':
+            case 'L':
+                text.erase(0, 2);
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Wide character literals are not implemented", location);
+            case '\'':
+                text.erase(0, 1);
+                break;
+            default:
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown character constant prefix `{}`", text[0]), location);
+        }
+        text.erase(text.length() - 1, 1);
+
+        try {
+            unescape_inplace(text);
+        } catch (const std::runtime_error& exc) {
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid character constant : {}", exc.what()), location);
+        }
+
+        if (text.length() > 1)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Character literal must resolve to a single character"), location);
+
+        // Declare the character constant
+        ir::TypeIdentifier type_identifier = {.category = ir::TypeCategory::PRIMITIVE, .name = "signed char"};
+        ir::stmt::LoadConst::Constant value = text[0];
+
+        ir::TypeSpecification spec = resolve_type(type_identifier, location);
+        std::shared_ptr<ir::Declaration> declaration = declare_temporary(spec, location);
+
+        add_statement(std::make_shared<ir::stmt::LoadConst> (location, declaration, value));
+        return declaration;
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_floating_constant(antlr4::tree::TerminalNode* terminal) {
@@ -875,9 +907,23 @@ namespace toycc {
 
 
     // ------------ IR emission common functions
+    // Return a declaration compatible with the `target` type specification. If necessary, emit an implicit cast and declare a new temporary with that target type
+    std::shared_ptr<ir::Declaration> IRGenerator::emit_implicit_cast(ir::TypeSpecification target, std::shared_ptr<ir::Declaration> source, CodeLocation location) {
+        if (target.can_be_assigned(source->spec))  // Already the correct type, nothing to do
+            return source;
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", location);
+    }
+
+
+    std::array<std::shared_ptr<ir::Declaration>, 2> IRGenerator::emit_arithmetic_conversion(std::shared_ptr<ir::Declaration> left, std::shared_ptr<ir::Declaration> right, CodeLocation location) {
+        if (left->spec.can_be_assigned(right->spec))  // Already the correct type, nothing to do
+            return {left, right};
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", location);
+    }
+
+    // Emit a copy statement from source to destination, adding an implicit cast if necessary
     void IRGenerator::emit_copy(std::shared_ptr<ir::Declaration> destination, std::shared_ptr<ir::Declaration> source, CodeLocation location, bool initialize) {
-        if (source->spec != destination->spec)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", location);
+        emit_implicit_cast(destination->spec, source, location);
 
         if (!initialize && (destination->spec.qualifiers & ir::TypeQualifier::CONST))
             throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to assign a value to a constant after initialization", location);
