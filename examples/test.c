@@ -1,4 +1,4 @@
-int main() {
-    int result = 1;
+int main(int argc, char** argv) {
+    int result = argc;
     return result;
 }

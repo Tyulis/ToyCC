@@ -600,7 +600,7 @@ namespace toycc {
     }
 
     std::vector<Flags<ir::TypeQualifier>> IRGenerator::decode_pointer_spec(CParser::PointerContext* context) {
-        std::vector<Flags<ir::TypeQualifier>> pointer_spec(context->pointerLevel().size());
+        std::vector<Flags<ir::TypeQualifier>> pointer_spec;
         for (CParser::PointerLevelContext* level : context->pointerLevel()) {
             if (level->Caret())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Carets in pointer specification are not supported", locate(level));
