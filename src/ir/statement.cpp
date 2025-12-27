@@ -13,6 +13,7 @@ namespace toycc::ir {
             case stmt::Tag::NOP:         return "NOP";
             case stmt::Tag::BLOCK:       return "BLOCK";
             case stmt::Tag::FUNCTION:    return "FUNCTION";
+            case stmt::Tag::BINARY_OP:   return "BINARY_OP";
             case stmt::Tag::LOAD_CONST:  return "LOAD_CONST";
             case stmt::Tag::COPY:        return "COPY";
             case stmt::Tag::RETURN:      return "RETURN";
@@ -22,6 +23,31 @@ namespace toycc::ir {
 }
 
 namespace toycc::ir::stmt {
+    static std::string binary_operator_repr(BinaryOperator op) {
+        switch (op) {
+            case BinaryOperator::MUL:          return "*";
+            case BinaryOperator::DIV:          return "/";
+            case BinaryOperator::MOD:          return "%";
+            case BinaryOperator::PLUS:         return "+";
+            case BinaryOperator::MINUS:        return "-";
+            case BinaryOperator::LSHIFT:       return "<<";
+            case BinaryOperator::RSHIFT:       return ">>";
+            case BinaryOperator::LT:           return "<";
+            case BinaryOperator::LE:           return "<=";
+            case BinaryOperator::GE:           return ">=";
+            case BinaryOperator::GT:           return ">";
+            case BinaryOperator::EQ:           return "==";
+            case BinaryOperator::NE:           return "!=";
+            case BinaryOperator::BITWISE_AND:  return "&";
+            case BinaryOperator::BITWISE_XOR:  return "^";
+            case BinaryOperator::BITWISE_OR:   return "|";
+            case BinaryOperator::LOGICAL_AND:  return "&&";
+            case BinaryOperator::LOGICAL_OR:   return "||";
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid binary operator");
+    }
+
+
     Block::Block(CodeLocation location, std::shared_ptr<Scope> scope) : Statement(Tag::BLOCK, location), scope(scope) {}
     Block::Block(Tag tag, CodeLocation location, std::shared_ptr<Scope> scope) : Statement(tag, location), scope(scope) {}
     std::string Block::ir_code() const {
@@ -51,5 +77,11 @@ namespace toycc::ir::stmt {
     Copy::Copy(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source) : Statement(Tag::COPY, location), destination(destination), source(source) {}
     std::string Copy::ir_code() const {
         return std::format("{} {} {}", tag_repr(), destination->name, source->name);
+    }
+
+    BinaryOp::BinaryOp(CodeLocation location, BinaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right)
+        : Statement(Tag::BINARY_OP, location), op(op), destination(destination), left(left), right(right) {}
+    std::string BinaryOp::ir_code() const {
+        return std::format("{} {} = {} {} {}", tag_repr(), destination->name, left->name, binary_operator_repr(op), right->name);
     }
 }

@@ -9,6 +9,7 @@ namespace toycc::ir {
         enum class Tag {
             NOP, BLOCK, FUNCTION,
             LOAD_CONST, COPY,
+            BINARY_OP,
             RETURN,
         };
 
@@ -76,6 +77,16 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> source;
 
             Copy(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source);
+            virtual std::string ir_code() const override;
+        };
+
+        struct BinaryOp : public Statement {
+            BinaryOperator op;
+            std::shared_ptr<Declaration> destination;
+            std::shared_ptr<Declaration> left;
+            std::shared_ptr<Declaration> right;
+
+            BinaryOp(CodeLocation location, BinaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right);
             virtual std::string ir_code() const override;
         };
     }

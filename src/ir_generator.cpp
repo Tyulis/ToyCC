@@ -711,10 +711,18 @@ namespace toycc {
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_additive_expression(CParser::AdditiveExpressionContext* context) {
-        std::shared_ptr<ir::Declaration> result = decode_multiplicative_expression(context->multiplicativeExpression()[0]);
-        if (context->multiplicativeExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Additive expressions are not implemented", locate(context));
-        return result;
+        const std::vector<CParser::MultiplicativeExpressionContext*> operands = context->multiplicativeExpression();
+        std::shared_ptr<ir::Declaration> left = decode_multiplicative_expression(operands[0]);
+        for (auto it = operands.begin() + 1; it != operands.end(); it++) {
+            std::shared_ptr<ir::Declaration> right = decode_multiplicative_expression(*it);
+            if (left->spec != right->spec)
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Implicit casts are not implemented", locate(context));
+
+            std::shared_ptr<ir::Declaration> result = declare_temporary(left->spec, locate(*it));
+            add_statement(std::make_shared<ir::stmt::BinaryOp>(locate(context), ir::stmt::BinaryOperator::PLUS, result, left, right));
+            left = result;
+        }
+        return left;
     }
 
     std::shared_ptr<ir::Declaration> IRGenerator::decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context) {
@@ -843,8 +851,7 @@ namespace toycc {
         else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Unknown integer literal suffix `{}`", suffix), location);
 
         ir::TypeSpecification spec = resolve_type(type_identifier, location);
-        std::shared_ptr<ir::Declaration> declaration = declare(ir::Declaration
-                {.name = anonymous_identifier(), .location = location, .storage = ir::StorageClass::AUTO | ir::StorageClass::TEMPORARY, .spec = spec});
+        std::shared_ptr<ir::Declaration> declaration = declare_temporary(spec, location);
 
         add_statement(std::make_shared<ir::stmt::LoadConst> (location, declaration, value));
         return declaration;
@@ -938,6 +945,12 @@ namespace toycc {
             return (current_scope()->typedefs[declaration.name] = std::make_shared<ir::Declaration>(declaration));
         else
             return (current_scope()->locals[declaration.name] = std::make_shared<ir::Declaration>(declaration));
+    }
+
+
+    std::shared_ptr<ir::Declaration> IRGenerator::declare_temporary(ir::TypeSpecification spec, CodeLocation location) {
+        ir::Declaration declaration = {.name = anonymous_identifier(), .location = location, .storage = ir::StorageClass::AUTO | ir::StorageClass::TEMPORARY, .spec = spec};
+        return declare(declaration);
     }
 
     std::shared_ptr<ir::Statement> IRGenerator::add_statement(std::shared_ptr<ir::Statement> statement) {

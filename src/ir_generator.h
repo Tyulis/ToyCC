@@ -115,6 +115,7 @@ namespace toycc {
             void init_global_scope();
             std::shared_ptr<ir::Scope> create_function_scope(std::shared_ptr<ir::Declaration> declaration);
             std::shared_ptr<ir::Declaration> declare(ir::Declaration declaration);
+            std::shared_ptr<ir::Declaration> declare_temporary(ir::TypeSpecification spec, CodeLocation location);
             std::shared_ptr<ir::Statement> add_statement(std::shared_ptr<ir::Statement> statement);
 
             std::shared_ptr<ir::Declaration> resolve_without_error(std::string name);
