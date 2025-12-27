@@ -1,5 +1,8 @@
+typedef int int_bis;
+
 int get_result(int argc) {
-    return 'a' + argc * 2;
+    int_bis *x, *y;
+    return 'a' + argc * x;
 }
 
 int main(int argc, char** argv) {

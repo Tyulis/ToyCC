@@ -20,8 +20,8 @@ NOF_TESTS_KO=0
 
 echo "" > ${TEST_SUMMARY}
 echo "" > ${TEST_LOG}
-rm ${TESTSUITE_DIR}/*.bin
-rm ${TESTSUITE_DIR}/*.out
+rm -f ${TESTSUITE_DIR}/*.bin
+rm -f ${TESTSUITE_DIR}/*.out
 
 for test_source in $(find ${TESTSUITE_DIR} -iname '*.c') ; do
     test_tags=${test_source}.tags

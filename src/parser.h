@@ -15,7 +15,7 @@ namespace toycc {
         ErrorHandler(const SourceMap& source_map);
 
         virtual void syntaxError([[maybe_unused]] antlr4::Recognizer* recognizer, antlr4::Token* offendingSymbol, size_t line,
-                                 size_t charPositionInLine, const std::string &msg, [[maybe_unused]] std::exception_ptr e);
+                size_t charPositionInLine, const std::string &msg, [[maybe_unused]] std::exception_ptr e) override;
 
         void check() const;
 

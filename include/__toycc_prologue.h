@@ -2,7 +2,7 @@
 #define __TOYCC_PROLOGUE_H__
 
 #define __restrict restrict
-#define __asm__ asm
+#define asm __asm__
 
 #define __STDC_NO_ATOMICS__ 1
 #define __STDC_NO_COMPLEX__ 1

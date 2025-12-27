@@ -24,11 +24,17 @@ add_subdirectory(lib/antlr4/runtime/Cpp)
 
 # Generate the parser
 set(PARSER_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/parser)
-set(GRAMMAR_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/C.g4)
-antlr_target(CParser ${GRAMMAR_G4}
+set(CLEXER_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/CLexer.g4)
+set(CPARSER_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/CParser.g4)
+antlr_target(CLexer ${CLEXER_G4}
              PACKAGE "toycc"
              OUTPUT_DIRECTORY ${PARSER_SRC}
-             LEXER PARSER LISTENER)
+             LEXER)
+antlr_target(CParser ${CPARSER_G4}
+             PACKAGE "toycc"
+             OUTPUT_DIRECTORY ${PARSER_SRC}
+             DEPENDS_ANTLR CLexer
+             PARSER LISTENER)
 
 
 # Copy the prologues
@@ -53,6 +59,7 @@ add_executable(${PROJECT_NAME}
 	src/util/log.cpp
 	src/util/strings.cpp
 
+	${ANTLR_CLexer_CXX_OUTPUTS}
 	${ANTLR_CParser_CXX_OUTPUTS})
 
 target_include_directories(${PROJECT_NAME} PRIVATE

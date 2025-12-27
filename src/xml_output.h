@@ -3,10 +3,10 @@
 #include <sstream>
 
 #include "parser/CParser.h"
-#include "parser/CBaseListener.h"
+#include "parser/CParserBaseListener.h"
 
 namespace toycc {
-    class XMLOutput : public CBaseListener {
+    class XMLOutput : public CParserBaseListener {
         public:
             XMLOutput(const CParser* parser);
             std::string result();
