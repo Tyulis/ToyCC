@@ -1,7 +1,6 @@
-typedef int int_bis;
 
 int get_result(int argc) {
-    int_bis *x, *y;
+    const int x = 4;
     return 'a' + argc * x;
 }
 

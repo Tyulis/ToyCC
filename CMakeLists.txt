@@ -11,7 +11,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(Boost CONFIG REQUIRED
-             COMPONENTS program_options)
+             COMPONENTS program_options container)
 
 # Include the ANTLR runtime
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -36,6 +36,11 @@ antlr_target(CParser ${CPARSER_G4}
              DEPENDS_ANTLR CLexer
              PARSER LISTENER)
 
+# Add the CParserBase include in CParser.h
+add_custom_target(CParserDependencies
+                  COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CParserDependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/CParser.h
+                  DEPENDS ${ANTLR_CParser_CXX_OUTPUTS}
+                  COMMENT "Adding the CParserBase.h include in CParser.h")
 
 # Copy the prologues
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
@@ -56,11 +61,16 @@ add_executable(${PROJECT_NAME}
 	src/ir/statement.cpp
 	src/ir/type.cpp
 
+	src/parserbase/CParserBase.cpp
+	src/parserbase/SymbolTable.cpp
+
 	src/util/log.cpp
 	src/util/strings.cpp
 
 	${ANTLR_CLexer_CXX_OUTPUTS}
 	${ANTLR_CParser_CXX_OUTPUTS})
+
+add_dependencies(${PROJECT_NAME} CParserDependencies)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
 	src/

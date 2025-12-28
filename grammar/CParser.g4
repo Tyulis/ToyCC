@@ -26,7 +26,7 @@
  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-/** C 2011 grammar built from the C11 Spec, with modifications for ToyCC*/
+/** C 2023 grammar built from the C23 Spec, with changes for ToyCC */
 
 // $antlr-format alignTrailingComments true, columnLimit 150, minEmptyLines 1, maxEmptyLinesToKeep 1, reflowComments false, useTab false
 // $antlr-format allowShortRulesOnASingleLine false, allowShortBlocksOnASingleLine true, alignSemicolons hanging, alignColons hanging
@@ -34,34 +34,66 @@
 parser grammar CParser;
 
 options {
-    tokenVocab = CLexer;
+    superClass=CParserBase;
+    tokenVocab=CLexer;
 }
 
+
+compilationUnit
+    : translationUnit? EOF
+    ;
+
+translationUnit
+    : externalDeclaration+
+    ;
+
+
+// 6.5.1
 primaryExpression
     : Identifier
     | Constant
     | StringLiteral+
     | '(' expression ')'
     | genericSelection
-    | '__extension__'? '(' compoundStatement ')' // Blocks (GCC extension)
-    | '__builtin_va_arg' '(' unaryExpression ',' typeName ')'
-    | '__builtin_offsetof' '(' typeName ',' unaryExpression ')'
+
+    // GNU
+    // https://github.com/gcc-mirror/gcc/blob/5d69161a7c36a2da8565967eb0cc2df1322a05a3/gcc/c/c-parser.cc#L11715-L11734
+    | '__func__' //GNU
+    | '__FUNCTION__' //GNU
+    | '__PRETTY_FUNCTION__' //GNU
+    | '__extension__'? '(' compoundStatement ')' //GNU
+    | '__builtin_va_arg' '(' unaryExpression ',' typeName ')' //GNU
+    | '__builtin_offsetof' '(' typeName ',' unaryExpression ')' //GNU
+    | '__builtin_choose_expr' '(' unaryExpression ',' unaryExpression ',' unaryExpression ')' //GNU
+    | '__builtin_types_compatible_p' '(' typeName ',' typeName ')' //GNU
+    | '__builtin_tgmath' '(' exprList ')'
+    | '__builtin_complex' '(' assignmentExpression ',' assignmentExpression ')'
     ;
 
+// GNU
+// https://github.com/gcc-mirror/gcc/blob/5d69161a7c36a2da8565967eb0cc2df1322a05a3/gcc/c/c-parser.cc#L14312-L14314
+exprList
+    : assignmentExpression (',' assignmentExpression)*
+    ;
+
+// 6.5.1.1
 genericSelection
     : '_Generic' '(' assignmentExpression ',' genericAssocList ')'
     ;
 
+// 6.5.1.1
 genericAssocList
     : genericAssociation (',' genericAssociation)*
     ;
 
+// 6.5.1.1
 genericAssociation
     : (typeName | 'default') ':' assignmentExpression
     ;
 
+// 6.5.2
 postfixExpression
-    : (primaryExpression | '__extension__'? '(' typeName ')' '{' initializerList ','? '}') postfixOperator*
+    : (primaryExpression | '__extension__'? '(' typeName ')' '{' initializerList? ','? '}') postfixOperator*
     ;
 
 postfixOperator
@@ -72,15 +104,21 @@ postfixOperator
     | '--'
     ;
 
+// 6.5.2
 argumentExpressionList
     : assignmentExpression (',' assignmentExpression)*
     ;
 
+// 6.5.3
+// GNU
+// https://github.com/gcc-mirror/gcc/blob/5d69161a7c36a2da8565967eb0cc2df1322a05a3/gcc/c/c-parser.cc#L10625-L10658
 unaryExpression
     : ('++' | '--' | 'sizeof')* (
         postfixExpression
         | unaryOperator castExpression
-        | ('sizeof' | '_Alignof') '(' typeName ')'
+        | ('sizeof' | Alignof) ( '(' typeName ')'
+		| unaryExpression //GNU
+		)
         | '&&' Identifier // GCC extension address of label
     )
     ;
@@ -92,10 +130,13 @@ unaryOperator
     | '-'
     | '~'
     | '!'
+    | '__extension__' // GNU
+    | '__real__' // GNU
+    | '__imag__' // GNU
     ;
 
 castExpression
-    : '__extension__'? '(' typeName ')' castExpression
+    : '(' typeName ')' castExpression
     | unaryExpression
     | DigitSequence // for
     ;
@@ -184,16 +225,13 @@ constantExpression
     ;
 
 declaration
-    : declarationSpecifiers initDeclaratorList? ';'
+    : declarationSpecifiers initDeclaratorList? ';' {this->EnterDeclaration();}
     | staticAssertDeclaration
+    | attributeDeclaration
     ;
 
 declarationSpecifiers
-    : declarationSpecifier+
-    ;
-
-declarationSpecifiers2
-    : declarationSpecifier+
+    : ({ this->IsDeclarationSpecifier()}? declarationSpecifier )+
     ;
 
 declarationSpecifier
@@ -210,6 +248,10 @@ initDeclaratorList
 
 initDeclarator
     : declarator ('=' initializer)?
+    ;
+
+attributeDeclaration
+    : attributeSpecifierSequence ';'
     ;
 
 storageClassSpecifier
@@ -231,7 +273,7 @@ typeSpecifier
     | 'double'
     | 'signed'
     | 'unsigned'
-    | '_Bool'
+    | Bool
     | '_Complex'
     | '__m128'
     | '__m128d'
@@ -240,13 +282,25 @@ typeSpecifier
     | atomicTypeSpecifier
     | structOrUnionSpecifier
     | enumSpecifier
-    | typedefName
-    | '__typeof__' '(' constantExpression ')' // GCC extension
+    | '__extension__'? typedefName
+    | typeofSpecifier
+    ;
+
+typeofSpecifier
+    : (Typeof | Typeof_unqual) '(' typeofSpecifierArgument ')'
+    ;
+
+typeofSpecifierArgument
+    : expression
+    | typeName
     ;
 
 structOrUnionSpecifier
-    : structOrUnion Identifier? '{' structDeclarationList '}'
-    | structOrUnion Identifier
+    : structOrUnion attributeSpecifierSequence? gnuAttributes?
+	( Identifier? '{' ( {this->IsNullStructDeclarationListExtension()}? | memberDeclarationList) '}'
+	| Identifier
+	)
+//	{this->EnterDeclaration();}
     ;
 
 structOrUnion
@@ -254,37 +308,39 @@ structOrUnion
     | 'union'
     ;
 
-structDeclarationList
-    : structDeclaration+
+memberDeclarationList
+    : memberDeclaration+
     ;
 
-structDeclaration // The first two rules have priority order and cannot be simplified to one expression.
-    : specifierQualifierList structDeclaratorList ';'
-    | specifierQualifierList ';'
+// struct-declaration is the GNU equivalent.
+memberDeclaration
+    : attributeSpecifierSequence? specifierQualifierList memberDeclaratorList? ';'
     | staticAssertDeclaration
+    | '__extension__' memberDeclaration // GNU extension.
     ;
 
 specifierQualifierList
-    : specifierQualifier+
+    : gnuAttributes? typeSpecifierQualifier+ attributeSpecifierSequence?
     ;
 
-specifierQualifier
+typeSpecifierQualifier
     : typeSpecifier
     | typeQualifier
+    | alignmentSpecifier
     ;
 
-structDeclaratorList
-    : structDeclarator (',' structDeclarator)*
+memberDeclaratorList
+    : structDeclarator (',' gnuAttributes? structDeclarator)*
     ;
 
 structDeclarator
-    : declarator
-    | declarator? ':' constantExpression
+    : declarator gnuAttributes?
+    | declarator? ':' constantExpression gnuAttributes?
     ;
 
 enumSpecifier
-    : 'enum' Identifier? '{' enumeratorList ','? '}'
-    | 'enum' Identifier
+    : 'enum' attributeSpecifierSequence? gnuAttributes? Identifier? enumTypeSpecifier? '{' enumeratorList ','? '}'
+    | 'enum' Identifier enumTypeSpecifier?
     ;
 
 enumeratorList
@@ -292,11 +348,15 @@ enumeratorList
     ;
 
 enumerator
-    : enumerationConstant ('=' constantExpression)?
+    : enumerationConstant attributeSpecifierSequence? gnuAttributes? ('=' constantExpression)?
     ;
 
 enumerationConstant
     : Identifier
+    ;
+
+enumTypeSpecifier
+    : specifierQualifierList
     ;
 
 atomicTypeSpecifier
@@ -315,33 +375,40 @@ functionSpecifier
     | '_Noreturn'
     | '__inline__' // GCC extension
     | '__stdcall'
-    | gccAttributeSpecifier
+    | gnuAttribute
     | '__declspec' '(' Identifier ')'
     ;
 
 alignmentSpecifier
-    : '_Alignas' '(' (typeName | constantExpression) ')'
+    : Alignas '(' (typeName | constantExpression) ')'
     ;
 
+// 6.7.6
+// This rule is basically what was implemented in the GCC compiler.
+// https://github.com/gcc-mirror/gcc/blob/f5cda36f16d447198c1e00b191d720b6f4a02876/gcc/c/c-parser.cc#L4975-L4995
 declarator
-    : pointer? directDeclarator gccDeclaratorExtension*
+    : gnuAttribute? pointer declarationSpecifiers? declarator
+    | directDeclarator gccDeclaratorExtension*
     ;
 
+// 6.7.6
+// The rules from the spec were refactored. array-declarator and function-declarator
+// were unfolded into direct-declarator. Those rules were deleted.
 directDeclarator
-    : Identifier ':' DigitSequence
-    | vcSpecificModifier Identifier
-    | '(' vcSpecificModifier declarator ')'
+    : Identifier attributeSpecifierSequence?
     | '(' declarator ')'
-    | Identifier
-    | directDeclarator '(' parameterTypeList ')'
-    | directDeclarator '(' identifierList? ')'
-    | directDeclarator '[' typeQualifierList? assignmentExpression? ']'
-    | directDeclarator '[' 'static' typeQualifierList? assignmentExpression ']'
-    | directDeclarator '[' typeQualifierList 'static' assignmentExpression ']'
-    | directDeclarator '[' typeQualifierList? '*' ']'
+    | directDeclarator '[' typeQualifierList? assignmentExpression? ']' attributeSpecifierSequence?
+    | directDeclarator '[' 'static' typeQualifierList? assignmentExpression ']' attributeSpecifierSequence?
+    | directDeclarator '[' typeQualifierList 'static' assignmentExpression ']' attributeSpecifierSequence?
+    | directDeclarator '[' typeQualifierList? '*' ']' attributeSpecifierSequence?
+    | directDeclarator '(' parameterTypeList? ')' attributeSpecifierSequence?
+    | Identifier ':' DigitSequence         // bit field
+    | vcSpecificModifer Identifier         // Visual C Extension
+    | '(' vcSpecificModifer declarator ')' // Visual C Extension
+    | gnuAttribute
     ;
 
-vcSpecificModifier
+vcSpecificModifer
     : '__cdecl'
     | '__clrcall'
     | '__stdcall'
@@ -351,23 +418,28 @@ vcSpecificModifier
     ;
 
 gccDeclaratorExtension
-    : '__asm' '(' StringLiteral+ ')'
-    | gccAttributeSpecifier
+    : asmDefinition
+    | gnuAttribute
     ;
 
-gccAttributeSpecifier
-    : '__attribute__' '(' '(' gccAttributeList ')' ')'
+gnuAttributes
+    : gnuAttribute+
     ;
 
-gccAttributeList
-    : gccAttribute? (',' gccAttribute?)*
+gnuAttribute
+    : Attribute '(' '(' gnuAttributeList ')' ')'
     ;
 
-gccAttribute
-    : ~(',' | '(' | ')') // relaxed def for "identifier or reserved word"
-    ('(' argumentExpressionList? ')')?
+gnuAttributeList
+    : gnuSingleAttribute*
     ;
 
+gnuSingleAttribute
+    : ~('(' | ')')
+    | '(' gnuAttributeList ')'
+    ;
+
+// 6.7.6
 pointer
     : pointerLevel+
     ;
@@ -376,21 +448,24 @@ pointerLevel
     : ('*' | '^') typeQualifierList?  // ^ - Blocks language extension
     ;
 
+// 6.7.6
 typeQualifierList
     : typeQualifier+
     ;
 
+// 6.7.6
 parameterTypeList
     : parameterList (',' '...')?
+    | '...'
     ;
 
+// 6.7.6
 parameterList
     : parameterDeclaration (',' parameterDeclaration)*
     ;
 
 parameterDeclaration
-    : declarationSpecifiers declarator
-    | declarationSpecifiers2 abstractDeclarator?
+    : declarationSpecifiers ( declarator | abstractDeclarator? )
     ;
 
 identifierList
@@ -424,30 +499,79 @@ typedefName
     : Identifier
     ;
 
+// 6.7.10
 initializer
     : assignmentExpression
     | '{' initializerList ','? '}'
+    | '{' '}' //GNU https://github.com/gcc-mirror/gcc/blob/77ab3b07385f23b39a2445011068c04e0872b481/gcc/c/c-parser.cc#L6542
     ;
 
+// 6.7.10
 initializerList
     : designation? initializer (',' designation? initializer)*
     ;
 
+// 6.7.10
 designation
     : designatorList '='
+    | arrayDesignator //GNU https://github.com/gcc-mirror/gcc/blob/77ab3b07385f23b39a2445011068c04e0872b481/gcc/c/c-parser.cc#L6545-L6546
+    | Identifier ':' //GNU
     ;
 
+// 6.7.10
 designatorList
     : designator+
     ;
 
+// 6.7.10
 designator
-    : '[' constantExpression ']'
+    : arrayDesignator //GNU
     | '.' Identifier
     ;
 
+// GNU https://github.com/gcc-mirror/gcc/blob/77ab3b07385f23b39a2445011068c04e0872b481/gcc/c/c-parser.cc#L6548-L6549
+arrayDesignator
+    : '[' constantExpression ('...' constantExpression)? ']'
+    ;
+
 staticAssertDeclaration
-    : '_Static_assert' '(' constantExpression ',' StringLiteral+ ')' ';'
+    : '_Static_assert' '(' constantExpression (',' StringLiteral)? ')' ';'
+    ;
+
+attributeSpecifierSequence
+    : attributeSpecifier+
+    ;
+
+attributeSpecifier
+    : '[' '[' attributeList ']' ']'
+    ;
+
+attributeList
+    : attribute (',' attribute)* // May not be correct.
+    ;
+
+attribute
+    : attributeToken attributeArgumentClause?
+    ;
+
+attributeToken
+    : Identifier
+    | Identifier ':' ':' Identifier
+    ;
+
+attributeArgumentClause
+    : '(' balancedTokenSequence? ')'
+    ;
+
+balancedTokenSequence
+    : balancedToken+
+    ;
+
+balancedToken
+    : '(' balancedTokenSequence? ')'
+    | '[' balancedTokenSequence? ']'
+    | '{' balancedTokenSequence? '}'
+    // any token other than a parenthesis, bracket, or brace
     ;
 
 statement
@@ -457,9 +581,7 @@ statement
     | selectionStatement
     | iterationStatement
     | jumpStatement
-    | ('__asm' | '__asm__') ('volatile' | '__volatile__') '(' (
-        logicalOrExpression (',' logicalOrExpression)*
-    )? (':' (logicalOrExpression (',' logicalOrExpression)*)?)* ')' ';'
+    | asmStatement
     ;
 
 labeledStatement
@@ -477,8 +599,8 @@ blockItemList
     ;
 
 blockItem
-    : statement
-    | declaration
+    : {this->IsStatement()}? statement
+    | {this->IsDeclaration()}? declaration
     ;
 
 expressionStatement
@@ -521,18 +643,65 @@ jumpStatement
     ) ';'
     ;
 
-compilationUnit
-    : translationUnit? EOF
-    ;
-
-translationUnit
-    : externalDeclaration+
-    ;
-
 externalDeclaration
-    : functionDefinition
-    | declaration
-    | ';'
+    : '__extension__'? (
+	functionDefinition
+	| declaration
+	| ';' // stray ;
+	| asmDefinition // GCC
+	)
+    ;
+
+asmDefinition
+    : simpleAsmExpr
+    | ('__asm' | '__asm__' | 'asm') '(' toplevelAsmArgument ')'
+    ;
+
+simpleAsmExpr
+    : ('__asm' | '__asm__' | 'asm') '(' asmStringLiteral ')'
+    ;
+
+toplevelAsmArgument
+    : asmStringLiteral
+    | asmStringLiteral ':' asmOperands?
+    | asmStringLiteral ':' asmOperands? ':' asmOperands?
+    ;
+
+asmStringLiteral
+    : StringLiteral
+    ;
+
+asmOperands
+    : asmOperand (',' asmOperand)*
+    ;
+
+asmOperand
+    : asmStringLiteral '(' expression ')'
+    | '[' Identifier ']' asmStringLiteral '(' expression ')'
+    ;
+
+asmStatement
+    : ('__asm' | '__asm__' | 'asm') asmQualifierList? '(' asmArgument ')' ';'
+    ;
+
+asmQualifier
+    : 'volatile'
+    | '__volatile__'
+    | 'inline'
+    | 'goto'
+    ;
+
+asmQualifierList
+    : asmQualifier+
+    ;
+
+asmClobbers
+    : (asmStringLiteral | Identifier) ( ',' (asmStringLiteral | Identifier) )*
+    ;
+
+asmArgument
+    : asmStringLiteral
+    | asmStringLiteral ':' asmOperands? ( ':' asmOperands? (':' asmClobbers? )* )?
     ;
 
 functionDefinition

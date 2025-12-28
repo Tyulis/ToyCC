@@ -41,10 +41,8 @@ namespace toycc::ir {
         return std::format("{} {}", category_repr(category), name);
     }
 
-    bool TypeIdentifier::operator< (TypeIdentifier rhs) const {
-        if (category != rhs.category)
-            return category < rhs.category;
-        return name < rhs.name;
+    bool TypeIdentifier::operator== (TypeIdentifier rhs) const {
+        return category == rhs.category && name == rhs.name;
     }
 
     Type::Type(TypeIdentifier identifier, CodeLocation location) : identifier(identifier), location(location) {}

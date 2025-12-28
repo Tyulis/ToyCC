@@ -5,6 +5,7 @@
 #include "Recognizer.h"
 #include "Token.h"
 
+#include "parserbase/CParserBase.h"  // IWYU pragma: export
 #include "parser.h"
 #include "xml_output.h"
 #include "diagnostic.h"

@@ -33,8 +33,59 @@
 
 lexer grammar CLexer;
 
+channels {
+    LINEDIRECTIVECHANNEL
+}
+
+KW__asm: '__asm';
+KW__asm__: '__asm__';
+KWasm: 'asm';
+Attribute: '__attribute__' | '__attribute' ;
+KW__builtin_offsetof: '__builtin_offsetof';
+KW__builtin_va_arg: '__builtin_va_arg';
+KW__builtin_choose_expr: '__builtin_choose_expr';
+KW__builtin_types_compatible_p: '__builtin_types_compatible_p';
+KW__builtin_tgmath: '__builtin_tgmath';
+KW__builtin_complex: '__builtin_complex';
+KW__cdecl: '__cdecl';
+KW__clrcall: '__clrcall';
+KW__declspec: '__declspec';
+KW__extension__: '__extension__';
+KW__fastcall: '__fastcall';
+KW__inline__: '__inline__';
+KW__m128: '__m128';
+KW__m128d: '__m128d';
+KW__m128i: '__m128i';
+KW__stdcall: '__stdcall';
+KW__thiscall: '__thiscall';
+KW__vectorcall: '__vectorcall';
+KW__volatile__: '__volatile__';
+KW__real__: '__real__';
+KW__imag__: '__imag__';
+KW__func__: '__func__';
+KW__FUNCTION__: '__FUNCTION__';
+KW__PRETTY_FUNCTION__: '__PRETTY_FUNCTION__';
+
+
+Alignas
+    : 'alignas'
+    | '_Alignas'
+    ;
+
+Alignof
+    : 'alignof'
+    | '_Alignof'
+    | '__alignof__' // GNU
+    | '__alignof'
+    ;
+
 Auto
     : 'auto'
+    ;
+
+Bool
+    : 'bool'
+    | '_Bool'
     ;
 
 Break
@@ -51,6 +102,10 @@ Char
 
 Const
     : 'const'
+    ;
+
+Constexpr
+    : 'constexpr'
     ;
 
 Continue
@@ -81,6 +136,10 @@ Extern
     : 'extern'
     ;
 
+False
+    : 'false'
+    ;
+
 Float
     : 'float'
     ;
@@ -107,6 +166,10 @@ Int
 
 Long
     : 'long'
+    ;
+
+Nulptr
+    : 'nullptr'
     ;
 
 Register
@@ -137,6 +200,10 @@ Static
     : 'static'
     ;
 
+Static_assert
+    : 'static_assert'
+    ;
+
 Struct
     : 'struct'
     ;
@@ -145,8 +212,23 @@ Switch
     : 'switch'
     ;
 
+Thread_local
+    : 'thread_local'
+    ;
+
 Typedef
     : 'typedef'
+    ;
+
+Typeof
+    : 'typeof'
+    | '__typeof__' //GNU
+    | '__typeof' // GNU
+    ;
+
+Typeof_unqual
+    : 'typeof_unequal'
+    | '__typeof_unequal__' //GNU
     ;
 
 Union
@@ -169,24 +251,28 @@ While
     : 'while'
     ;
 
-Alignas
-    : '_Alignas'
-    ;
-
-Alignof
-    : '_Alignof'
-    ;
-
 Atomic
     : '_Atomic'
     ;
 
-Bool
-    : '_Bool'
+BitInt
+    : '_BitInt'
     ;
 
 Complex
     : '_Complex'
+    ;
+
+Decimal128
+    : '_Decimal128'
+    ;
+
+Decimal32
+    : '_Decimal32'
+    ;
+
+Decimal64
+    : '_Decimal64'
     ;
 
 Generic
@@ -207,82 +293,6 @@ StaticAssert
 
 ThreadLocal
     : '_Thread_local'
-    ;
-
-Ext__asm__
-    : '__asm__'
-    ;
-
-Ext__asm
-    : '__asm'
-    ;
-
-Ext__attribute__
-    : '__attribute__'
-    ;
-
-Ext__builtin_va_arg
-    : '__builtin_va_arg'
-    ;
-
-Ext__builtin_offsetof
-    : '__builtin_offsetof'
-    ;
-
-Ext__cdecl
-    : '__cdecl'
-    ;
-
-Ext__clrcall
-    : '__clrcall'
-    ;
-
-Ext__declspec
-    : '__declspec'
-    ;
-
-Ext__extension__
-    : '__extension__'
-    ;
-
-Ext__fastcall
-    : '__fastcall'
-    ;
-
-Ext__inline__
-    : '__inline__'
-    ;
-
-Ext__m128
-    : '__m128'
-    ;
-
-Ext__m128d
-    : '__m128d'
-    ;
-
-Ext__m128i
-    : '__m128i'
-    ;
-
-Ext__stdcall
-    : '__stdcall'
-    ;
-
-Ext__thiscall
-    : '__thiscall'
-    ;
-
-Ext__typeof__
-    : '__typeof__'
-    ;
-
-Ext__vectorcall
-    : '__vectorcall'
-    ;
-
-Ext__volatile__
-    : '__volatile__'
     ;
 
 LeftParen
@@ -647,7 +657,7 @@ fragment HexadecimalEscapeSequence
     ;
 
 StringLiteral
-    : EncodingPrefix? '"' SCharSequence? '"'
+    : EncodingPrefix? '"' SCharSequence? '"' ([ \n\r\t]+ EncodingPrefix? '"' SCharSequence? '"')*
     ;
 
 fragment EncodingPrefix
@@ -672,19 +682,12 @@ MultiLineMacro
     : '#' (~[\n]*? '\\' '\r'? '\n')+ ~ [\n]+ -> channel (HIDDEN)
     ;
 
-Directive
-    : '#' ~ [\n]* -> channel (HIDDEN)
+LineDirective
+    : '#' [ \t]* 'line' .*? ( '\n' | '\r\n' | '\r' ) -> channel (LINEDIRECTIVECHANNEL)
     ;
 
-// ignore the following asm blocks:
-/*
-    asm
-    {
-        mfspr x, 286;
-    }
- */
-AsmBlock
-    : 'asm' ~'{'* '{' ~'}'* '}' -> channel(HIDDEN)
+Directive
+    : '#' ~ [\n]* -> channel (HIDDEN)
     ;
 
 Whitespace

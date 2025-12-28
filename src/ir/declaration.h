@@ -33,6 +33,7 @@ namespace toycc::ir {
     enum class FunctionSpecifier {
         INLINE      = 0x01,
         NORETURN    = 0x02,
+        STDCALL     = 0x04,
     };
 
     struct Declaration;

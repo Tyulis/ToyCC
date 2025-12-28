@@ -27,7 +27,7 @@ namespace toycc::ir {
 
         std::string text() const;
         std::string ir_code() const;
-        bool operator< (TypeIdentifier rhs) const;
+        bool operator== (TypeIdentifier rhs) const;
     };
 
     struct Type {
@@ -56,3 +56,11 @@ namespace toycc::ir {
         virtual std::string ir_code() const override;
     };
 }
+
+template<> struct std::hash<toycc::ir::TypeIdentifier> {
+    std::size_t operator()(const toycc::ir::TypeIdentifier& s) const noexcept {
+        std::size_t h1 = std::hash<toycc::ir::TypeCategory>{}(s.category);
+        std::size_t h2 = std::hash<std::string>{}(s.name);
+        return h1 ^ (h2 << 1); // or use boost::hash_combine
+    }
+};

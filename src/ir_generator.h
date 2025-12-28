@@ -34,8 +34,9 @@ namespace toycc {
             void decode_function_definition(CParser::FunctionDefinitionContext* context);
 
             // -------- Statements
+            std::shared_ptr<ir::Scope> decode_block(CParser::CompoundStatementContext* context);
+            std::shared_ptr<ir::Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ir::ScopeType type);
             void decode_compound_statement(CParser::CompoundStatementContext* context, std::shared_ptr<ir::Scope> scope);
-            std::shared_ptr<ir::Scope> decode_compound_statement(CParser::CompoundStatementContext* context);
 
             void decode_block_item_list(CParser::BlockItemListContext* context);
             void decode_statement(CParser::StatementContext* context);
@@ -44,7 +45,7 @@ namespace toycc {
 
             // -------- Declarations
             void decode_declaration(CParser::DeclarationContext* context);
-            void decode_declaration_specifiers(ir::Declaration& declaration, std::vector<CParser::DeclarationSpecifierContext*> specifiers);
+            void decode_declaration_specifiers(ir::Declaration& declaration, CParser::DeclarationSpecifiersContext* specifiers);
             ir::TypeSpecification decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context);
 
             Flags<ir::StorageClass> decode_storage_class(CParser::StorageClassSpecifierContext* context);
@@ -53,9 +54,11 @@ namespace toycc {
             Flags<ir::FunctionSpecifier> decode_function_specifier(CParser::FunctionSpecifierContext* context);
 
             ir::TypeSpecification resolve_type_specifier(std::vector<CParser::TypeSpecifierContext*> specifiers, bool is_typedef);
-            ir::TypeIdentifier decode_type_specifier(std::vector<CParser::TypeSpecifierContext*> specifiers);
+            ir::TypeIdentifier decode_type_specifiers(std::vector<CParser::TypeSpecifierContext*> specifiers);
             ir::TypeIdentifier decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context);
-            std::vector<ir::StructMember> decode_struct_declaration(CParser::StructDeclarationContext* context);
+            std::vector<ir::StructMember> decode_member_declaration(CParser::MemberDeclarationContext* context);
+            std::vector<ir::StructMember> decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, ir::TypeSpecification base_spec);
+            ir::StructMember decode_struct_declarator(CParser::StructDeclaratorContext* context, ir::TypeSpecification base_spec);
 
             size_t resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context);
             std::optional<std::string> decode_declarator(ir::TypeSpecification& spec, CParser::DeclaratorContext* context);
@@ -64,7 +67,6 @@ namespace toycc {
             std::vector<ir::Declaration> decode_parameter_type_list(CParser::ParameterTypeListContext* context);
             std::vector<ir::Declaration> decode_parameter_list(CParser::ParameterListContext* context);
             ir::Declaration decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
-            void decode_initializer(ir::Declaration const& declaration, CParser::InitializerContext* context);
             std::vector<Flags<ir::TypeQualifier>> decode_pointer_spec(CParser::PointerContext* context);
 
             // -------- Expressions
@@ -95,7 +97,6 @@ namespace toycc {
             std::shared_ptr<ir::Declaration> decode_binary_constant(antlr4::tree::TerminalNode* terminal);
             std::shared_ptr<ir::Declaration> decode_octal_constant(antlr4::tree::TerminalNode* terminal);
             std::shared_ptr<ir::Declaration> decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals);
-
             std::shared_ptr<ir::Declaration> decode_function_call(std::shared_ptr<ir::Declaration> function, CParser::PostfixOperatorContext* call);
 
             std::shared_ptr<ir::Declaration> declare_integer_constant(size_t value, std::string suffix, CodeLocation location);
@@ -126,7 +127,6 @@ namespace toycc {
             std::shared_ptr<ir::Scope> create_function_scope(std::shared_ptr<ir::Declaration> declaration);
             std::shared_ptr<ir::Declaration> declare(ir::Declaration declaration);
             std::shared_ptr<ir::Declaration> declare_temporary(ir::TypeSpecification spec, CodeLocation location);
-            std::shared_ptr<ir::Statement> add_statement(std::shared_ptr<ir::Statement> statement);
 
             std::shared_ptr<ir::Declaration> resolve_without_error(std::string name);
             std::shared_ptr<ir::Declaration> resolve(std::string name, CodeLocation location);
