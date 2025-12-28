@@ -20,6 +20,8 @@ namespace toycc::ir {
             case stmt::Tag::DEREF_STORE: return "DEREF_STORE";
             case stmt::Tag::COPY:        return "COPY";
 
+            case stmt::Tag::ADDRESS_OF:  return "ADDRESS_OF";
+            case stmt::Tag::UNARY_OP:    return "UNARY_OP";
             case stmt::Tag::BINARY_OP:   return "BINARY_OP";
             case stmt::Tag::CALL:        return "CALL";
 
@@ -52,6 +54,13 @@ namespace toycc::ir::stmt {
             case BinaryOperator::LOGICAL_OR:   return "||";
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid binary operator");
+    }
+
+    static std::string unary_operator_repr(UnaryOperator op) {
+        switch (op) {
+            case UnaryOperator::ADDRESSOF: return "&";
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid unary operator");
     }
 
     static std::string conversion_operation_repr(ConversionOperation operation) {
@@ -95,41 +104,34 @@ namespace toycc::ir::stmt {
         return code.str();
     }
 
-    DerefLoad::DerefLoad(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source_pointer, std::vector<std::shared_ptr<Declaration>> indices)
-        : Statement(Tag::DEREF_LOAD, location), destination(destination), source_pointer(source_pointer), indices(indices) {}
+    DerefLoad::DerefLoad(CodeLocation location, std::shared_ptr<Declaration> destination, LValue source_pointer)
+        : Statement(Tag::DEREF_LOAD, location), destination(destination), source_pointer(source_pointer) {}
     std::string DerefLoad::ir_code() const {
-        std::stringstream code;
-        code << tag_repr() << " " << destination->name << " = ";
-        if (indices.empty()) {
-            code << "*" << source_pointer->name;
-        } else {
-            code << source_pointer->name;
-            for (std::shared_ptr<Declaration> index : indices)
-                code << "[" << index->name << "]";
-        }
-        return code.str();
+        return std::format("{} {} = {}", tag_repr(), destination->name, source_pointer.ir_code());
     }
 
-    DerefStore::DerefStore(CodeLocation location, std::shared_ptr<Declaration> destination_pointer, std::vector<std::shared_ptr<Declaration>> indices, std::shared_ptr<Declaration> source)
-        : Statement(Tag::DEREF_STORE, location), destination_pointer(destination_pointer), indices(indices), source(source) {}
+    DerefStore::DerefStore(CodeLocation location, LValue destination_pointer, std::shared_ptr<Declaration> source)
+        : Statement(Tag::DEREF_STORE, location), destination_pointer(destination_pointer), source(source) {}
     std::string DerefStore::ir_code() const {
-        std::stringstream code;
-        code << tag_repr() << " ";
-        if (indices.empty()) {
-            code << "*" << destination_pointer->name;
-        } else {
-            code << destination_pointer->name;
-            for (std::shared_ptr<Declaration> index : indices)
-                code << "[" << index->name << "]";
-        }
-        code << " = " << source->name;
-        return code.str();
+        return std::format("{} {} = {}", tag_repr(), destination_pointer.ir_code(), source->name);
     }
 
     Copy::Copy(CodeLocation location, ConversionOperation operation, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source)
         : Statement(Tag::COPY, location), operation(operation), destination(destination), source(source) {}
     std::string Copy::ir_code() const {
         return std::format("{} {} = {} {}", tag_repr(), destination->name, conversion_operation_repr(operation), source->name);
+    }
+
+    AddressOf::AddressOf(CodeLocation location, std::shared_ptr<Declaration> destination, LValue operand)
+    : Statement(Tag::ADDRESS_OF, location), destination(destination), operand(operand) {}
+    std::string AddressOf::ir_code() const {
+        return std::format("{} {} = &{}", tag_repr(), destination->name, operand.ir_code());
+    }
+
+    UnaryOp::UnaryOp(CodeLocation location, UnaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> operand)
+        : Statement(Tag::UNARY_OP, location), op(op), destination(destination), operand(operand) {}
+    std::string UnaryOp::ir_code() const {
+        return std::format("{} {} = {}{}", tag_repr(), destination->name, unary_operator_repr(op), operand->name);
     }
 
     BinaryOp::BinaryOp(CodeLocation location, BinaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right)

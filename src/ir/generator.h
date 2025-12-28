@@ -83,6 +83,7 @@ namespace toycc::ir {
                 ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, Generator& generator);
                 ~ExpressionResult();
                 TypeSpecification type() const;
+                LValue lvalue() const;
 
                 std::shared_ptr<Declaration> load(CodeLocation location);
                 void store(std::shared_ptr<Declaration> source, CodeLocation location);

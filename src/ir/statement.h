@@ -9,12 +9,12 @@ namespace toycc::ir {
         enum class Tag {
             NOP, BLOCK, FUNCTION,
             LOAD_CONST, DEREF_LOAD, DEREF_STORE, COPY,
-            BINARY_OP, CALL,
+            ADDRESS_OF, UNARY_OP, BINARY_OP, CALL,
             RETURN,
         };
 
         enum class UnaryOperator {
-            ADDRESSOF, DEREFERENCE, PLUS, MINUS, BITWISE_NOT, LOGICAL_NOT,
+            ADDRESSOF,
         };
 
         enum class BinaryOperator {
@@ -70,19 +70,17 @@ namespace toycc::ir {
 
         struct DerefLoad : public Statement {
             std::shared_ptr<Declaration> destination;
-            std::shared_ptr<Declaration> source_pointer;
-            std::vector<std::shared_ptr<Declaration>> indices;
+            LValue source_pointer;
 
-            DerefLoad(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source_pointer, std::vector<std::shared_ptr<Declaration>> indices);
+            DerefLoad(CodeLocation location, std::shared_ptr<Declaration> destination, LValue source_pointer);
             virtual std::string ir_code() const override;
         };
 
         struct DerefStore: public Statement {
-            std::shared_ptr<Declaration> destination_pointer;
-            std::vector<std::shared_ptr<Declaration>> indices;
+            LValue destination_pointer;
             std::shared_ptr<Declaration> source;
 
-            DerefStore(CodeLocation location, std::shared_ptr<Declaration> destination_pointer, std::vector<std::shared_ptr<Declaration>> indices, std::shared_ptr<Declaration> source);
+            DerefStore(CodeLocation location, LValue destination_pointer, std::shared_ptr<Declaration> source);
             virtual std::string ir_code() const override;
         };
 
@@ -93,6 +91,23 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> source;
 
             Copy(CodeLocation location, ConversionOperation operation, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source);
+            virtual std::string ir_code() const override;
+        };
+
+        struct AddressOf : public Statement {
+            std::shared_ptr<Declaration> destination;
+            LValue operand;
+
+            AddressOf(CodeLocation location, std::shared_ptr<Declaration> destination, LValue operand);
+            virtual std::string ir_code() const override;
+        };
+
+        struct UnaryOp : public Statement {
+            UnaryOperator op;
+            std::shared_ptr<Declaration> destination;
+            std::shared_ptr<Declaration> operand;
+
+            UnaryOp(CodeLocation location, UnaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> operand);
             virtual std::string ir_code() const override;
         };
 

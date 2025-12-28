@@ -170,8 +170,11 @@ namespace toycc::ir {
         if (custom_alignment.has_value())
             code << "alignas(" << custom_alignment.value() << ") ";
         code << function_specifiers_repr(function_spec) << "(" << type_qualifiers_repr(qualifiers) << type->identifier.ir_code();
-        for (Flags<TypeQualifier> level : pointer_spec)
-            code << "*" << type_qualifiers_repr(level) << " ";
+        for (size_t level = 0; level < pointer_spec.size(); level++) {
+            code << "*" << type_qualifiers_repr(pointer_spec[level]);
+            if (level != pointer_spec.size() - 1)
+                code << " ";
+        }
         code << ")";
 
         if (is_function_type) {
@@ -215,5 +218,18 @@ namespace toycc::ir {
 
     bool Declaration::operator== (const Declaration& decl) const {
         return (name == decl.name && storage == decl.storage && spec == decl.spec);
+    }
+
+
+    std::string LValue::ir_code() const {
+        std::stringstream code;
+        code << base_declaration->name;
+        for (std::shared_ptr<Declaration> index : indices) {
+            if (index.get() == nullptr)
+                code << "[0]";
+            else
+                code << "[" << index->name << "]";
+        }
+        return code.str();
     }
 }

@@ -185,11 +185,32 @@ namespace toycc::ir {
 
 
     std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_addressof(CParser::UnaryExpressionContext* context) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary addressof operations are not implemented", locate(context));
+        const CodeLocation location = locate(context);
+
+        std::shared_ptr<ExpressionResult> operand = decode_cast_expression(context->castExpression());
+        if (!operand->is_lvalue)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Can't take the address of an rvalue", locate(context));
+
+        ir::TypeSpecification result_spec = operand->type();
+        result_spec.pointer_spec.emplace(result_spec.pointer_spec.cbegin());
+
+        std::shared_ptr<Declaration> result = declare_temporary(result_spec, location);
+        current_scope()->add_statement(std::make_shared<stmt::AddressOf>(location, result, operand->lvalue()));
+        return make_expression(result, true);
     }
 
     std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_dereference(CParser::UnaryExpressionContext* context) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary dereference operations are not implemented", locate(context));
+        const CodeLocation location = locate(context);
+
+        std::shared_ptr<ExpressionResult> operand = decode_cast_expression(context->castExpression());
+        ir::TypeSpecification operand_spec = operand->type();
+        if (!operand_spec.is_pointer_type())
+            throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to dereference a non-pointer object", location);
+
+        std::shared_ptr<ExpressionResult> result = std::make_shared<ExpressionResult>(*operand);
+        result->indices.insert(result->indices.cbegin(), nullptr);  // nullptr is a shortcut for a simple dereference here
+        result->is_lvalue = true;
+        return result;
     }
 
     std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_plus(CParser::UnaryExpressionContext* context) {

@@ -11,7 +11,7 @@ namespace toycc::ir {
 
         // Otherwise emit a dereference
         std::shared_ptr<Declaration> destination = generator.declare_temporary(type(), location);
-        generator.current_scope()->add_statement(std::make_shared<stmt::DerefLoad>(location, destination, result, indices));
+        generator.current_scope()->add_statement(std::make_shared<stmt::DerefLoad>(location, destination, lvalue()));
         return destination;
     }
 
@@ -24,7 +24,7 @@ namespace toycc::ir {
         if (indices.empty())
             generator.current_scope()->add_statement(std::make_shared<stmt::Copy>(location, stmt::ConversionOperation::COPY, result, stored_value));
         else
-            generator.current_scope()->add_statement(std::make_shared<stmt::DerefStore>(location, result, indices, stored_value));
+            generator.current_scope()->add_statement(std::make_shared<stmt::DerefStore>(location, lvalue(), stored_value));
     }
 
     Generator::ExpressionResult::~ExpressionResult() {
@@ -61,6 +61,12 @@ namespace toycc::ir {
         for (std::shared_ptr<Declaration> index : indices)
             spec = spec.referenced_type();
         return spec;
+    }
+
+    LValue Generator::ExpressionResult::lvalue() const {
+        if (!is_lvalue)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to convert an rvalue expression result to an lvalue", location);
+        return {.base_declaration = result, .location = location, .indices = indices};
     }
 
     // Wrap a simple declaration into an ExpressionResult

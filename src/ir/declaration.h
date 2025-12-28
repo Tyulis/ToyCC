@@ -80,4 +80,12 @@ namespace toycc::ir {
 
         bool operator== (const Declaration& decl) const;
     };
+
+    struct LValue {
+        std::shared_ptr<Declaration> base_declaration;
+        CodeLocation location;
+        std::vector<std::shared_ptr<Declaration>> indices;  // Either variables for indices, or nullptr as a shortcut for zero
+
+        std::string ir_code() const;
+    };
 }
