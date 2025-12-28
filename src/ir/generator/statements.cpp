@@ -1,16 +1,12 @@
 #include "diagnostic.h"
 #include "ir/generator.h"
+#include "ir/statement.h"
 
 namespace toycc::ir {
-    std::shared_ptr<Scope> Generator::decode_block(CParser::CompoundStatementContext* context) {
-        std::shared_ptr<Scope> scope = decode_compound_statement(context, ScopeType::BLOCK);
-        current_scope()->add_statement(std::make_shared<stmt::Block>(locate(context), scope));
-        return scope;
-    }
-
     std::shared_ptr<Scope> Generator::decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type) {
         std::shared_ptr<Scope> scope = std::make_shared<Scope>(type, current_scope()->function);
         decode_compound_statement(context, scope);
+        current_scope()->add_statement(std::make_shared<stmt::Block>(locate(context), scope));
         return scope;
     }
 
@@ -31,15 +27,15 @@ namespace toycc::ir {
         }
     }
 
-    void Generator::decode_statement(CParser::StatementContext* context) {
+    void Generator::decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type) {
         if (context->labeledStatement())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Labeled statements are not implemented", locate(context));
         else if (context->compoundStatement())
-            decode_compound_statement(context->compoundStatement(), ScopeType::BLOCK);
+            decode_compound_statement(context->compoundStatement(), scope_type.value_or(ScopeType::BLOCK));
         else if (context->expressionStatement())
             decode_expression_statement(context->expressionStatement());
         else if (context->selectionStatement())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Selection statements are not implemented", locate(context));
+            decode_selection_statement(context->selectionStatement());
         else if (context->iterationStatement())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Iteration statements are not implemented", locate(context));
         else if (context->jumpStatement())
@@ -53,6 +49,40 @@ namespace toycc::ir {
         if (context->expression())
             decode_expression(context->expression());
         // Otherwise it's a trailing semicolon -> skip
+    }
+
+    void Generator::decode_selection_statement(CParser::SelectionStatementContext* context) {
+        if (context->If())
+            decode_if_statement(context);
+        else if (context->Switch())
+            decode_switch_statement(context);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown selection statement `{}`", context->getText()), locate(context));
+    }
+
+    void Generator::decode_if_statement(CParser::SelectionStatementContext* context) {
+        const CodeLocation predicate_location = locate(context->expression());
+        std::shared_ptr<ExpressionResult> predicate_expression = decode_expression(context->expression());
+        std::shared_ptr<Declaration> predicate = convert_to_boolean(predicate_expression->load(predicate_location), predicate_location);
+
+        const std::string label_after_if = anonymous_label();
+        current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_after_if, predicate, false));
+
+        decode_statement(context->statement(0), ScopeType::IF);
+
+        if (context->Else()) {
+            const std::string label_after_else = anonymous_label();
+            current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_after_else));  // If we entered the `if`, skip the `else` part
+            current_scope()->add_label(label_after_if);  // Must be after the `else` skip otherwise the `else` path jumps to the second jump statement
+
+            decode_statement(context->statement(1), ScopeType::ELSE);
+            current_scope()->add_label(label_after_else);
+        } else {
+            current_scope()->add_label(label_after_if);
+        }
+    }
+
+    void Generator::decode_switch_statement(CParser::SelectionStatementContext* context) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Switch statements are not implemented", locate(context));
     }
 
     void Generator::decode_jump_statement(CParser::JumpStatementContext* context) {

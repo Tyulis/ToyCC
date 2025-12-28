@@ -1,3 +1,4 @@
+#include <list>
 #include <sstream>
 
 #include "diagnostic.h"
@@ -8,6 +9,10 @@ namespace toycc::ir {
     Scope::Scope(ScopeType type, std::shared_ptr<Declaration> function) : type(type), function(function) {}
 
     std::string Scope::ir_code() const {
+        std::vector<std::list<std::string>> label_positions(statements.size() + 1);
+        for (std::pair<std::string, size_t> label : labels)
+            label_positions[label.second].push_back(label.first);
+
         std::stringstream code;
         for (std::pair<TypeIdentifier, std::shared_ptr<Type>> item : types)
             code << item.second->ir_code() << ";\n";
@@ -15,8 +20,14 @@ namespace toycc::ir {
             code << item->ir_code() << ";\n";
         for (std::shared_ptr<Declaration> item : locals)
             code << item->ir_code() << ";\n";
-        for (std::shared_ptr<Statement> item : statements)
-            code << item->ir_code() << ";\n";
+
+        for (size_t statement_index = 0; statement_index < statements.size(); statement_index++) {
+            for (std::string label : label_positions[statement_index])
+                code << label << ":\n";
+            code << statements[statement_index]->ir_code() << ";\n";
+        }
+        for (std::string label : label_positions[statements.size()])
+            code << label << ":\n";
         return rtrim(code.str());
     }
 
@@ -76,4 +87,11 @@ namespace toycc::ir {
         return statement;
     }
 
+    size_t Scope::add_label(std::string label) {
+        auto existing_label = labels.find(label);
+        if (existing_label != labels.end())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label `{}` already exists in this scope", label));
+        labels[label] = statements.size();
+        return statements.size();
+    }
 }

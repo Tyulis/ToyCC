@@ -10,7 +10,7 @@ namespace toycc::ir {
             NOP, BLOCK, FUNCTION,
             LOAD_CONST, DEREF_LOAD, DEREF_STORE, COPY,
             ADDRESS_OF, UNARY_OP, BINARY_OP, CALL,
-            RETURN,
+            JUMP, RETURN,
         };
 
         enum class UnaryOperator {
@@ -59,7 +59,7 @@ namespace toycc::ir {
         };
 
         struct LoadConst : public Statement {
-            using Constant = std::variant<int, unsigned int, long, unsigned long, long long, unsigned long long, float, double, long double, char, std::string>;
+            using Constant = std::variant<ssize_t, size_t, long double, std::string>;
 
             std::shared_ptr<Declaration> destination;
             Constant value;
@@ -127,6 +127,16 @@ namespace toycc::ir {
             std::vector<std::shared_ptr<Declaration>> parameters;
 
             Call(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> function, std::vector<std::shared_ptr<Declaration>> parameters);
+            virtual std::string ir_code() const override;
+        };
+
+        struct Jump : public Statement {
+            std::string label;
+            std::shared_ptr<Declaration> predicate;
+            bool jump_if_is = true;
+
+            Jump(CodeLocation location, std::string label);
+            Jump(CodeLocation location, std::string label, std::shared_ptr<Declaration> predicate, bool jump_if_is = true);
             virtual std::string ir_code() const override;
         };
 

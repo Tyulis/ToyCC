@@ -76,6 +76,11 @@ namespace toycc::ir {
         return declare(declaration);
     }
 
+    std::shared_ptr<Declaration> Generator::declare_temporary_predicate(CodeLocation location) {
+        TypeSpecification bool_spec = resolve_type(TypeIdentifier {.category = TypeCategory::PRIMITIVE, .name = "bool"}, location);
+        return declare_temporary(bool_spec, location);
+    }
+
     std::optional<CodeLocation> Generator::locate_name(std::string name, bool current_scope_only) {
         std::vector<TypeIdentifier> type_identifiers = {{.category = TypeCategory::PRIMITIVE, .name = name},
         {.category = TypeCategory::BUILTIN,   .name = name},

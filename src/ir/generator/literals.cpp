@@ -43,7 +43,7 @@ namespace toycc::ir {
 
         // Declare the character constant
         TypeIdentifier type_identifier = {.category = TypeCategory::PRIMITIVE, .name = "signed char"};
-        stmt::LoadConst::Constant value = text[0];
+        stmt::LoadConst::Constant value = static_cast<ssize_t>(text[0]);
 
         TypeSpecification spec = resolve_type(type_identifier, location);
         std::shared_ptr<Declaration> declaration = declare_temporary(spec, location);
@@ -110,12 +110,12 @@ namespace toycc::ir {
         TypeIdentifier type_identifier = {.category = TypeCategory::PRIMITIVE, .name = ""};
         stmt::LoadConst::Constant value;
 
-        if      (suffix.empty())                     { value = static_cast<int>               (base_value); type_identifier.name = "signed int";             }
-        else if (suffix == "u")                      { value = static_cast<unsigned int>      (base_value); type_identifier.name = "unsigned int";           }
-        else if (suffix == "l")                      { value = static_cast<long>              (base_value); type_identifier.name = "signed long int";        }
-        else if (suffix == "ll")                     { value = static_cast<unsigned long>     (base_value); type_identifier.name = "signed long long int";   }
-        else if (suffix == "ul" || suffix == "lu")   { value = static_cast<long long>         (base_value); type_identifier.name = "unsigned long int";      }
-        else if (suffix == "ull" || suffix == "llu") { value = static_cast<unsigned long long>(base_value); type_identifier.name = "unsigned long long int"; }
+        if      (suffix.empty())                     { value = static_cast<ssize_t> (base_value); type_identifier.name = "signed int";             }
+        else if (suffix == "u")                      { value = static_cast<size_t>  (base_value); type_identifier.name = "unsigned int";           }
+        else if (suffix == "l")                      { value = static_cast<ssize_t> (base_value); type_identifier.name = "signed long int";        }
+        else if (suffix == "ll")                     { value = static_cast<ssize_t> (base_value); type_identifier.name = "signed long long int";   }
+        else if (suffix == "ul" || suffix == "lu")   { value = static_cast<size_t>  (base_value); type_identifier.name = "unsigned long int";      }
+        else if (suffix == "ull" || suffix == "llu") { value = static_cast<size_t>  (base_value); type_identifier.name = "unsigned long long int"; }
         else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Unknown integer literal suffix `{}`", suffix), location);
 
         TypeSpecification spec = resolve_type(type_identifier, location);

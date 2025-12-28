@@ -2,6 +2,7 @@
 #include "ir/generator.h"
 #include "arch/x86_64.h"
 #include "ir/statement.h"
+#include "ir/type.h"
 
 namespace toycc::ir {
     // Return a declaration compatible with the `target` type specification. If necessary, emit an implicit cast and declare a new temporary with that target type
@@ -10,6 +11,12 @@ namespace toycc::ir {
 
         if (destination_spec.bitfield_length != source_spec.bitfield_length)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfield conversions are not implemented", location);
+
+        if (destination_spec.is_object_type() && destination_spec.type->identifier.category == TypeCategory::PRIMITIVE) {
+            const PrimitiveType& destination_primitive = static_cast<const PrimitiveType&>(*destination_spec.type);
+            if (destination_primitive.semantic == PrimitiveSemantic::BOOL)
+                return convert_to_boolean(source, location);
+        }
 
         if (destination_spec.is_array_type() && source_spec.is_array_type())
             return emit_implicit_conversion_array(destination_spec, source, location);
@@ -184,17 +191,8 @@ namespace toycc::ir {
                 break;
             }
 
-            case PrimitiveSemantic::BOOL: {
-                switch (source_primitive.semantic) {
-                    case PrimitiveSemantic::BOOL:
-                        return source;
-                    case PrimitiveSemantic::INTEGER:
-                        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Int -> bool conversions are not implemented", location);
-                    case PrimitiveSemantic::FLOAT:
-                        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Float -> bool conversions are not implemented", location);;
-                }
-                break;
-            }
+            case PrimitiveSemantic::BOOL:
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Wrong path, this should have gone through convert_to_boolean", location);
         }
 
         // Factor simple conversions here
@@ -229,5 +227,59 @@ namespace toycc::ir {
 
         source = emit_implicit_conversion(destination->spec, source, location);
         current_scope()->add_statement(std::make_shared<stmt::Copy>(location, stmt::ConversionOperation::COPY, destination, source));
+    }
+
+    std::shared_ptr<Declaration> Generator::convert_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
+        const TypeSpecification& value_spec = value->spec;
+        if (value_spec.is_array_type())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Truth values of array types are not implemented", location);
+        else if (value_spec.is_function_type)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Truth values of function types are not implemented", location);
+        else if (value_spec.is_pointer_type())
+            return convert_pointer_to_boolean(value, location);
+        else if (value_spec.is_object_type())
+            return convert_object_to_boolean(value, location);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown type class in conversion to boolean", location);
+    }
+
+    std::shared_ptr<Declaration> Generator::convert_pointer_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
+        std::shared_ptr<Declaration> result = declare_temporary_predicate(location);
+        std::shared_ptr<Declaration> zero = declare_temporary(value->spec, location);
+        current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<size_t>(0)));
+        current_scope()->add_statement(std::make_shared<stmt::BinaryOp> (location, stmt::BinaryOperator::EQ, result, value, zero));
+        return result;
+    }
+
+    std::shared_ptr<Declaration> Generator::convert_object_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
+        switch (value->spec.type->identifier.category) {
+            case TypeCategory::VOID:       throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to use void in conversion to boolean", location);
+            case TypeCategory::TYPEDEF:    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to use an unresolved typedef in conversion to boolean", location);
+            case TypeCategory::PRIMITIVE:  return convert_primitive_to_boolean(value, location);
+            case TypeCategory::STRUCT:     throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting a struct to boolean is not implemented", location);
+            case TypeCategory::UNION:      throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting a union to boolean is not implemented", location);
+            case TypeCategory::ENUM:       throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting an enum to boolean is not implemented", location);
+            case TypeCategory::BUILTIN:    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting a builtin to boolean is not implemented", location);
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown object type category", location);
+    }
+
+    std::shared_ptr<Declaration> Generator::convert_primitive_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
+        const PrimitiveType& primitive = static_cast<const PrimitiveType&>(*value->spec.type);
+
+        if (primitive.semantic == PrimitiveSemantic::BOOL)
+            return value;
+
+        std::shared_ptr<Declaration> result = declare_temporary_predicate(location);
+        std::shared_ptr<Declaration> zero = declare_temporary(value->spec, location);
+
+        if (primitive.semantic == PrimitiveSemantic::INTEGER) {
+            if (primitive.is_signed)  current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<ssize_t>(0)));
+            else                      current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<size_t> (0)));
+        } else if (primitive.semantic == PrimitiveSemantic::FLOAT) {
+            current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<long double>(0)));
+        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown primitive type semantic", location);
+
+        current_scope()->add_statement(std::make_shared<stmt::BinaryOp> (location, stmt::BinaryOperator::EQ, result, value, zero));
+        return result;
     }
 }

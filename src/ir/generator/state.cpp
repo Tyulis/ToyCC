@@ -5,6 +5,10 @@ namespace toycc::ir {
         return std::format("@I{}", unique_id++);
     }
 
+    std::string Generator::anonymous_label() {
+        return std::format("@L{}", unique_id++);
+    }
+
     std::shared_ptr<Scope> Generator::current_scope() {
         return scope_stack.back();
     }

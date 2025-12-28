@@ -25,6 +25,7 @@ namespace toycc::ir {
             case stmt::Tag::BINARY_OP:   return "BINARY_OP";
             case stmt::Tag::CALL:        return "CALL";
 
+            case stmt::Tag::JUMP:        return "JUMP";
             case stmt::Tag::RETURN:      return "RETURN";
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid statement tag");
@@ -92,11 +93,7 @@ namespace toycc::ir::stmt {
         std::stringstream code;
         code << tag_repr() << " " << destination->name << " = ";
 
-        if (std::holds_alternative<char>(value)) {
-            std::string character;
-            character.push_back(std::get<char>(value));
-            code << "'" << escape(character) << "'";
-        } else if (std::holds_alternative<std::string>(value)) {
+        if (std::holds_alternative<std::string>(value)) {
             code << "\"" << escape(std::get<std::string>(value)) << "\"";
         } else {
             std::visit([&](auto&& val) { code << val; }, value);
@@ -152,6 +149,18 @@ namespace toycc::ir::stmt {
         }
         code << ")";
         return code.str();
+    }
+
+    Jump::Jump(CodeLocation location, std::string label) : Statement(Tag::JUMP, location), label(label), predicate(nullptr) {}
+    Jump::Jump(CodeLocation location, std::string label, std::shared_ptr<Declaration> predicate, bool jump_if_is)
+        : Statement(Tag::JUMP, location), label(label), predicate(predicate), jump_if_is(jump_if_is) {}
+    std::string Jump::ir_code() const {
+        if (predicate.get() == nullptr)
+            return std::format("{} to {}", tag_repr(), label);
+        else if (jump_if_is == true)
+            return std::format("{} to {} if {} is true", tag_repr(), label, predicate->name);
+        else
+            return std::format("{} to {} if {} is false", tag_repr(), label, predicate->name);
     }
 
     Return::Return(CodeLocation location) : Statement(Tag::RETURN, location), declaration(nullptr) {}

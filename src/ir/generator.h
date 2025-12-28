@@ -34,13 +34,15 @@ namespace toycc::ir {
         void decode_function_definition(CParser::FunctionDefinitionContext* context);
 
         // -------- Statements -> ir/generator/statements.cpp
-        std::shared_ptr<Scope> decode_block(CParser::CompoundStatementContext* context);
         std::shared_ptr<Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type);
         void decode_compound_statement(CParser::CompoundStatementContext* context, std::shared_ptr<Scope> scope);
 
         void decode_block_item_list(CParser::BlockItemListContext* context);
-        void decode_statement(CParser::StatementContext* context);
+        void decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type = {});
         void decode_expression_statement(CParser::ExpressionStatementContext* context);
+        void decode_selection_statement(CParser::SelectionStatementContext* context);
+        void decode_if_statement(CParser::SelectionStatementContext* context);
+        void decode_switch_statement(CParser::SelectionStatementContext* context);
         void decode_jump_statement(CParser::JumpStatementContext* context);
         void decode_return_statement(CParser::JumpStatementContext* context);
 
@@ -153,8 +155,14 @@ namespace toycc::ir {
         std::array<std::shared_ptr<Declaration>, 2> emit_arithmetic_conversion(std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right, CodeLocation location);
         void emit_copy(std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source, CodeLocation location, bool initialize);
 
+        std::shared_ptr<Declaration> convert_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
+        std::shared_ptr<Declaration> convert_pointer_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
+        std::shared_ptr<Declaration> convert_object_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
+        std::shared_ptr<Declaration> convert_primitive_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
+
         // -------- State management -> ir/generator/state.cpp
         std::string anonymous_identifier();
+        std::string anonymous_label();
         std::shared_ptr<Scope> current_scope();
 
         CodeLocation locate(antlr4::ParserRuleContext* context) const;
@@ -170,6 +178,7 @@ namespace toycc::ir {
 
         std::shared_ptr<Declaration> declare(Declaration declaration);
         std::shared_ptr<Declaration> declare_temporary(TypeSpecification spec, CodeLocation location);
+        std::shared_ptr<Declaration> declare_temporary_predicate(CodeLocation location);
 
         std::optional<CodeLocation> locate_name(std::string name, bool current_scope_only = false);
         std::shared_ptr<Declaration> resolve_without_error(std::string name);

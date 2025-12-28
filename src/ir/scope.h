@@ -35,6 +35,7 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> add_typedef(std::shared_ptr<Declaration> declaration);
             std::shared_ptr<Declaration> add_local(std::shared_ptr<Declaration> declaration);
             std::shared_ptr<Statement>   add_statement(std::shared_ptr<Statement> statement);
+            size_t add_label(std::string label);
 
         private:
             struct insertion_index {};
@@ -54,5 +55,6 @@ namespace toycc::ir {
             ordered_declaration_map typedefs;
             ordered_declaration_map locals;
             std::vector<std::shared_ptr<Statement>> statements;
+            std::unordered_map<std::string, size_t> labels;  // Label -> index in `statements`
     };
 }
