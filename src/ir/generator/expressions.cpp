@@ -1,10 +1,11 @@
 #include "diagnostic.h"
 #include "ir/generator.h"
+#include "ir/statement.h"
 
 namespace toycc::ir {
     // ------------ Expressions
 
-    std::shared_ptr<Declaration> Generator::decode_initializer(CParser::InitializerContext* context) {
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_initializer(CParser::InitializerContext* context) {
         if (context->LeftBrace() || context->RightBrace())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Initializer lists are not implemented", locate(context));
         else if (context->assignmentExpression())
@@ -12,15 +13,15 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown initializer `{}`", context->getText()), locate(context));
     }
 
-    std::shared_ptr<Declaration> Generator::decode_expression(CParser::ExpressionContext* context) {
-        std::shared_ptr<Declaration> result;
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_expression(CParser::ExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result;
         for (CParser::AssignmentExpressionContext* expression : context->assignmentExpression())
             result = decode_assignment_expression(expression);
         return result;  // In a comma-separated list of expressions, return the last one
     }
 
 
-    std::shared_ptr<Declaration> Generator::decode_assignment_expression(CParser::AssignmentExpressionContext* context) {
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_assignment_expression(CParser::AssignmentExpressionContext* context) {
         const CodeLocation location = locate(context);
 
         if (context->conditionalExpression())
@@ -29,24 +30,24 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", location);
 
         const std::optional<stmt::BinaryOperator> op = decode_assignment_operator(context->assignmentOperator());
-        LValue destination = decode_lvalue_unary_expression(context->unaryExpression());
-        std::shared_ptr<Declaration> source = decode_assignment_expression(context->assignmentExpression());
+        std::shared_ptr<Generator::ExpressionResult> destination = decode_unary_expression(context->unaryExpression());
+        if (!destination->is_lvalue)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Assignment destination must be an lvalue");
+        std::shared_ptr<ExpressionResult> source = decode_assignment_expression(context->assignmentExpression());
 
         if (op.has_value()) {
-            std::shared_ptr<Declaration> left_operand = load_lvalue(destination, location);
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(left_operand, source, location);
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(destination->load(location), source->load(location), location);
             std::shared_ptr<Declaration> result = declare_temporary(converted_left->spec, location);
             current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(locate(context), op.value(), result, converted_left, converted_right));
-            source = result;  // The value to assign is now the result of that operation
+            source = make_expression(result, false);  // The value to assign is now the result of that operation
         }
 
-        std::shared_ptr<Declaration> result = store_to_lvalue(destination, source, location);
-        apply_lvalue_postfix_operations(destination, location);
-        return result;
+        destination->store(source->load(location), location);
+        return source;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_conditional_expression(CParser::ConditionalExpressionContext* context) {
-        std::shared_ptr<Declaration> predicate = decode_logical_or_expression(context->logicalOrExpression());
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_conditional_expression(CParser::ConditionalExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> predicate = decode_logical_or_expression(context->logicalOrExpression());
 
         if (!context->Question())
             return predicate;
@@ -54,96 +55,99 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Conditional expressions are not implemented", locate(context));
     }
 
-    std::shared_ptr<Declaration> Generator::decode_logical_or_expression(CParser::LogicalOrExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_logical_and_expression(context->logicalAndExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_logical_or_expression(CParser::LogicalOrExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_logical_and_expression(context->logicalAndExpression()[0]);
         if (context->logicalAndExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Logical OR expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_logical_and_expression(CParser::LogicalAndExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_inclusive_or_expression(context->inclusiveOrExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_logical_and_expression(CParser::LogicalAndExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_inclusive_or_expression(context->inclusiveOrExpression()[0]);
         if (context->inclusiveOrExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Logical AND expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_inclusive_or_expression(CParser::InclusiveOrExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_exclusive_or_expression(context->exclusiveOrExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_inclusive_or_expression(CParser::InclusiveOrExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_exclusive_or_expression(context->exclusiveOrExpression()[0]);
         if (context->exclusiveOrExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inclusive OR expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_exclusive_or_expression(CParser::ExclusiveOrExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_and_expression(context->andExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_exclusive_or_expression(CParser::ExclusiveOrExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_and_expression(context->andExpression()[0]);
         if (context->andExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Exclusive OR expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_and_expression(CParser::AndExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_equality_expression(context->equalityExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_and_expression(CParser::AndExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_equality_expression(context->equalityExpression()[0]);
         if (context->equalityExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "AND expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_equality_expression(CParser::EqualityExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_relational_expression(context->relationalExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_equality_expression(CParser::EqualityExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_relational_expression(context->relationalExpression()[0]);
         if (context->relationalExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Equality expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_relational_expression(CParser::RelationalExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_shift_expression(context->shiftExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_relational_expression(CParser::RelationalExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_shift_expression(context->shiftExpression()[0]);
         if (context->shiftExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Relational expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_shift_expression(CParser::ShiftExpressionContext* context) {
-        std::shared_ptr<Declaration> result = decode_additive_expression(context->additiveExpression()[0]);
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_shift_expression(CParser::ShiftExpressionContext* context) {
+        std::shared_ptr<ExpressionResult> result = decode_additive_expression(context->additiveExpression()[0]);
         if (context->additiveExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Shift expressions are not implemented", locate(context));
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_additive_expression(CParser::AdditiveExpressionContext* context) {
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_additive_expression(CParser::AdditiveExpressionContext* context) {
         const std::vector<CParser::MultiplicativeExpressionContext*> operands = context->multiplicativeExpression();
         const std::vector<CParser::AdditiveOperatorContext*> operators = context->additiveOperator();
 
-        std::shared_ptr<Declaration> left = decode_multiplicative_expression(operands[0]);
+        std::shared_ptr<ExpressionResult> left = decode_multiplicative_expression(operands[0]);
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(left, decode_multiplicative_expression(operands[operation_index + 1]), location);
+            std::shared_ptr<ExpressionResult> right = decode_multiplicative_expression(operands[operation_index + 1]);
+            if (left->result->spec.is_pointer_type() || right->result->spec.is_pointer_type())
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Pointer arithmetic is not implemented");
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(left->load(location), right->load(location), location);
 
             std::shared_ptr<Declaration> result = declare_temporary(converted_left->spec, location);
             current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(locate(context), decode_additive_operator(operators[operation_index]), result, converted_left, converted_right));
-            left = result;
+            left = make_expression(result, false);
         }
         return left;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context) {
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context) {
         const std::vector<CParser::CastExpressionContext*> operands = context->castExpression();
         const std::vector<CParser::MultiplicativeOperatorContext*> operators = context->multiplicativeOperator();
 
-        std::shared_ptr<Declaration> left = decode_cast_expression(operands[0]);
+        std::shared_ptr<ExpressionResult> left = decode_cast_expression(operands[0]);
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(left, decode_cast_expression(operands[operation_index + 1]), location);
+            std::shared_ptr<ExpressionResult> right = decode_cast_expression(operands[operation_index + 1]);
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(left->load(location), right->load(location), location);
 
             std::shared_ptr<Declaration> result = declare_temporary(converted_left->spec, location);
-            current_scope()->add_statement(std::make_shared<stmt::BinaryOp>
-            (locate(context), decode_multiplicative_operator(operators[operation_index]), result, converted_left, converted_right));
-            left = result;
+            current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(location, decode_multiplicative_operator(operators[operation_index]), result, converted_left, converted_right));
+            left = make_expression(result, false);
         }
         return left;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_cast_expression(CParser::CastExpressionContext* context) {
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_cast_expression(CParser::CastExpressionContext* context) {
         if (context->DigitSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences as cast expressions are not implemented", locate(context));
         else if (context->typeName())
@@ -153,39 +157,88 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown cast expression `{}`", context->getText()), locate(context));
     }
 
-    std::shared_ptr<Declaration> Generator::decode_unary_expression(CParser::UnaryExpressionContext* context) {
-        if (!context->PlusPlus().empty() || !context->MinusMinus().empty() || !context->Sizeof().empty() || context->Alignof() || context->AndAnd() || context->unaryOperator() || context->castExpression())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary expressions are not implemented", locate(context));
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_expression(CParser::UnaryExpressionContext* context) {
+        const CodeLocation location = locate(context);
 
-        return decode_postfix_expression(context->postfixExpression());
+        if (!context->PlusPlus().empty() || !context->MinusMinus().empty() || !context->Sizeof().empty() || context->Alignof() || context->AndAnd())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary expressions are not implemented", locate(context));
+        else if (context->postfixExpression())
+            return decode_postfix_expression(context->postfixExpression());
+        else if (context->unaryOperator() && context->castExpression())
+            return decode_unary_operation(context);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown unary expression `{}`", context->getText()), locate(context));
     }
 
-    std::shared_ptr<Declaration> Generator::decode_postfix_expression(CParser::PostfixExpressionContext* context) {
-        if (!context->primaryExpression())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inline rvalue initializers are not implemented");
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_operation(CParser::UnaryExpressionContext* context) {
+        if      (context->unaryOperator()->And())    return decode_unary_addressof(context);
+        else if (context->unaryOperator()->Star())   return decode_unary_dereference(context);
+        else if (context->unaryOperator()->Plus())   return decode_unary_plus(context);
+        else if (context->unaryOperator()->Minus())  return decode_unary_minus(context);
+        else if (context->unaryOperator()->Tilde())  return decode_unary_bitwise_not(context);
+        else if (context->unaryOperator()->Not())    return decode_unary_logical_not(context);
+        else if (context->unaryOperator()->KW__extension__())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Extension unary operators are not supported", locate(context->unaryOperator()));
+        else if (context->unaryOperator()->KW__real__() || context->unaryOperator()->KW__imag__())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Complex unary operators are not supported", locate(context->unaryOperator()));
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown unary operator `{}`", context->getText()), locate(context->unaryOperator()));
+    }
 
-        std::shared_ptr<Declaration> result = decode_primary_expression(context->primaryExpression());
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_addressof(CParser::UnaryExpressionContext* context) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary addressof operations are not implemented", locate(context));
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_dereference(CParser::UnaryExpressionContext* context) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary dereference operations are not implemented", locate(context));
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_plus(CParser::UnaryExpressionContext* context) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary plus operations are not implemented", locate(context));
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_minus(CParser::UnaryExpressionContext* context) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary minus operations are not implemented", locate(context));
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_bitwise_not(CParser::UnaryExpressionContext* context) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary bitwise not operations are not implemented", locate(context));
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_logical_not(CParser::UnaryExpressionContext* context) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary logical not operations are not implemented", locate(context));
+    }
+
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_postfix_expression(CParser::PostfixExpressionContext* context) {
+        if (!context->primaryExpression())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inline initializer lists are not implemented");
+
+        std::shared_ptr<ExpressionResult> result = decode_primary_expression(context->primaryExpression());
         for (CParser::PostfixOperatorContext* postfix : context->postfixOperator()) {
             const CodeLocation location = locate(postfix);
             if (postfix->LeftBracket() || postfix->RightBracket())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Array indexing is not implemented", location);
             else if (postfix->LeftParen() || postfix->RightParen())
-                result = decode_function_call(result, postfix);
+                result = decode_function_call(result->load(location), postfix);
             else if (postfix->Dot() || postfix->Arrow())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Member access is not implemented", location);
-            else if (postfix->PlusPlus() || postfix->MinusMinus())
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Incrementation and decrementation operators are not implemented", location);
+            else if (postfix->PlusPlus())
+                result->postfix_increments.push_back(1);
+            else if (postfix->MinusMinus())
+                result->postfix_increments.push_back(-1);
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown postfix operator `{}`", postfix->getText()));
         }
         return result;
     }
 
-    std::shared_ptr<Declaration> Generator::decode_primary_expression(CParser::PrimaryExpressionContext* context) {
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_primary_expression(CParser::PrimaryExpressionContext* context) {
+        const CodeLocation location = locate(context);
         if (context->Identifier())
-            return resolve(context->Identifier()->getText(), locate(context->Identifier()));
+            return make_expression(resolve(context->Identifier()->getText(), location), true);
         else if (context->Constant())
-            return decode_constant(context->Constant());
+            return make_expression(decode_constant(context->Constant()), false);
         else if (!context->StringLiteral().empty())
-            return decode_string_literal(context->StringLiteral());
+            return make_expression(decode_string_literal(context->StringLiteral()), false);
         else if (context->LeftParen() && context->expression() && context->RightParen())
             return decode_expression(context->expression());
         else if (context->genericSelection())
@@ -193,8 +246,7 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Unknown primary expression `{}`", context->getText()), locate(context));
     }
 
-    std::shared_ptr<Declaration> Generator::decode_function_call(std::shared_ptr<Declaration> function, CParser::PostfixOperatorContext* call) {
-        std::shared_ptr<Declaration> destination = declare_temporary(function->spec.return_type(), locate(call));
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_function_call(std::shared_ptr<Declaration> function, CParser::PostfixOperatorContext* call) {
         std::vector<std::shared_ptr<Declaration>> parameters;
         if (call->argumentExpressionList()) {
             std::vector<CParser::AssignmentExpressionContext*> parameter_expressions = call->argumentExpressionList()->assignmentExpression();
@@ -202,8 +254,9 @@ namespace toycc::ir {
                 throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found {}, expected {}", parameter_expressions.size(), function->spec.parameters.size()), locate(call));
 
             for (size_t param = 0; param < parameter_expressions.size(); param++) {
-                std::shared_ptr<Declaration> expression_result = decode_assignment_expression(parameter_expressions[param]);
-                std::shared_ptr<Declaration> parameter = emit_implicit_conversion(function->spec.parameters[param].spec, expression_result, locate(parameter_expressions[param]));
+                const CodeLocation param_location = locate(parameter_expressions[param]);
+                std::shared_ptr<ExpressionResult> expression_result = decode_assignment_expression(parameter_expressions[param]);
+                std::shared_ptr<Declaration> parameter = emit_implicit_conversion(function->spec.parameters[param].spec, expression_result->load(param_location), param_location);
                 parameters.push_back(parameter);
             }
         } else {
@@ -211,8 +264,9 @@ namespace toycc::ir {
                 throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found 0, expected {}", function->spec.parameters.size()), locate(call));
         }
 
+        std::shared_ptr<Declaration> destination = declare_temporary(function->spec.return_type(), locate(call));
         current_scope()->add_statement(std::make_shared<stmt::Call>(locate(call), destination, function, parameters));
-        return destination;
+        return make_expression(destination, false);
     }
 
 

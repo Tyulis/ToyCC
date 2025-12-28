@@ -2,7 +2,6 @@
 
 #include <variant>
 #include "ir/declaration.h"
-#include "util/flags.hpp"
 
 
 namespace toycc::ir {

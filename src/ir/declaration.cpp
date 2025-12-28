@@ -216,12 +216,4 @@ namespace toycc::ir {
     bool Declaration::operator== (const Declaration& decl) const {
         return (name == decl.name && storage == decl.storage && spec == decl.spec);
     }
-
-
-    ir::TypeSpecification LValue::type() const {
-        ir::TypeSpecification spec = base_declaration->spec;
-        for (std::shared_ptr<Declaration> index : indices)
-            spec = spec.referenced_type();
-        return spec;
-    }
 }

@@ -68,22 +68,24 @@ namespace toycc::ir {
     }
 
     void Generator::decode_return_statement(CParser::JumpStatementContext* context) {
+        const CodeLocation location = locate(context);
+
         std::shared_ptr<Declaration> current_function = current_scope()->function;
         if (current_function.get() == nullptr)
-            throw Diagnostic(DiagnosticLevel::ERROR, "Return statement outside of a function definition", locate(context));
+            throw Diagnostic(DiagnosticLevel::ERROR, "Return statement outside of a function definition", location);
 
         if (context->expression()) {
             TypeSpecification return_type_spec = current_function->spec.return_type();
             if (return_type_spec.is_void())
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't return a value in a function returning void", locate(context));
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't return a value in a function returning void", location);
 
-            std::shared_ptr<Declaration> expression_result = decode_expression(context->expression());
-            std::shared_ptr<Declaration> return_value = emit_implicit_conversion(return_type_spec, expression_result, locate(context));
-            current_scope()->add_statement(std::make_shared<stmt::Return>(locate(context), return_value));
+            std::shared_ptr<ExpressionResult> expression_result = decode_expression(context->expression());
+            std::shared_ptr<Declaration> return_value = emit_implicit_conversion(return_type_spec, expression_result->load(location), location);
+            current_scope()->add_statement(std::make_shared<stmt::Return>(location, return_value));
         } else {
             if (!current_function->spec.return_type().is_void())
-                throw Diagnostic(DiagnosticLevel::ERROR, "Return without a value within a function with a non-void return type", locate(context));
-            current_scope()->add_statement(std::make_shared<stmt::Return>(locate(context)));
+                throw Diagnostic(DiagnosticLevel::ERROR, "Return without a value within a function with a non-void return type", location);
+            current_scope()->add_statement(std::make_shared<stmt::Return>(location));
         }
     }
 }

@@ -1,3 +1,4 @@
+#include "code_location.h"
 #include "diagnostic.h"
 #include "ir/generator.h"
 
@@ -41,8 +42,9 @@ namespace toycc::ir {
                     if (declaration->storage & StorageClass::TYPEDEF)
                         throw Diagnostic(DiagnosticLevel::ERROR, "Initializers are not allowed in typedef declarations", locate(declarator->initializer()));
 
-                    std::shared_ptr<Declaration> initializer = decode_initializer(declarator->initializer());
-                    emit_copy(declaration, initializer, locate(declarator->initializer()), true);
+                    const CodeLocation initializer_location = locate(declarator->initializer());
+                    std::shared_ptr<ExpressionResult> initializer = decode_initializer(declarator->initializer());
+                    emit_copy(declaration, initializer->load(initializer_location), initializer_location, true);
                 }
             }
         }

@@ -76,7 +76,6 @@ namespace toycc::ir {
         return declare(declaration);
     }
 
-
     std::optional<CodeLocation> Generator::locate_name(std::string name, bool current_scope_only) {
         std::vector<TypeIdentifier> type_identifiers = {{.category = TypeCategory::PRIMITIVE, .name = name},
         {.category = TypeCategory::BUILTIN,   .name = name},
