@@ -109,12 +109,14 @@ namespace toycc::ir {
         std::shared_ptr<Declaration> declare_integer_constant(size_t value, std::string suffix, CodeLocation location);
 
         // -------- Conversions -> ir/generator/conversions.cpp
-        std::shared_ptr<Declaration> emit_implicit_conversion(TypeSpecification target, std::shared_ptr<Declaration> source, CodeLocation location);
+        std::shared_ptr<Declaration> emit_implicit_conversion(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
+        std::shared_ptr<Declaration> emit_implicit_conversion_array(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
+        std::shared_ptr<Declaration> emit_implicit_conversion_function(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
+        std::shared_ptr<Declaration> emit_implicit_conversion_pointer(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
+        std::shared_ptr<Declaration> emit_implicit_conversion_object(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
+        std::shared_ptr<Declaration> emit_implicit_conversion_primitive(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
         std::array<std::shared_ptr<Declaration>, 2> emit_arithmetic_conversion(std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right, CodeLocation location);
         void emit_copy(std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source, CodeLocation location, bool initialize);
-
-        Flags<stmt::ConversionOperation> implicit_conversion_operation(TypeSpecification destination, TypeSpecification source, CodeLocation location);
-        Flags<stmt::ConversionOperation> explicit_conversion_operation(TypeSpecification destination, TypeSpecification source, CodeLocation location);
 
         // -------- State management -> ir/generator/state.cpp
         std::string anonymous_identifier();
