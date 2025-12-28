@@ -48,7 +48,6 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY
 # Compile the app
 add_executable(${PROJECT_NAME}
 	src/diagnostic.cpp
-	src/ir_generator.cpp
 	src/main.cpp
 	src/parser.cpp
 	src/preprocess.cpp
@@ -60,6 +59,17 @@ add_executable(${PROJECT_NAME}
 	src/ir/scope.cpp
 	src/ir/statement.cpp
 	src/ir/type.cpp
+
+	src/ir/generator/conversions.cpp
+	src/ir/generator/declarations.cpp
+	src/ir/generator/exports.cpp
+	src/ir/generator/expressions.cpp
+	src/ir/generator/external.cpp
+	src/ir/generator/literals.cpp
+	src/ir/generator/scopeframe.cpp
+	src/ir/generator/state.cpp
+	src/ir/generator/statements.cpp
+	src/ir/generator/symbols.cpp
 
 	src/parserbase/CParserBase.cpp
 	src/parserbase/SymbolTable.cpp

@@ -9,7 +9,7 @@
 #include "parser.h"
 #include "xml_output.h"
 #include "diagnostic.h"
-#include "ir_generator.h"
+#include "ir/generator.h"
 #include "util/strings.h"
 
 namespace toycc {
@@ -59,7 +59,7 @@ namespace toycc {
 
     std::string Parser::to_ir() {
         toycc::CParser::CompilationUnitContext* unit = parser.compilationUnit();
-        std::shared_ptr<ir::Scope> ir = generate_ir(source_map, unit);
+        std::shared_ptr<ir::Scope> ir = ir::generate_ir(source_map, unit);
 
         error_handler.check();
         return ir->ir_code();
