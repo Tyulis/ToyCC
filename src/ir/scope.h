@@ -15,7 +15,7 @@ namespace toycc::ir {
     using namespace boost::multi_index;
 
     enum class ScopeType {
-        GLOBAL, BLOCK, FUNCTION, FOR, DO, WHILE, IF, ELSE, SWITCH,
+        GLOBAL, BLOCK, FUNCTION, LOOP, CONDITIONAL, SWITCH,
     };
 
     struct Scope {

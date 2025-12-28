@@ -43,6 +43,10 @@ namespace toycc::ir {
         void decode_selection_statement(CParser::SelectionStatementContext* context);
         void decode_if_statement(CParser::SelectionStatementContext* context);
         void decode_switch_statement(CParser::SelectionStatementContext* context);
+        void decode_iteration_statement(CParser::IterationStatementContext* context);
+        void decode_while_statement(CParser::IterationStatementContext* context);
+        void decode_do_while_statement(CParser::IterationStatementContext* context);
+        void decode_for_statement(CParser::IterationStatementContext* context);
         void decode_jump_statement(CParser::JumpStatementContext* context);
         void decode_return_statement(CParser::JumpStatementContext* context);
 
