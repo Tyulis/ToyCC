@@ -80,4 +80,12 @@ namespace toycc::ir {
 
         bool operator== (const Declaration& decl) const;
     };
+
+    struct LValue {
+        std::shared_ptr<Declaration> base_declaration;
+        std::vector<std::shared_ptr<Declaration>> indices;
+        std::vector<int> postfix_increments;
+
+        ir::TypeSpecification type() const;
+    };
 }

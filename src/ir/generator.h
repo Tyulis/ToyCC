@@ -95,6 +95,15 @@ namespace toycc::ir {
         stmt::BinaryOperator decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
         stmt::BinaryOperator decode_additive_operator(CParser::AdditiveOperatorContext* context);
 
+        // -------- Lvalue manipulation -> ir/generator/lvalues.cpp
+        std::shared_ptr<Declaration> load_lvalue(LValue value, CodeLocation location);
+        std::shared_ptr<Declaration> store_to_lvalue(LValue destination, std::shared_ptr<Declaration> source, CodeLocation location);
+        void apply_lvalue_postfix_operations(LValue value, CodeLocation location);
+
+        LValue decode_lvalue_unary_expression(CParser::UnaryExpressionContext* context);
+        LValue decode_lvalue_postfix_expression(CParser::PostfixExpressionContext* context);
+        LValue decode_lvalue_primary_expression(CParser::PrimaryExpressionContext* context);
+
         // -------- Literals -> ir/generator/literals.cpp
         std::shared_ptr<Declaration> decode_constant(antlr4::tree::TerminalNode* terminal);
         std::shared_ptr<Declaration> decode_character_constant(antlr4::tree::TerminalNode* terminal);

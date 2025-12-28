@@ -21,15 +21,28 @@ namespace toycc::ir {
 
 
     std::shared_ptr<Declaration> Generator::decode_assignment_expression(CParser::AssignmentExpressionContext* context) {
+        const CodeLocation location = locate(context);
+
         if (context->conditionalExpression())
             return decode_conditional_expression(context->conditionalExpression());
+        else if (context->DigitSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", location);
 
-        if (context->DigitSequence())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", locate(context));
+        const std::optional<stmt::BinaryOperator> op = decode_assignment_operator(context->assignmentOperator());
+        LValue destination = decode_lvalue_unary_expression(context->unaryExpression());
+        std::shared_ptr<Declaration> source = decode_assignment_expression(context->assignmentExpression());
 
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Assignment expressions are not implemented", locate(context));
-        //const std::optional<stmt::BinaryOperator> op = decode_assignment_operator(context->assignmentOperator());
-        //std::shared_ptr<Declaration> right_operand = decode_assignment_expression(context->assignmentExpression());
+        if (op.has_value()) {
+            std::shared_ptr<Declaration> left_operand = load_lvalue(destination, location);
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(left_operand, source, location);
+            std::shared_ptr<Declaration> result = declare_temporary(converted_left->spec, location);
+            current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(locate(context), op.value(), result, converted_left, converted_right));
+            source = result;  // The value to assign is now the result of that operation
+        }
+
+        std::shared_ptr<Declaration> result = store_to_lvalue(destination, source, location);
+        apply_lvalue_postfix_operations(destination, location);
+        return result;
     }
 
     std::shared_ptr<Declaration> Generator::decode_conditional_expression(CParser::ConditionalExpressionContext* context) {

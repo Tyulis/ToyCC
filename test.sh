@@ -29,7 +29,7 @@ for test_source in $(find ${TESTSUITE_DIR} -iname '*.c') ; do
     test_output=${test_source}.out
     test_expected_output=${test_source}.expected
 
-    if ! cat ${test_tags} | grep -qE "c89|c99|c11" ; then
+    if ! cat ${test_tags} | grep -qE "c89|c99|c11|c17|c23" ; then
         continue
     fi
 

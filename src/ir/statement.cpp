@@ -16,6 +16,8 @@ namespace toycc::ir {
             case stmt::Tag::FUNCTION:    return "FUNCTION";
 
             case stmt::Tag::LOAD_CONST:  return "LOAD_CONST";
+            case stmt::Tag::DEREF_LOAD:  return "DEREF_LOAD";
+            case stmt::Tag::DEREF_STORE: return "DEREF_STORE";
             case stmt::Tag::COPY:        return "COPY";
 
             case stmt::Tag::BINARY_OP:   return "BINARY_OP";
@@ -93,6 +95,37 @@ namespace toycc::ir::stmt {
         return code.str();
     }
 
+    DerefLoad::DerefLoad(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source_pointer, std::vector<std::shared_ptr<Declaration>> indices)
+        : Statement(Tag::DEREF_LOAD, location), destination(destination), source_pointer(source_pointer), indices(indices) {}
+    std::string DerefLoad::ir_code() const {
+        std::stringstream code;
+        code << tag_repr() << " " << destination->name << " = ";
+        if (indices.empty()) {
+            code << "*" << source_pointer->name;
+        } else {
+            code << source_pointer->name;
+            for (std::shared_ptr<Declaration> index : indices)
+                code << "[" << index->name << "]";
+        }
+        return code.str();
+    }
+
+    DerefStore::DerefStore(CodeLocation location, std::shared_ptr<Declaration> destination_pointer, std::vector<std::shared_ptr<Declaration>> indices, std::shared_ptr<Declaration> source)
+        : Statement(Tag::DEREF_STORE, location), destination_pointer(destination_pointer), indices(indices), source(source) {}
+    std::string DerefStore::ir_code() const {
+        std::stringstream code;
+        code << tag_repr() << " ";
+        if (indices.empty()) {
+            code << "*" << destination_pointer->name;
+        } else {
+            code << destination_pointer->name;
+            for (std::shared_ptr<Declaration> index : indices)
+                code << "[" << index->name << "]";
+        }
+        code << " = " << source->name;
+        return code.str();
+    }
+
     Copy::Copy(CodeLocation location, ConversionOperation operation, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source)
         : Statement(Tag::COPY, location), operation(operation), destination(destination), source(source) {}
     std::string Copy::ir_code() const {
@@ -122,6 +155,10 @@ namespace toycc::ir::stmt {
     Return::Return(CodeLocation location) : Statement(Tag::RETURN, location), declaration(nullptr) {}
     Return::Return(CodeLocation location, std::shared_ptr<Declaration> declaration) : Statement(Tag::RETURN, location), declaration(declaration) {}
     std::string Return::ir_code() const {
-        return std::format("{} {}", tag_repr(), declaration->name);
+        std::stringstream code;
+        code << tag_repr();
+        if (declaration.get() != nullptr)
+            code << " " << declaration->name;
+        return code.str();
     }
 }

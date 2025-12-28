@@ -9,7 +9,7 @@ namespace toycc::ir {
     namespace stmt {
         enum class Tag {
             NOP, BLOCK, FUNCTION,
-            LOAD_CONST, COPY,
+            LOAD_CONST, DEREF_LOAD, DEREF_STORE, COPY,
             BINARY_OP, CALL,
             RETURN,
         };
@@ -66,6 +66,24 @@ namespace toycc::ir {
             Constant value;
 
             LoadConst(CodeLocation location, std::shared_ptr<Declaration> destination, Constant value);
+            virtual std::string ir_code() const override;
+        };
+
+        struct DerefLoad : public Statement {
+            std::shared_ptr<Declaration> destination;
+            std::shared_ptr<Declaration> source_pointer;
+            std::vector<std::shared_ptr<Declaration>> indices;
+
+            DerefLoad(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source_pointer, std::vector<std::shared_ptr<Declaration>> indices);
+            virtual std::string ir_code() const override;
+        };
+
+        struct DerefStore: public Statement {
+            std::shared_ptr<Declaration> destination_pointer;
+            std::vector<std::shared_ptr<Declaration>> indices;
+            std::shared_ptr<Declaration> source;
+
+            DerefStore(CodeLocation location, std::shared_ptr<Declaration> destination_pointer, std::vector<std::shared_ptr<Declaration>> indices, std::shared_ptr<Declaration> source);
             virtual std::string ir_code() const override;
         };
 
