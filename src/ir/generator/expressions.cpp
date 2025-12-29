@@ -16,8 +16,16 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Generator::ExpressionResult> Generator::decode_expression(CParser::ExpressionContext* context) {
+        return decode_expression_list(context->assignmentExpression());
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_for_expression(CParser::ForExpressionContext* context) {
+        return decode_expression_list(context->assignmentExpression());
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::decode_expression_list(std::vector<CParser::AssignmentExpressionContext*> context) {
         std::shared_ptr<ExpressionResult> result;
-        for (CParser::AssignmentExpressionContext* expression : context->assignmentExpression())
+        for (CParser::AssignmentExpressionContext* expression : context)
             result = decode_assignment_expression(expression);
         return result;  // In a comma-separated list of expressions, return the last one
     }

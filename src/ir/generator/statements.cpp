@@ -3,8 +3,8 @@
 #include "ir/statement.h"
 
 namespace toycc::ir {
-    std::shared_ptr<Scope> Generator::decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type) {
-        std::shared_ptr<Scope> scope = std::make_shared<Scope>(type, current_scope()->function);
+    std::shared_ptr<Scope> Generator::decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type, std::string entry_label, std::string exit_label) {
+        std::shared_ptr<Scope> scope = std::make_shared<Scope>(type, current_scope()->function, entry_label, exit_label);
         decode_compound_statement(context, scope);
         current_scope()->add_statement(std::make_shared<stmt::Block>(locate(context), scope));
         return scope;
@@ -27,11 +27,11 @@ namespace toycc::ir {
         }
     }
 
-    void Generator::decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type) {
+    void Generator::decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type, std::string entry_label, std::string exit_label) {
         if (context->labeledStatement())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Labeled statements are not implemented", locate(context));
         else if (context->compoundStatement())
-            decode_compound_statement(context->compoundStatement(), scope_type.value_or(ScopeType::BLOCK));
+            decode_compound_statement(context->compoundStatement(), scope_type.value_or(ScopeType::BLOCK), entry_label, exit_label);
         else if (context->expressionStatement())
             decode_expression_statement(context->expressionStatement());
         else if (context->selectionStatement())
@@ -96,24 +96,22 @@ namespace toycc::ir {
     }
 
     void Generator::decode_while_statement(CParser::IterationStatementContext* context) {
-        const std::string label_entry= anonymous_label();
-        const std::string label_exit = anonymous_label();
+        const std::string entry_label = anonymous_label();
+        const std::string exit_label  = anonymous_label();
 
         // First evaluation of the predicate right before the loop : when already false, don't enter
         const CodeLocation predicate_location = locate(context->expression());
         std::shared_ptr<ExpressionResult> entry_predicate_expression = decode_expression(context->expression());
-        std::shared_ptr<Declaration> entry_predicate = emit_implicit_conversion(boolean_type, entry_predicate_expression->load(predicate_location), predicate_location);
-        current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_exit, entry_predicate, false));
+        emit_conditional_jump(entry_predicate_expression, exit_label, false, predicate_location);
 
         // Then the loop body
-        current_scope()->add_label(label_entry);
-        decode_statement(context->statement(), ScopeType::LOOP);
+        current_scope()->add_label(entry_label);
+        decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
-        // Second evaluation of the predicate into the loop : when false, fall through
+        // Second evaluation of the predicate into the loop : when true, jump back to the beginning of the loop
         std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
-        std::shared_ptr<Declaration> loop_predicate = emit_implicit_conversion(boolean_type, loop_predicate_expression->load(predicate_location), predicate_location);
-        current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_entry, loop_predicate, false));
-        current_scope()->add_label(label_exit);
+        emit_conditional_jump(loop_predicate_expression, entry_label, true, predicate_location);
+        current_scope()->add_label(exit_label);
     }
 
     void Generator::decode_do_while_statement(CParser::IterationStatementContext* context) {
@@ -121,13 +119,59 @@ namespace toycc::ir {
     }
 
     void Generator::decode_for_statement(CParser::IterationStatementContext* context) {
-        std::shared_ptr<Scope> scope;  // The for loop initialization is outside of the enclosing scope, push a new scope for it
-        ScopeFrame frame = in_scope(scope);
+        // The for loop initialization is outside of the enclosing scope, push a new scope for it
+        std::shared_ptr<Scope> scope = std::make_shared<Scope>(ScopeType::BLOCK, current_scope()->function);
 
+        {
+            ScopeFrame frame = in_scope(scope);
 
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "For statements are not implemented", locate(context));
+            // Emit the initialization before anything else
+            CParser::ForConditionContext* for_condition = context->forCondition();
+            if (for_condition->forDeclaration())
+                decode_for_declaration(for_condition->forDeclaration());
+            else if (for_condition->expression())
+                decode_expression(for_condition->expression());
+            // Otherwise that's an empty statement, no initialization
+
+            const std::string entry_label = anonymous_label();
+            const std::string exit_label  = anonymous_label();
+
+            CParser::ForExpressionContext* predicate_context = for_condition->forPredicate;
+            CParser::ForExpressionContext* increment_context = for_condition->forIncrement;
+
+            // NOTE : No predicate means an infinite loop. Here, skipping the predicate means there is no exit condition
+            if (predicate_context) {
+                // First evaluation of the predicate right before the loop : when already false, don't enter
+                std::shared_ptr<ExpressionResult> entry_predicate_expression = decode_for_expression(predicate_context);
+                emit_conditional_jump(entry_predicate_expression, exit_label, false, locate(predicate_context));
+            }
+
+            // Then the loop body
+            current_scope()->add_label(entry_label);
+            decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
+
+            if (predicate_context) {
+                // Second evaluation of the predicate into the loop : when false, exit
+                std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_for_expression(predicate_context);
+
+                if (increment_context)  // With increment: predicate == true : fall through to the increment, jump afterwards | predicate == false : jump out of the loop
+                    emit_conditional_jump(loop_predicate_expression, exit_label, false, locate(predicate_context));
+                else  // Without increment : predicate == true : directly jump back to the beginning of the loop | predicate == false : fall through to the exit
+                    emit_conditional_jump(loop_predicate_expression, entry_label, true, locate(predicate_context));
+            }
+
+            // When the loop predicate is true -> fall through to the increment statement then jump back to the beginning of the loop
+            if (increment_context) {
+                decode_for_expression(increment_context);
+                current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(predicate_context), entry_label));
+            }
+
+            // After the loop
+            current_scope()->add_label(exit_label);
+        }
+
+        current_scope()->add_statement(std::make_shared<stmt::Block>(locate(context), scope));
     }
-
 
     void Generator::decode_jump_statement(CParser::JumpStatementContext* context) {
         if (context->Goto())
@@ -164,5 +208,11 @@ namespace toycc::ir {
                 throw Diagnostic(DiagnosticLevel::ERROR, "Return without a value within a function with a non-void return type", location);
             current_scope()->add_statement(std::make_shared<stmt::Return>(location));
         }
+    }
+
+
+    void Generator::emit_conditional_jump(std::shared_ptr<ExpressionResult> predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location) {
+        std::shared_ptr<Declaration> predicate = emit_implicit_conversion(boolean_type, predicate_expression->load(location), location);
+        current_scope()->add_statement(std::make_shared<stmt::Jump>(location, destination_label, predicate, jump_if_is));
     }
 }

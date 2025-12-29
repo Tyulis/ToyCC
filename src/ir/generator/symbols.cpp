@@ -12,7 +12,7 @@ namespace toycc::ir {
 
         using namespace toycc::arch;
         current_scope()->add_type(std::make_shared<Type> (TypeCategory::VOID, std::string("void"), BUILTIN_LOCATION));
-        boolean_type = current_scope()->add_type(std::make_shared<BooleanType> ("bool", BUILTIN_LOCATION, BOOL_SIZE, BOOL_ALIGNMENT));
+        boolean_type = current_scope()->add_type(std::make_shared<BooleanType> ("bool", BUILTIN_LOCATION, 8 * BOOL_SIZE, 8 * BOOL_ALIGNMENT));
 
         character_type = add_integer_type("signed char", true, CHAR_SIZE,   CHAR_ALIGNMENT);
         add_integer_type("unsigned char",          false, CHAR_SIZE,        CHAR_ALIGNMENT);
@@ -22,7 +22,7 @@ namespace toycc::ir {
         add_integer_type("unsigned int",           false, INT_SIZE,         INT_ALIGNMENT);
         add_integer_type("signed long int",        true,  LONG_SIZE,        LONG_ALIGNMENT);
         add_integer_type("unsigned long int",      false, LONG_SIZE,        LONG_ALIGNMENT);
-        add_integer_type("signed long long int",   false, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
+        add_integer_type("signed long long int",   true,  LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
         add_integer_type("unsigned long long int", false, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
         add_floating_point_type("float",                  FLOAT_SIZE,       FLOAT_ALIGNMENT);
         add_floating_point_type("double",                 DOUBLE_SIZE,      DOUBLE_ALIGNMENT);

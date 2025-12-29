@@ -22,8 +22,10 @@ namespace toycc::ir {
         public:
             ScopeType type;
             std::shared_ptr<Declaration> function;
+            std::string entry_label;
+            std::string exit_label;
 
-            Scope(ScopeType type, std::shared_ptr<Declaration> function);
+            Scope(ScopeType type, std::shared_ptr<Declaration> function, std::string entry_label = {}, std::string exit_label = {});
 
             std::string ir_code() const;
 

@@ -38,12 +38,41 @@ namespace toycc::ir {
         void decode_external_declaration(CParser::ExternalDeclarationContext* context);
         void decode_function_definition(CParser::FunctionDefinitionContext* context);
 
+        // -------- RAII expression result to keep track of lvalues and lingering effects -> ir/generator/expressionresult.cpp
+        struct ExpressionResult {
+        public:
+            CodeLocation location;
+            std::shared_ptr<Declaration> result;
+            bool is_lvalue;
+            bool is_constexpr;
+
+            std::vector<std::shared_ptr<Declaration>> indices;
+            std::vector<int> postfix_increments;
+
+            ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, bool is_constexpr, Generator& generator);
+            ~ExpressionResult();
+            std::shared_ptr<Type> type() const;
+            LValue lvalue() const;
+
+            std::shared_ptr<Declaration> load(CodeLocation location);
+            void store(std::shared_ptr<Declaration> source, CodeLocation location);
+
+        private:
+            Generator& generator;
+
+            void apply_postfix_operations();
+            void apply_pointer_postfix_operations();
+            void apply_integer_postfix_operations();
+        };
+
+        std::shared_ptr<ExpressionResult> make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue, bool is_constexpr);
+
         // -------- Statements -> ir/generator/statements.cpp
-        std::shared_ptr<Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type);
+        std::shared_ptr<Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type, std::string entry_label = {}, std::string exit_label = {});
         void decode_compound_statement(CParser::CompoundStatementContext* context, std::shared_ptr<Scope> scope);
 
         void decode_block_item_list(CParser::BlockItemListContext* context);
-        void decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type = {});
+        void decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type = {}, std::string entry_label = {}, std::string exit_label = {});
         void decode_expression_statement(CParser::ExpressionStatementContext* context);
         void decode_selection_statement(CParser::SelectionStatementContext* context);
         void decode_if_statement(CParser::SelectionStatementContext* context);
@@ -55,8 +84,12 @@ namespace toycc::ir {
         void decode_jump_statement(CParser::JumpStatementContext* context);
         void decode_return_statement(CParser::JumpStatementContext* context);
 
+        void emit_conditional_jump(std::shared_ptr<ExpressionResult> predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location);
+
         // -------- Declarations -> ir/generator/declarations.cpp
         void decode_declaration(CParser::DeclarationContext* context);
+        void decode_for_declaration(CParser::ForDeclarationContext* context);
+        void decode_declaration(CParser::DeclarationSpecifiersContext* specifiers, CParser::InitDeclaratorListContext* init);
         void decode_declaration_specifiers(Declaration& declaration, CParser::DeclarationSpecifiersContext* specifiers);
         std::shared_ptr<Type> decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context);
 
@@ -81,38 +114,11 @@ namespace toycc::ir {
         Member decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
         std::shared_ptr<Type> decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> base_type);
 
-        // -------- RAII expression result to keep track of lvalues and lingering effects -> ir/generator/expressionresult.cpp
-        struct ExpressionResult {
-            public:
-                CodeLocation location;
-                std::shared_ptr<Declaration> result;
-                bool is_lvalue;
-                bool is_constexpr;
-
-                std::vector<std::shared_ptr<Declaration>> indices;
-                std::vector<int> postfix_increments;
-
-                ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, bool is_constexpr, Generator& generator);
-                ~ExpressionResult();
-                std::shared_ptr<Type> type() const;
-                LValue lvalue() const;
-
-                std::shared_ptr<Declaration> load(CodeLocation location);
-                void store(std::shared_ptr<Declaration> source, CodeLocation location);
-
-            private:
-                Generator& generator;
-
-                void apply_postfix_operations();
-                void apply_pointer_postfix_operations();
-                void apply_integer_postfix_operations();
-        };
-
-        std::shared_ptr<ExpressionResult> make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue, bool is_constexpr);
-
         // -------- Expressions -> ir/generator/expressions.cpp
         std::shared_ptr<ExpressionResult> decode_initializer(CParser::InitializerContext* context);
         std::shared_ptr<ExpressionResult> decode_expression(CParser::ExpressionContext* context);
+        std::shared_ptr<ExpressionResult> decode_for_expression(CParser::ForExpressionContext* context);
+        std::shared_ptr<ExpressionResult> decode_expression_list(std::vector<CParser::AssignmentExpressionContext*> context);
         std::shared_ptr<ExpressionResult> decode_assignment_expression(CParser::AssignmentExpressionContext* context);
         std::shared_ptr<ExpressionResult> decode_conditional_expression(CParser::ConditionalExpressionContext* context);
         std::shared_ptr<ExpressionResult> decode_logical_or_expression(CParser::LogicalOrExpressionContext* context);

@@ -6,7 +6,8 @@
 #include "util/strings.h"
 
 namespace toycc::ir {
-    Scope::Scope(ScopeType type, std::shared_ptr<Declaration> function) : type(type), function(function) {}
+    Scope::Scope(ScopeType type, std::shared_ptr<Declaration> function, std::string entry_label, std::string exit_label)
+        : type(type), function(function), entry_label(entry_label), exit_label(exit_label) {}
 
     std::string Scope::ir_code() const {
         std::vector<std::list<std::string>> label_positions(statements.size() + 1);

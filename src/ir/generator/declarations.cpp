@@ -11,14 +11,18 @@ namespace toycc::ir {
         if (context->attributeDeclaration())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute declarations are not implemented", locate(context));
 
+        decode_declaration(context->declarationSpecifiers(), context->initDeclaratorList());
+    }
+
+    void Generator::decode_declaration(CParser::DeclarationSpecifiersContext* specifiers, CParser::InitDeclaratorListContext* init_declarators) {
         Declaration base_declaration;
-        base_declaration.location = locate(context);
-        decode_declaration_specifiers(base_declaration, context->declarationSpecifiers());
+        base_declaration.location = locate(specifiers);
+        decode_declaration_specifiers(base_declaration, specifiers);
 
         // First, only process the declarations
         std::vector<Declaration> declarations;
-        if (context->initDeclaratorList()) {
-            for (CParser::InitDeclaratorContext* declarator : context->initDeclaratorList()->initDeclarator()) {
+        if (init_declarators) {
+            for (CParser::InitDeclaratorContext* declarator : init_declarators->initDeclarator()) {
                 Declaration declaration = base_declaration;
                 decode_declarator(declaration, declarator->declarator());
                 declarations.push_back(declaration);
@@ -34,10 +38,10 @@ namespace toycc::ir {
         }
 
         // Then the initializations
-        if (context->initDeclaratorList()) {
+        if (init_declarators) {
             for (unsigned decl_index = 0; decl_index < declarations.size(); decl_index++) {
                 std::shared_ptr<Declaration> declaration = declared_variables[decl_index];
-                CParser::InitDeclaratorContext* declarator = context->initDeclaratorList()->initDeclarator()[decl_index];
+                CParser::InitDeclaratorContext* declarator = init_declarators->initDeclarator()[decl_index];
                 if (declarator->initializer()) {
                     if (declaration->storage & StorageClass::TYPEDEF)
                         throw Diagnostic(DiagnosticLevel::ERROR, "Initializers are not allowed in typedef declarations", locate(declarator->initializer()));
@@ -48,6 +52,10 @@ namespace toycc::ir {
                 }
             }
         }
+    }
+
+    void Generator::decode_for_declaration(CParser::ForDeclarationContext* context) {
+        decode_declaration(context->declarationSpecifiers(), context->initDeclaratorList());
     }
 
     void Generator::decode_declaration_specifiers(Declaration& declaration, CParser::DeclarationSpecifiersContext* specifiers) {

@@ -622,7 +622,7 @@ iterationStatement
 //    |   For '(' declaration  expression? ';' expression? ')' statement
 
 forCondition
-    : (forDeclaration | expression?) ';' forExpression? ';' forExpression?
+    : (forDeclaration | expression?) ';' forPredicate=forExpression? ';' forIncrement=forExpression?
     ;
 
 forDeclaration
