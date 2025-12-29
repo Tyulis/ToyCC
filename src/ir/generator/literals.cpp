@@ -42,11 +42,8 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Character literal must resolve to a single character"), location);
 
         // Declare the character constant
-        TypeIdentifier type_identifier = {.category = TypeCategory::PRIMITIVE, .name = "signed char"};
         stmt::LoadConst::Constant value = static_cast<ssize_t>(text[0]);
-
-        TypeSpecification spec = resolve_type(type_identifier, location);
-        std::shared_ptr<Declaration> declaration = declare_temporary(spec, location);
+        std::shared_ptr<Declaration> declaration = declare_temporary(character_type, location);
 
         current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, declaration, value));
         return declaration;
@@ -107,7 +104,7 @@ namespace toycc::ir {
 
     std::shared_ptr<Declaration> Generator::declare_integer_constant(size_t base_value, std::string suffix, CodeLocation location) {
         to_lower_inplace(suffix);
-        TypeIdentifier type_identifier = {.category = TypeCategory::PRIMITIVE, .name = ""};
+        TypeIdentifier type_identifier = {.tag = TypeTag::DIRECT, .name = {}};
         stmt::LoadConst::Constant value;
 
         if      (suffix.empty())                     { value = static_cast<ssize_t> (base_value); type_identifier.name = "signed int";             }
@@ -118,8 +115,8 @@ namespace toycc::ir {
         else if (suffix == "ull" || suffix == "llu") { value = static_cast<size_t>  (base_value); type_identifier.name = "unsigned long long int"; }
         else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Unknown integer literal suffix `{}`", suffix), location);
 
-        TypeSpecification spec = resolve_type(type_identifier, location);
-        std::shared_ptr<Declaration> declaration = declare_temporary(spec, location);
+        std::shared_ptr<Type> type = resolve_type(type_identifier, location);
+        std::shared_ptr<Declaration> declaration = declare_temporary(type, location);
 
         current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, declaration, value));
         return declaration;

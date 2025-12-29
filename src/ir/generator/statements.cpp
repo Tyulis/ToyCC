@@ -62,7 +62,7 @@ namespace toycc::ir {
     void Generator::decode_if_statement(CParser::SelectionStatementContext* context) {
         const CodeLocation predicate_location = locate(context->expression());
         std::shared_ptr<ExpressionResult> predicate_expression = decode_expression(context->expression());
-        std::shared_ptr<Declaration> predicate = convert_to_boolean(predicate_expression->load(predicate_location), predicate_location);
+        std::shared_ptr<Declaration> predicate = emit_implicit_conversion(boolean_type, predicate_expression->load(predicate_location), predicate_location);
 
         const std::string label_after_if = anonymous_label();
         current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_after_if, predicate, false));
@@ -102,7 +102,7 @@ namespace toycc::ir {
         // First evaluation of the predicate right before the loop : when already false, don't enter
         const CodeLocation predicate_location = locate(context->expression());
         std::shared_ptr<ExpressionResult> entry_predicate_expression = decode_expression(context->expression());
-        std::shared_ptr<Declaration> entry_predicate = convert_to_boolean(entry_predicate_expression->load(predicate_location), predicate_location);
+        std::shared_ptr<Declaration> entry_predicate = emit_implicit_conversion(boolean_type, entry_predicate_expression->load(predicate_location), predicate_location);
         current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_exit, entry_predicate, false));
 
         // Then the loop body
@@ -111,7 +111,7 @@ namespace toycc::ir {
 
         // Second evaluation of the predicate into the loop : when false, fall through
         std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
-        std::shared_ptr<Declaration> loop_predicate = convert_to_boolean(loop_predicate_expression->load(predicate_location), predicate_location);
+        std::shared_ptr<Declaration> loop_predicate = emit_implicit_conversion(boolean_type, loop_predicate_expression->load(predicate_location), predicate_location);
         current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_entry, loop_predicate, false));
         current_scope()->add_label(label_exit);
     }
@@ -121,6 +121,10 @@ namespace toycc::ir {
     }
 
     void Generator::decode_for_statement(CParser::IterationStatementContext* context) {
+        std::shared_ptr<Scope> scope;  // The for loop initialization is outside of the enclosing scope, push a new scope for it
+        ScopeFrame frame = in_scope(scope);
+
+
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "For statements are not implemented", locate(context));
     }
 
@@ -143,17 +147,20 @@ namespace toycc::ir {
         std::shared_ptr<Declaration> current_function = current_scope()->function;
         if (current_function.get() == nullptr)
             throw Diagnostic(DiagnosticLevel::ERROR, "Return statement outside of a function definition", location);
+        if (current_function->type->category != TypeCategory::FUNCTION)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The scope's current function doesn't have a function type", location);
+
+        std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType> (current_function->type);
 
         if (context->expression()) {
-            TypeSpecification return_type_spec = current_function->spec.return_type();
-            if (return_type_spec.is_void())
+            if (function_type->return_type->category == TypeCategory::VOID)
                 throw Diagnostic(DiagnosticLevel::ERROR, "Can't return a value in a function returning void", location);
 
             std::shared_ptr<ExpressionResult> expression_result = decode_expression(context->expression());
-            std::shared_ptr<Declaration> return_value = emit_implicit_conversion(return_type_spec, expression_result->load(location), location);
+            std::shared_ptr<Declaration> return_value = emit_implicit_conversion(function_type->return_type, expression_result->load(location), location);
             current_scope()->add_statement(std::make_shared<stmt::Return>(location, return_value));
         } else {
-            if (!current_function->spec.return_type().is_void())
+            if (function_type->return_type->category != TypeCategory::VOID)
                 throw Diagnostic(DiagnosticLevel::ERROR, "Return without a value within a function with a non-void return type", location);
             current_scope()->add_statement(std::make_shared<stmt::Return>(location));
         }

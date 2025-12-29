@@ -3,7 +3,7 @@ project(toycc VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
-set(CMAKE_CXX_FLAGS "-g -Wall -Wextra -Werror=switch")
+set(CMAKE_CXX_FLAGS "-g -Wall -Wextra -Werror=switch -Werror=implicit-fallthrough")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)  # For clangd
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -54,11 +54,11 @@ add_executable(${PROJECT_NAME}
 	src/source_map.cpp
 	src/xml_output.cpp
 
-	src/ir/compound_type.cpp
 	src/ir/declaration.cpp
 	src/ir/scope.cpp
 	src/ir/statement.cpp
 	src/ir/type.cpp
+	src/ir/type_expressions.cpp
 
 	src/ir/generator/conversions.cpp
 	src/ir/generator/declarations.cpp
@@ -71,6 +71,7 @@ add_executable(${PROJECT_NAME}
 	src/ir/generator/state.cpp
 	src/ir/generator/statements.cpp
 	src/ir/generator/symbols.cpp
+	src/ir/generator/temporarygenerator.cpp
 
 	src/parserbase/CParserBase.cpp
 	src/parserbase/SymbolTable.cpp

@@ -1,216 +1,307 @@
 #include "diagnostic.h"
+#include "ir/type_expressions.h"
 #include "ir/generator.h"
-#include "arch/x86_64.h"
 #include "ir/statement.h"
 #include "ir/type.h"
 
 namespace toycc::ir {
-    // Return a declaration compatible with the `target` type specification. If necessary, emit an implicit cast and declare a new temporary with that target type
-    std::shared_ptr<Declaration> Generator::emit_implicit_conversion(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const TypeSpecification& source_spec = source->spec;
+    Generator::ConversionValidity Generator::get_conversion_validity(std::shared_ptr<Type> destination, std::shared_ptr<Type> source) {
+        // Those shouldn't be converted at all
+        if (destination->category == TypeCategory::VOID || source->category == TypeCategory::VOID)
+            return ConversionValidity::INVALID;
+        if (destination->category == TypeCategory::BUILTIN || source->category == TypeCategory::BUILTIN)
+            return ConversionValidity::INVALID;
 
-        if (destination_spec.bitfield_length != source_spec.bitfield_length)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfield conversions are not implemented", location);
+        // Exact same type -> OK for coercion. From now on, types are not equal
+        if (destination == source)
+            return ConversionValidity::IMPLICIT;
 
-        if (destination_spec.is_object_type() && destination_spec.type->identifier.category == TypeCategory::PRIMITIVE) {
-            const PrimitiveType& destination_primitive = static_cast<const PrimitiveType&>(*destination_spec.type);
-            if (destination_primitive.semantic == PrimitiveSemantic::BOOL)
-                return convert_to_boolean(source, location);
-        }
+        // Get modifiers out of the way
+        if (destination->category == TypeCategory::QUALIFIED || source->category == TypeCategory::QUALIFIED) {
+            Flags<TypeQualifier> destination_qualifiers = {}, source_qualifiers = {};
 
-        if (destination_spec.is_array_type() && source_spec.is_array_type())
-            return emit_implicit_conversion_array(destination_spec, source, location);
-        else if (destination_spec.is_function_type && source_spec.is_function_type)
-            return emit_implicit_conversion_function(destination_spec, source, location);
-        else if (destination_spec.is_pointer_type() && source_spec.is_pointer_type())
-            return emit_implicit_conversion_pointer(destination_spec, source, location);
-        else if (destination_spec.is_object_type() && source_spec.is_object_type())
-            return emit_implicit_conversion_object(destination_spec, source, location);
-
-        throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible type classes", location);
-    }
-
-    std::shared_ptr<Declaration> Generator::emit_implicit_conversion_array(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const TypeSpecification& source_spec = source->spec;
-
-        if (destination_spec.element_type() != source_spec.element_type())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between array types with incompatible element types", location);
-        if (destination_spec.array_spec != source_spec.array_spec)
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible array dimensions", location);
-
-        return source;  // In practice those are just pointers, nothing to do
-    }
-
-    std::shared_ptr<Declaration> Generator::emit_implicit_conversion_function(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const TypeSpecification& source_spec = source->spec;
-
-        if (destination_spec.return_type() != source_spec.return_type())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between function types with incompatible return types", location);
-        if (destination_spec.parameters.size() != source_spec.parameters.size())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible function types", location);
-
-        for (size_t param = 0; param < destination_spec.parameters.size(); param++) {
-            try {
-                if (!destination_spec.parameters[param].spec.can_be_assigned_from(source_spec.parameters[param].spec))
-                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between function types with incompatible parameter types", location);
-            } catch (const Diagnostic&) {
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between function types with incompatible parameter types", location);
+            if (destination->category == TypeCategory::QUALIFIED) {
+                const QualifiedType qualified_destination = static_cast<const QualifiedType&>(*destination);
+                destination = qualified_destination.underlying_type;
+                destination_qualifiers = qualified_destination.qualifiers;
             }
+
+            if (source->category == TypeCategory::QUALIFIED) {
+                const QualifiedType qualified_source = static_cast<const QualifiedType&>(*source);
+                source = qualified_source.underlying_type;
+                source_qualifiers = qualified_source.qualifiers;
+            }
+
+            ConversionValidity unqualified_conversion_validity = get_conversion_validity(destination, source);
+            if      (unqualified_conversion_validity == ConversionValidity::INVALID) return ConversionValidity::INVALID;
+            else if (destination_qualifiers.includes(source_qualifiers))             return unqualified_conversion_validity;
+            else                                                                     return ConversionValidity::EXPLICIT;
         }
 
-        return source;  // In practice those are just pointers, nothing to do
+        if (destination->category == TypeCategory::ALIGNED)
+            return get_conversion_validity(static_cast<const AlignedType&>(*destination).underlying_type, source);
+        if (source->category == TypeCategory::ALIGNED)
+            return get_conversion_validity(destination, static_cast<const AlignedType&>(*source).underlying_type);
+
+        if (destination->category == TypeCategory::BITFIELD || source->category == TypeCategory::BITFIELD)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfield conversions are not implemented");
+
+        // Those are only valid when both types are equal
+        if (destination->category == TypeCategory::FUNCTION || source->category == TypeCategory::FUNCTION)
+            return ConversionValidity::INVALID;
+        if (destination->category == TypeCategory::STRUCT || source->category == TypeCategory::STRUCT)
+            return ConversionValidity::INVALID;
+        if (destination->category == TypeCategory::UNION || source->category == TypeCategory::UNION)
+            return ConversionValidity::INVALID;
+
+        if (destination->category == TypeCategory::ENUM) {
+            if      (source->category == TypeCategory::INTEGER)  return ConversionValidity::EXPLICIT;
+            else if (source->category == TypeCategory::BOOL)     return ConversionValidity::EXPLICIT;
+            else return ConversionValidity::INVALID;
+        }
+
+        if (destination->category == TypeCategory::ARRAY) {
+            if (source->category == TypeCategory::POINTER)  return ConversionValidity::EXPLICIT;
+            else return ConversionValidity::INVALID;
+        }
+
+        if (destination->category == TypeCategory::POINTER) {
+            if      (source->category == TypeCategory::POINTER)  return ConversionValidity::EXPLICIT;  // Only implicit when it's the same pointer type
+            else if (source->category == TypeCategory::ARRAY)    return ConversionValidity::EXPLICIT;
+            else if (source->category == TypeCategory::INTEGER)  return ConversionValidity::EXPLICIT;
+            else return ConversionValidity::INVALID;
+        }
+
+        else if (destination->category == TypeCategory::FLOAT) {
+            if      (source->category == TypeCategory::BOOL)     return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::INTEGER)  return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::FLOAT) {
+                std::shared_ptr<FloatingPointType> destination_float = std::static_pointer_cast<FloatingPointType>(destination);
+                std::shared_ptr<FloatingPointType> source_float      = std::static_pointer_cast<FloatingPointType>(destination);
+                if (destination_float->size_bits >= source_float->size_bits)  return ConversionValidity::IMPLICIT;
+                else                                                          return ConversionValidity::EXPLICIT;
+            }
+            else return ConversionValidity::INVALID;
+        }
+
+        else if (destination->category == TypeCategory::INTEGER) {
+            if      (source->category == TypeCategory::BOOL)   return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::FLOAT)  return ConversionValidity::EXPLICIT;
+            else if (source->category == TypeCategory::INTEGER) {
+                std::shared_ptr<IntegerType> destination_int = std::static_pointer_cast<IntegerType>(destination);
+                std::shared_ptr<IntegerType> source_int      = std::static_pointer_cast<IntegerType>(source);
+
+                if      (destination_int->size_bits > source_int->size_bits)    return ConversionValidity::IMPLICIT;
+                else if (destination_int->size_bits < source_int->size_bits)    return ConversionValidity::EXPLICIT;
+                else if (destination_int->is_signed && !source_int->is_signed)  return ConversionValidity::IMPLICIT;
+                else                                                            return ConversionValidity::EXPLICIT;
+            }
+            else return ConversionValidity::INVALID;
+        }
+
+        else if (destination->category == TypeCategory::BOOL) {
+            if      (source->category == TypeCategory::ARRAY)    return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::POINTER)  return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::FLOAT)    return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::INTEGER)  return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::BOOL)     return ConversionValidity::IMPLICIT;
+            else return ConversionValidity::INVALID;
+        }
+
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown conversion case");  // Everything should have returned by now
     }
 
-    std::shared_ptr<Declaration> Generator::emit_implicit_conversion_pointer(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const TypeSpecification& source_spec = source->spec;
-
-        if (destination_spec.type.get() != source_spec.type.get())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between pointers to incompatible types", location);
-
-        if (destination_spec.pointer_spec.size() != source_spec.pointer_spec.size())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible pointer types", location);
-
-        if (!destination_spec.qualifiers.includes(source_spec.qualifiers))
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a less cv-qualified pointer type", location);
-
-        for (size_t level = 0; level < destination_spec.pointer_spec.size() - 1; level++)
-            if (!destination_spec.pointer_spec[level].includes(source_spec.pointer_spec[level]))
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a less cv-qualified pointer type", location);
-
-        return source;  // Those are both pointers, nothing to do
+    // Return a declaration compatible with the `target` type specification. If necessary, emit an implicit cast and declare a new temporary with that target type
+    std::shared_ptr<Declaration> Generator::emit_implicit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location) {
+        const ConversionValidity validity = get_conversion_validity(destination_type, source->type);
+        switch (validity) {
+            case ConversionValidity::INVALID:
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert type `{}` to `{}`", source->type->text(), destination_type->text()), location);
+            case ConversionValidity::EXPLICIT:
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Conversion from `{}` to `{}` can't be implicit", source->type->text(), destination_type->text()), location);
+            case ConversionValidity::IMPLICIT:
+                return emit_conversion(destination_type, source, location);
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown conversion validity", location);
     }
 
-    std::shared_ptr<Declaration> Generator::emit_implicit_conversion_object(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const TypeSpecification& source_spec = source->spec;
+    // Main entry point. Internals won't recheck the validity of the conversion
+    std::shared_ptr<Declaration> Generator::emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location) {
+        const ConversionValidity validity = get_conversion_validity(destination_type, source->type);
+        if (validity == ConversionValidity::INVALID)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert from `{}` to `{}`", source->type->text(), destination_type->text()));
 
-        const TypeCategory destination_category = destination_spec.type->identifier.category;
-        const TypeCategory source_category = source_spec.type->identifier.category;
+        return emit_conversion(destination_type, source->type, source, location, make_temporary_generator(destination_type, location));
+    }
 
-        if (destination_category == TypeCategory::VOID || source_category == TypeCategory::VOID)
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between void and non-void types", location);
-        if (destination_category == TypeCategory::TYPEDEF || source_category == TypeCategory::TYPEDEF)
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted a cast with an unresolved typedef", location);
-        if (destination_category == TypeCategory::BUILTIN || source_category == TypeCategory::BUILTIN)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Casting to or from built-in types is not supported", location);
+    std::shared_ptr<Declaration> Generator::emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
+                                                            CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    {
+        // Qualifiers were already checked, they are irrelevant in conversions -> remove them
+        if (destination_type->category == TypeCategory::QUALIFIED)
+            destination_type = std::static_pointer_cast<QualifiedType>(destination_type)->underlying_type;
+        if (source_type->category == TypeCategory::QUALIFIED)
+            source_type = std::static_pointer_cast<QualifiedType>(source_type)->underlying_type;
 
-        if (destination_category == TypeCategory::PRIMITIVE && source_category == TypeCategory::ENUM) {
-            PrimitiveType& primitive_destination = static_cast<PrimitiveType&>(*destination_spec.type);
-            if (primitive_destination.semantic != PrimitiveSemantic::INTEGER)
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast an enumerated value to a non-integer primitive type", location);
-            if (!primitive_destination.is_signed)
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast an enumerated value to an unsigned integer type", location);
+        // Exact same type -> nothing to do
+        if (destination_type == source_type)
+            return source;
 
-            if (primitive_destination.primitive_size < toycc::arch::INT_SIZE)
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely convert an enumerated value to an integer type smaller than int", location);
-            else if (primitive_destination.primitive_size == toycc::arch::INT_SIZE)
+        if (destination_type->category == TypeCategory::ALIGNED || source_type->category == TypeCategory::ALIGNED) {
+            std::shared_ptr<Type> destination_unqualified = destination_type, source_unqualified = source_type;
+            if (destination_type->category == TypeCategory::ALIGNED)
+                destination_unqualified = std::static_pointer_cast<AlignedType>(destination_type)->underlying_type;
+            if (source_type->category == TypeCategory::ALIGNED)
+                source_unqualified = std::static_pointer_cast<AlignedType>(source_type)->underlying_type;
+
+            std::shared_ptr<Declaration> destination = emit_conversion(destination_unqualified, source_unqualified, source, location, destination_generator);
+
+            // No copy was emitted, but one is required to realign the source object
+            if (destination.get() == source.get() && destination_type->alignment(location) > source_type->alignment(location)) {
+                destination = destination_generator();
+                current_scope()->add_statement(std::make_shared<stmt::Copy>(location, stmt::ConversionOperation::COPY, destination, source));
+            }
+            return destination;
+        }
+
+        if (destination_type->category == TypeCategory::BITFIELD || source_type->category == TypeCategory::BITFIELD)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfield conversions are not implemented");
+
+        switch (destination_type->category) {
+            case TypeCategory::BOOL:    return emit_conversion_to_bool   (std::static_pointer_cast<BooleanType>      (destination_type), source_type, source, location, destination_generator);
+            case TypeCategory::INTEGER: return emit_conversion_to_integer(std::static_pointer_cast<IntegerType>      (destination_type), source_type, source, location, destination_generator);
+            case TypeCategory::FLOAT:   return emit_conversion_to_float  (std::static_pointer_cast<FloatingPointType>(destination_type), source_type, source, location, destination_generator);
+            case TypeCategory::POINTER: return emit_conversion_to_pointer(                                            destination_type, source_type, source, location, destination_generator);
+            case TypeCategory::ARRAY:   return emit_conversion_to_pointer(                                            destination_type, source_type, source, location, destination_generator);
+            case TypeCategory::ENUM:    return emit_conversion_to_enum   (std::static_pointer_cast<EnumType>         (destination_type), source_type, source, location, destination_generator);
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
+        }
+    }
+
+    std::shared_ptr<Declaration> Generator::emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
+                                                         CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    {
+        switch (source_type->category) {
+            case TypeCategory::BOOL:
                 return source;
-            else {
-                std::shared_ptr<Declaration> destination = declare_temporary(destination_spec, location);
-                current_scope()->add_statement(std::make_shared<ir::stmt::Copy>(location, stmt::ConversionOperation::COPY, destination, source));  // Extend the size -> just copy the value
+
+            case TypeCategory::POINTER:
+            case TypeCategory::INTEGER:
+            case TypeCategory::FLOAT: {
+                std::shared_ptr<Declaration> destination = destination_generator();
+                std::shared_ptr<Declaration> zero = declare_temporary(source_type, location);
+
+                stmt::LoadConst::Constant constant_zero;
+                if (source_type->category == TypeCategory::POINTER)     constant_zero = static_cast<size_t>(0);
+                else if (source_type->category == TypeCategory::FLOAT)  constant_zero = static_cast<long double>(0.0);
+                else if (source_type->category == TypeCategory::INTEGER) {
+                    if (std::static_pointer_cast<IntegerType>(source_type)->is_signed)  constant_zero = static_cast<ssize_t>(0);
+                    else                                                                constant_zero = static_cast<size_t>(0);
+                }
+
+                current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, constant_zero));
+                current_scope()->add_statement(std::make_shared<stmt::BinaryOp> (location, stmt::BinaryOperator::EQ, destination, source, zero));
                 return destination;
             }
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
         }
-
-        if (destination_category != source_category)  // Except enum -> int, implicit conversions across categories are forbidden
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast between incompatible type categories", location);
-
-        if (destination_category == TypeCategory::STRUCT && source_category == TypeCategory::STRUCT) {
-            if (destination_spec.type.get() != source_spec.type.get())
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between incompatible structure types", location);
-            return source;
-        }
-
-        if (destination_category == TypeCategory::UNION && source_category == TypeCategory::UNION) {
-            if (destination_spec.type.get() != source_spec.type.get())
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between incompatible union types", location);
-            return source;
-        }
-
-        if (destination_category == TypeCategory::ENUM && source_category == TypeCategory::ENUM) {
-            if (destination_spec.type.get() != source_spec.type.get())
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't cast between incompatible enum types", location);
-            return source;
-        }
-
-        // Now, only primitive types remain
-        return emit_implicit_conversion_primitive(destination_spec, source, location);
     }
 
-    std::shared_ptr<Declaration> Generator::emit_implicit_conversion_primitive(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const PrimitiveType& destination_primitive = static_cast<const PrimitiveType&>(*destination_spec.type);
-        const PrimitiveType& source_primitive      = static_cast<const PrimitiveType&>(*source->spec.type);
-        std::optional<stmt::ConversionOperation> operation;
+    std::shared_ptr<Declaration> Generator::emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
+                                                                       CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    {
+        switch (source_type->category) {
+            case TypeCategory::BOOL:
+                if (destination_type->size(location) == source_type->size(location) && destination_type->alignment(location) >= source_type->alignment(location))
+                    return source;
+                else
+                    return emit_copy_conversion(source, location, destination_generator);
 
-        switch (destination_primitive.semantic) {
-            case PrimitiveSemantic::FLOAT:
-                switch (source_primitive.semantic) {
-                    case PrimitiveSemantic::FLOAT:
-                        if (destination_primitive.primitive_size > source_primitive.primitive_size)
-                            operation = stmt::ConversionOperation::FLOAT_TO_FLOAT;
-                        else if (destination_primitive.primitive_size == source_primitive.primitive_size)
-                            return source;  // Same format -> no conversion required
-                        else throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a smaller floating-point type", location);
-                        break;
-
-                    case PrimitiveSemantic::INTEGER:
-                        operation = stmt::ConversionOperation::INT_TO_FLOAT;
-                        break;
-
-                    case PrimitiveSemantic::BOOL:
-                        operation = stmt::ConversionOperation::BOOL_TO_FLOAT;
-                        break;
+            case TypeCategory::INTEGER: {
+                std::shared_ptr<IntegerType> source_integer = std::static_pointer_cast<IntegerType>(source_type);
+                if (destination_type->is_signed == source_integer->is_signed) {
+                    if (destination_type->size_bits > source_integer->size_bits)
+                        return emit_copy_conversion(source, location, destination_generator);
+                    else if (destination_type->size_bits == source_integer->size_bits)
+                        return source;
+                    else  // if (destination_primitive.primitive_size < source_primitive.primitive_size)
+                        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Narrowing integer conversions are not implemented", location);
+                } else {
+                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Signed -> unsigned conversions are not implemented", location);
                 }
-                break;
-
-            case PrimitiveSemantic::INTEGER: {
-                switch (source_primitive.semantic) {
-                    case PrimitiveSemantic::INTEGER:
-                        if (destination_primitive.is_signed == source_primitive.is_signed) {
-                            if (destination_primitive.primitive_size > source_primitive.primitive_size)
-                                operation = stmt::ConversionOperation::COPY;
-                            else if (destination_primitive.primitive_size == source_primitive.primitive_size)
-                                return source;
-                            else  // if (destination_primitive.primitive_size < source_primitive.primitive_size)
-                                throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a smaller integer type", location);
-                        } else if (!destination_primitive.is_signed && destination_primitive.primitive_size > source_primitive.primitive_size) {
-                            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Signed -> unsigned conversions are not implemented", location);
-                        } else if (destination_primitive.is_signed && destination_primitive.primitive_size > source_primitive.primitive_size) {
-                            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unsigned -> signed conversions are not implemented", location);
-                        } else {
-                            throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast to a same-size or smaller type with different signedness", location);
-                        }
-                        break;
-
-                    case PrimitiveSemantic::BOOL:
-                        operation = stmt::ConversionOperation::BOOL_TO_INT;
-                        break;
-
-                    case PrimitiveSemantic::FLOAT:
-                        throw Diagnostic(DiagnosticLevel::ERROR, "Can't implicitely cast floating-point types to integers", location);
-                }
-                break;
             }
 
-            case PrimitiveSemantic::BOOL:
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Wrong path, this should have gone through convert_to_boolean", location);
+            case TypeCategory::FLOAT:
+                return emit_copy_conversion(source, location, destination_generator, stmt::ConversionOperation::FLOAT_TO_INT);
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
         }
+    }
 
-        // Factor simple conversions here
-        if (!operation.has_value())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "If this conversion is not a simple COPY, it already should have returned", location);
+    std::shared_ptr<Declaration> Generator::emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
+                                                                     CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    {
+        switch (source_type->category) {
+            case TypeCategory::BOOL:
+            case TypeCategory::INTEGER:
+                return emit_copy_conversion(source, location, destination_generator, stmt::ConversionOperation::INT_TO_FLOAT);
 
-        std::shared_ptr<Declaration> destination = declare_temporary(destination_spec, location);
-        current_scope()->add_statement(std::make_shared<ir::stmt::Copy>(location, operation.value(), destination, source));
+            case TypeCategory::FLOAT: {
+                std::shared_ptr<FloatingPointType> source_float = std::static_pointer_cast<FloatingPointType>(source_type);
+                if (source_float->size_bits == destination_type->size_bits) {
+                    if (source_float->alignment_bits == destination_type->alignment_bits)
+                        return source;
+                    else
+                        return emit_copy_conversion(source, location, destination_generator);
+                } else {
+                    return emit_copy_conversion(source, location, destination_generator, stmt::ConversionOperation::FLOAT_TO_FLOAT);
+                }
+            }
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
+        }
+    }
+
+    std::shared_ptr<Declaration> Generator::emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
+                                                            CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    {
+        switch (source_type->category) {
+            case TypeCategory::ARRAY:  // Those are just pointers, nothing to do
+            case TypeCategory::POINTER:
+                return source;
+
+            case TypeCategory::INTEGER:
+                if (source_type->size(location) == destination_type->size(location))
+                    return source;
+                else
+                    return emit_copy_conversion(source, location, destination_generator);
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
+        }
+    }
+
+    std::shared_ptr<Declaration> Generator::emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
+                                                         CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    {
+        if (destination_type->underlying_type->category != TypeCategory::INTEGER)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid enum underlying type", location);
+        return emit_conversion_to_integer(std::static_pointer_cast<IntegerType>(destination_type->underlying_type), source_type, source, location, destination_generator);
+    }
+
+
+    std::shared_ptr<Declaration> Generator::emit_copy_conversion(std::shared_ptr<Declaration> source, CodeLocation location, TemporaryGenerator destination_generator, stmt::ConversionOperation op) {
+        std::shared_ptr<Declaration> destination = destination_generator();
+        current_scope()->add_statement(std::make_shared<stmt::Copy>(location, op, destination, source));
         return destination;
     }
 
-
     std::array<std::shared_ptr<Declaration>, 2> Generator::emit_arithmetic_conversion(std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right, CodeLocation location) {
         try {
-            left = emit_implicit_conversion(right->spec, left, location);
+            left = emit_implicit_conversion(right->type, left, location);
         } catch (const Diagnostic& left_conversion_diagnostic) {
             try {
-                right = emit_implicit_conversion(left->spec, right, location);
+                right = emit_implicit_conversion(left->type, right, location);
             } catch (const Diagnostic& right_conversion_diagnostic) {
                 throw Diagnostic(DiagnosticLevel::ERROR, "Can't perform any standard arithmetic conversions to make the operands compatible", location)
                 .add_note(left_conversion_diagnostic).add_note(right_conversion_diagnostic);
@@ -222,64 +313,10 @@ namespace toycc::ir {
 
     // Copy source to destination, adding an implicit cast if necessary
     void Generator::emit_copy(std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source, CodeLocation location, bool initialize) {
-        if (!initialize && (destination->spec.qualifiers & TypeQualifier::CONST))
+        if (!initialize && destination->type->is_const())
             throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to assign a value to a constant after initialization", location);
 
-        source = emit_implicit_conversion(destination->spec, source, location);
+        source = emit_implicit_conversion(destination->type, source, location);
         current_scope()->add_statement(std::make_shared<stmt::Copy>(location, stmt::ConversionOperation::COPY, destination, source));
-    }
-
-    std::shared_ptr<Declaration> Generator::convert_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
-        const TypeSpecification& value_spec = value->spec;
-        if (value_spec.is_array_type())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Truth values of array types are not implemented", location);
-        else if (value_spec.is_function_type)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Truth values of function types are not implemented", location);
-        else if (value_spec.is_pointer_type())
-            return convert_pointer_to_boolean(value, location);
-        else if (value_spec.is_object_type())
-            return convert_object_to_boolean(value, location);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown type class in conversion to boolean", location);
-    }
-
-    std::shared_ptr<Declaration> Generator::convert_pointer_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
-        std::shared_ptr<Declaration> result = declare_temporary_predicate(location);
-        std::shared_ptr<Declaration> zero = declare_temporary(value->spec, location);
-        current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<size_t>(0)));
-        current_scope()->add_statement(std::make_shared<stmt::BinaryOp> (location, stmt::BinaryOperator::EQ, result, value, zero));
-        return result;
-    }
-
-    std::shared_ptr<Declaration> Generator::convert_object_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
-        switch (value->spec.type->identifier.category) {
-            case TypeCategory::VOID:       throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to use void in conversion to boolean", location);
-            case TypeCategory::TYPEDEF:    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to use an unresolved typedef in conversion to boolean", location);
-            case TypeCategory::PRIMITIVE:  return convert_primitive_to_boolean(value, location);
-            case TypeCategory::STRUCT:     throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting a struct to boolean is not implemented", location);
-            case TypeCategory::UNION:      throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting a union to boolean is not implemented", location);
-            case TypeCategory::ENUM:       throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting an enum to boolean is not implemented", location);
-            case TypeCategory::BUILTIN:    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Converting a builtin to boolean is not implemented", location);
-        }
-        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown object type category", location);
-    }
-
-    std::shared_ptr<Declaration> Generator::convert_primitive_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location) {
-        const PrimitiveType& primitive = static_cast<const PrimitiveType&>(*value->spec.type);
-
-        if (primitive.semantic == PrimitiveSemantic::BOOL)
-            return value;
-
-        std::shared_ptr<Declaration> result = declare_temporary_predicate(location);
-        std::shared_ptr<Declaration> zero = declare_temporary(value->spec, location);
-
-        if (primitive.semantic == PrimitiveSemantic::INTEGER) {
-            if (primitive.is_signed)  current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<ssize_t>(0)));
-            else                      current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<size_t> (0)));
-        } else if (primitive.semantic == PrimitiveSemantic::FLOAT) {
-            current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, static_cast<long double>(0)));
-        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown primitive type semantic", location);
-
-        current_scope()->add_statement(std::make_shared<stmt::BinaryOp> (location, stmt::BinaryOperator::EQ, result, value, zero));
-        return result;
     }
 }

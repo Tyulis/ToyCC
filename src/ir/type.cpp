@@ -1,72 +1,184 @@
 #include <format>
+#include <sstream>
 
 #include "diagnostic.h"
-#include "ir/type.h"
 #include "code_location.h"
+#include "ir/type.h"
+#include "util/alignment.hpp"
 
 namespace toycc::ir {
-    static std::string category_repr(TypeCategory category) {
+    constexpr static TypeTag to_tag(TypeCategory category) {
         switch (category) {
-            case TypeCategory::VOID:       return "VOID";
-            case TypeCategory::PRIMITIVE:  return "PRIMITIVE";
-            case TypeCategory::TYPEDEF:    return "TYPEDEF";
-            case TypeCategory::BUILTIN:    return "BUILTIN";
-            case TypeCategory::STRUCT:     return "STRUCT";
-            case TypeCategory::UNION:      return "UNION";
-            case TypeCategory::ENUM:       return "ENUM";
+            case TypeCategory::VOID:      return TypeTag::DIRECT;
+            case TypeCategory::BUILTIN:   return TypeTag::DIRECT;
+            case TypeCategory::BOOL:      return TypeTag::DIRECT;
+            case TypeCategory::INTEGER:   return TypeTag::DIRECT;
+            case TypeCategory::FLOAT:     return TypeTag::DIRECT;
+            case TypeCategory::POINTER:   return TypeTag::DIRECT;
+            case TypeCategory::ARRAY:     return TypeTag::DIRECT;
+            case TypeCategory::STRUCT:    return TypeTag::STRUCT;
+            case TypeCategory::UNION:     return TypeTag::UNION;
+            case TypeCategory::ENUM:      return TypeTag::ENUM;
+            case TypeCategory::FUNCTION:  return TypeTag::DIRECT;
+            case TypeCategory::BITFIELD:  return TypeTag::DIRECT;
+            case TypeCategory::ALIGNED:   return TypeTag::DIRECT;
+            case TypeCategory::QUALIFIED: return TypeTag::DIRECT;
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category");
+    }
+
+    static std::string tag_repr(TypeTag tag) {
+        switch (tag) {
+            case TypeTag::DIRECT:   return "";
+            case TypeTag::STRUCT:   return "struct ";
+            case TypeTag::UNION:    return "union ";
+            case TypeTag::ENUM:     return "enum ";
+            case TypeTag::TYPEDEF:  return "";
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type tag");
+    }
+
+    std::string category_repr(TypeCategory category) {
+        switch (category) {
+            case TypeCategory::VOID:      return "VOID";
+            case TypeCategory::BUILTIN:   return "BUILTIN";
+            case TypeCategory::BOOL:      return "BOOL";
+            case TypeCategory::INTEGER:   return "INTEGER";
+            case TypeCategory::FLOAT:     return "FLOAT";
+            case TypeCategory::POINTER:   return "POINTER";
+            case TypeCategory::ARRAY:     return "ARRAY";
+            case TypeCategory::STRUCT:    return "STRUCT";
+            case TypeCategory::UNION:     return "UNION";
+            case TypeCategory::ENUM:      return "ENUM";
+            case TypeCategory::FUNCTION:  return "FUNCTION";
+            case TypeCategory::BITFIELD:  return "BITFIELD";
+            case TypeCategory::ALIGNED:   return "ALIGNED";
+            case TypeCategory::QUALIFIED: return "QUALIFIED";
         }
 
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category");
     }
 
+    // -------- TypeIdentifier
     std::string TypeIdentifier::text() const {
-        switch (category) {
-            case TypeCategory::VOID:
-            case TypeCategory::PRIMITIVE:
-            case TypeCategory::TYPEDEF:
-            case TypeCategory::BUILTIN:
-                return name;
-            case TypeCategory::STRUCT:
-                return std::format("struct {}", name);
-            case TypeCategory::UNION:
-                return std::format("union {}", name);
-            case TypeCategory::ENUM:
-                return std::format("enum {}", name);
-        }
-
-        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category");
+        return std::format("{}{}", tag_repr(tag), name);
     }
 
-    std::string TypeIdentifier::ir_code() const {
-        return std::format("{} {}", category_repr(category), name);
+    // -------- Type
+    Type::Type(TypeCategory category, std::string name, CodeLocation location) : category(category), name(name), location(location) {}
+
+    bool Type::complete() const {
+        return true;
     }
 
-    bool TypeIdentifier::operator== (TypeIdentifier rhs) const {
-        return category == rhs.category && name == rhs.name;
+    bool Type::is_const() const {
+        return false;
     }
 
-    Type::Type(TypeIdentifier identifier, CodeLocation location) : identifier(identifier), location(location) {}
+    size_t Type::size(CodeLocation location) const {
+        throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't quary the size of type `{}`", text()), location);
+    }
+
+    size_t Type::alignment(CodeLocation location) const {
+        throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't quary the alignment of type `{}`", text()), location);
+    }
+
+    bool Type::operator== (const Type& rhs) const {
+        return category == rhs.category;
+    }
+
+    std::shared_ptr<Type> Type::dereference(CodeLocation location) const {
+        throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't dereference type `{}`", text()), location);
+    }
+
+    std::shared_ptr<Type> Type::dequalify() const {
+        return std::make_shared<Type> (*this);
+    }
+
+    TypeIdentifier Type::identifier() const {
+        return {.tag = to_tag(category), .name = name};
+    }
+
+    bool Type::is_arithmetic() const {
+        const TypeCategory dequalified_category = dequalify()->category;
+        return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::FLOAT;
+    }
+
+    bool Type::is_integral() const {
+        const TypeCategory dequalified_category = dequalify()->category;
+        return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER;
+    }
+
+    bool Type::is_comparable() const {
+        const TypeCategory dequalified_category = dequalify()->category;
+        return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::FLOAT ||
+        dequalified_category == TypeCategory::POINTER;
+    }
+
+    bool Type::has_truth_value() const {
+        const TypeCategory dequalified_category = dequalify()->category;
+        return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::FLOAT ||
+               dequalified_category == TypeCategory::POINTER;
+    }
+
     std::string Type::ir_code() const {
-        return std::format("#type {}", identifier.ir_code());
+        return category_repr(category);
     }
 
-
-    static std::string semantic_repr(PrimitiveSemantic semantic) {
-        switch (semantic) {
-            case PrimitiveSemantic::BOOL:    return "BOOL";
-            case PrimitiveSemantic::FLOAT:   return "FLOAT";
-            case PrimitiveSemantic::INTEGER: return "INTEGER";
-        }
-
-        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid primitive semantic");
+    std::string Type::text() const {
+        return ir_code();
     }
 
-    PrimitiveType::PrimitiveType(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment)
-        : Type(TypeIdentifier {.category = TypeCategory::PRIMITIVE, .name = name}, CodeLocation{.filename = "<built-in>", .line = 0, .character = 0}),
-          is_signed(is_signed), semantic(semantic), primitive_size(size), primitive_alignment(alignment) {}
+    // -------- PrimitiveType
+    PrimitiveType::PrimitiveType(TypeCategory category, std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits)
+        : Type(category, name, location), size_bits(size_bits), alignment_bits(alignment_bits) {}
+
+    size_t PrimitiveType::size(CodeLocation) const {
+        return size_bits_to_bytes(size_bits);
+    }
+
+    size_t PrimitiveType::alignment(CodeLocation) const {
+        return alignment_bits_to_bytes(alignment_bits);
+    }
 
     std::string PrimitiveType::ir_code() const {
-        return std::format("#type {} : {} {} size {} alignment {}",
-                           identifier.ir_code(), (is_signed? "signed" : "unsigned"), semantic_repr(semantic), primitive_size, primitive_alignment);
+        std::stringstream code;
+        code << category_repr(category) << "(" << size_bits;
+        if (alignment_bits != size_bits)
+            code << "|" << alignment_bits;
+        code << ")";
+        return code.str();
     }
+
+    bool PrimitiveType::operator== (const Type& rhs) const {
+        return (category == rhs.category) && *this == static_cast<const PrimitiveType&>(rhs);
+    }
+
+    bool PrimitiveType::operator== (const PrimitiveType& rhs) const {
+        return Type::operator== (rhs) && size_bits == rhs.size_bits && alignment_bits == rhs.alignment_bits;
+    }
+
+    // -------- BooleanType
+    BooleanType::BooleanType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits)
+        : PrimitiveType(TypeCategory::BOOL, name, location, size_bits, alignment_bits) {}
+
+    // -------- IntegerType
+    IntegerType::IntegerType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits, bool is_signed)
+        : PrimitiveType(TypeCategory::INTEGER, name, location, size_bits, alignment_bits), is_signed(is_signed) {}
+
+    std::string IntegerType::ir_code() const {
+        return std::format("{} {}", (is_signed? "SIGNED" : "UNSIGNED"), PrimitiveType::ir_code());
+    }
+
+    bool IntegerType::operator== (const Type& rhs) const {
+        return (category == rhs.category) && *this == static_cast<const IntegerType&>(rhs);
+    }
+
+    bool IntegerType::operator== (const IntegerType& rhs) const {
+        return PrimitiveType::operator== (rhs) && is_signed == rhs.is_signed;
+    }
+
+    // -------- FloatingPointType
+    FloatingPointType::FloatingPointType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits)
+        : PrimitiveType(TypeCategory::FLOAT, name, location, size_bits, alignment_bits) {}
 }

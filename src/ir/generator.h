@@ -3,7 +3,8 @@
 #include <memory>
 #include "ParserRuleContext.h"
 
-#include "ir/compound_type.h"
+#include "code_location.h"
+#include "ir/type_expressions.h"
 #include "ir/declaration.h"
 #include "ir/scope.h"
 #include "ir/statement.h"
@@ -21,6 +22,10 @@ namespace toycc::ir {
         std::deque<std::shared_ptr<Scope>> scope_stack;
 
         size_t unique_id = 0;
+
+        std::shared_ptr<Type> enum_underlying_type;
+        std::shared_ptr<Type> boolean_type;
+        std::shared_ptr<Type> character_type;
 
     public:
         Generator(const SourceMap& source_map, CParser::CompilationUnitContext* context);
@@ -53,28 +58,28 @@ namespace toycc::ir {
         // -------- Declarations -> ir/generator/declarations.cpp
         void decode_declaration(CParser::DeclarationContext* context);
         void decode_declaration_specifiers(Declaration& declaration, CParser::DeclarationSpecifiersContext* specifiers);
-        TypeSpecification decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context);
+        std::shared_ptr<Type> decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context);
 
         Flags<StorageClass> decode_storage_class(CParser::StorageClassSpecifierContext* context);
         Flags<TypeQualifier> decode_type_qualifier_list(CParser::TypeQualifierListContext* context);
         Flags<TypeQualifier> decode_type_qualifier(CParser::TypeQualifierContext* context);
         Flags<FunctionSpecifier> decode_function_specifier(CParser::FunctionSpecifierContext* context);
 
-        TypeSpecification resolve_type_specifier(std::vector<CParser::TypeSpecifierContext*> specifiers, bool is_typedef);
+        std::shared_ptr<Type> resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> specifiers, bool is_typedef);
         TypeIdentifier decode_type_specifiers(std::vector<CParser::TypeSpecifierContext*> specifiers);
         TypeIdentifier decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context);
-        std::vector<StructMember> decode_member_declaration(CParser::MemberDeclarationContext* context);
-        std::vector<StructMember> decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, TypeSpecification base_spec);
-        StructMember decode_struct_declarator(CParser::StructDeclaratorContext* context, TypeSpecification base_spec);
+        std::vector<Member> decode_member_declaration(CParser::MemberDeclarationContext* context);
+        std::vector<Member> decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, std::shared_ptr<Type> base_type);
+        Member decode_struct_declarator(CParser::StructDeclaratorContext* context, std::shared_ptr<Type> base_type);
 
         size_t resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context);
-        std::optional<std::string> decode_declarator(TypeSpecification& spec, CParser::DeclaratorContext* context);
-        std::optional<std::string> decode_direct_declarator(TypeSpecification& spec, CParser::DirectDeclaratorContext* context);
-        std::optional<std::string> decode_function_direct_declarator(TypeSpecification& spec, CParser::DirectDeclaratorContext* context);
-        std::vector<Declaration> decode_parameter_type_list(CParser::ParameterTypeListContext* context);
-        std::vector<Declaration> decode_parameter_list(CParser::ParameterListContext* context);
-        Declaration decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
-        std::vector<Flags<TypeQualifier>> decode_pointer_spec(CParser::PointerContext* context);
+        void decode_declarator(Member& member, CParser::DeclaratorContext* context);
+        void decode_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context);
+        void decode_function_direct_declarator(Member& spec, CParser::DirectDeclaratorContext* context);
+        std::vector<Member> decode_parameter_type_list(CParser::ParameterTypeListContext* context);
+        std::vector<Member> decode_parameter_list(CParser::ParameterListContext* context);
+        Member decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
+        std::shared_ptr<Type> decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> base_type);
 
         // -------- RAII expression result to keep track of lvalues and lingering effects -> ir/generator/expressionresult.cpp
         struct ExpressionResult {
@@ -82,13 +87,14 @@ namespace toycc::ir {
                 CodeLocation location;
                 std::shared_ptr<Declaration> result;
                 bool is_lvalue;
+                bool is_constexpr;
 
                 std::vector<std::shared_ptr<Declaration>> indices;
                 std::vector<int> postfix_increments;
 
-                ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, Generator& generator);
+                ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, bool is_constexpr, Generator& generator);
                 ~ExpressionResult();
-                TypeSpecification type() const;
+                std::shared_ptr<Type> type() const;
                 LValue lvalue() const;
 
                 std::shared_ptr<Declaration> load(CodeLocation location);
@@ -102,7 +108,7 @@ namespace toycc::ir {
                 void apply_integer_postfix_operations();
         };
 
-        std::shared_ptr<ExpressionResult> make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue);
+        std::shared_ptr<ExpressionResult> make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue, bool is_constexpr);
 
         // -------- Expressions -> ir/generator/expressions.cpp
         std::shared_ptr<ExpressionResult> decode_initializer(CParser::InitializerContext* context);
@@ -136,6 +142,10 @@ namespace toycc::ir {
         stmt::BinaryOperator decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
         stmt::BinaryOperator decode_additive_operator(CParser::AdditiveOperatorContext* context);
 
+        std::shared_ptr<ExpressionResult> emit_binary_operation(stmt::BinaryOperator op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
+
+        bool is_operator_valid(stmt::BinaryOperator op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
+
         // -------- Literals -> ir/generator/literals.cpp
         std::shared_ptr<Declaration> decode_constant(antlr4::tree::TerminalNode* terminal);
         std::shared_ptr<Declaration> decode_character_constant(antlr4::tree::TerminalNode* terminal);
@@ -149,24 +159,53 @@ namespace toycc::ir {
 
         std::shared_ptr<Declaration> declare_integer_constant(size_t value, std::string suffix, CodeLocation location);
 
+        // -------- Convenience class to make temporaries of a given type only when necessary -> ir/generator/temporarygenerator.cpp
+        class TemporaryGenerator {
+        public:
+            TemporaryGenerator(std::shared_ptr<Type> type, CodeLocation location, Generator& generator);
+            std::shared_ptr<Declaration> operator()() const;
+
+        private:
+            std::shared_ptr<Type> type;
+            CodeLocation location;
+            Generator& generator;
+        };
+
+        TemporaryGenerator make_temporary_generator(std::shared_ptr<Type> type, CodeLocation location);
+
         // -------- Conversions -> ir/generator/conversions.cpp
-        std::shared_ptr<Declaration> emit_implicit_conversion(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
-        std::shared_ptr<Declaration> emit_implicit_conversion_array(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
-        std::shared_ptr<Declaration> emit_implicit_conversion_function(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
-        std::shared_ptr<Declaration> emit_implicit_conversion_pointer(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
-        std::shared_ptr<Declaration> emit_implicit_conversion_object(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
-        std::shared_ptr<Declaration> emit_implicit_conversion_primitive(TypeSpecification destination_spec, std::shared_ptr<Declaration> source, CodeLocation location);
+        enum class ConversionValidity {
+            INVALID, EXPLICIT, IMPLICIT,
+        };
+
+        ConversionValidity get_conversion_validity(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source);
+        std::shared_ptr<Declaration> emit_implicit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location);
+        std::shared_ptr<Declaration> emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location);
+
+        // Internals
+        std::shared_ptr<Declaration> emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
+                                                     CodeLocation location, TemporaryGenerator destination_generator);
+        std::shared_ptr<Declaration> emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
+                                                     CodeLocation location, TemporaryGenerator destination_generator);
+        std::shared_ptr<Declaration> emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
+                                                     CodeLocation location, TemporaryGenerator destination_generator);
+        std::shared_ptr<Declaration> emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
+                                                     CodeLocation location, TemporaryGenerator destination_generator);
+        std::shared_ptr<Declaration> emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
+                                                     CodeLocation location, TemporaryGenerator destination_generator);
+        std::shared_ptr<Declaration> emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
+                                                     CodeLocation location, TemporaryGenerator destination_generator);
+
+        std::shared_ptr<Declaration> emit_copy_conversion(std::shared_ptr<Declaration> source, CodeLocation location, TemporaryGenerator destination_generator,
+                                                          stmt::ConversionOperation op = stmt::ConversionOperation::COPY);
+
         std::array<std::shared_ptr<Declaration>, 2> emit_arithmetic_conversion(std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right, CodeLocation location);
         void emit_copy(std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source, CodeLocation location, bool initialize);
-
-        std::shared_ptr<Declaration> convert_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
-        std::shared_ptr<Declaration> convert_pointer_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
-        std::shared_ptr<Declaration> convert_object_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
-        std::shared_ptr<Declaration> convert_primitive_to_boolean(std::shared_ptr<Declaration> value, CodeLocation location);
 
         // -------- State management -> ir/generator/state.cpp
         std::string anonymous_identifier();
         std::string anonymous_label();
+        std::string anonymous_type();
         std::shared_ptr<Scope> current_scope();
 
         CodeLocation locate(antlr4::ParserRuleContext* context) const;
@@ -175,29 +214,29 @@ namespace toycc::ir {
 
         // -------- Symbol management -> ir/generator/symbols.cpp
         void init_global_scope();
-        void add_builtin_type(std::string name);
-        void add_primitive_type(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment);
+        std::shared_ptr<Type> add_builtin_type(std::string name);
+        std::shared_ptr<Type> add_integer_type(std::string name, bool is_signed, size_t size, size_t alignment);
+        std::shared_ptr<Type> add_floating_point_type(std::string name, size_t size, size_t alignment);
 
         std::shared_ptr<Scope> create_function_scope(std::shared_ptr<Declaration> declaration);
 
         std::shared_ptr<Declaration> declare(Declaration declaration);
-        std::shared_ptr<Declaration> declare_temporary(TypeSpecification spec, CodeLocation location);
-        std::shared_ptr<Declaration> declare_temporary_predicate(CodeLocation location);
+        std::shared_ptr<Declaration> declare_temporary(std::shared_ptr<Type> type, CodeLocation location);
 
         std::optional<CodeLocation> locate_name(std::string name, bool current_scope_only = false);
         std::shared_ptr<Declaration> resolve_without_error(std::string name);
         std::shared_ptr<Declaration> resolve(std::string name, CodeLocation location);
-        std::optional<TypeSpecification> resolve_type_without_error(TypeIdentifier identifier);
-        TypeSpecification resolve_type(TypeIdentifier identifier, CodeLocation location);
+        std::shared_ptr<Type> resolve_type_without_error(TypeIdentifier identifier);
+        std::shared_ptr<Type> resolve_type(TypeIdentifier identifier, CodeLocation location);
 
         // -------- RAII class for pushing and popping scopes off the scope stack -> ir/generator/scopeframe.cpp
         class ScopeFrame {
-        public:
-            ScopeFrame(std::deque<std::shared_ptr<Scope>>& scope_stack, std::shared_ptr<Scope> scope);
-            ~ScopeFrame();
+            public:
+                ScopeFrame(std::deque<std::shared_ptr<Scope>>& scope_stack, std::shared_ptr<Scope> scope);
+                ~ScopeFrame();
 
-        private:
-            std::deque<std::shared_ptr<Scope>>& scope_stack;
+            private:
+                std::deque<std::shared_ptr<Scope>>& scope_stack;
         };
 
         ScopeFrame in_scope(std::shared_ptr<Scope> scope);

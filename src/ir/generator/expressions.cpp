@@ -1,6 +1,8 @@
 #include "diagnostic.h"
+#include "ir/type_expressions.h"
 #include "ir/generator.h"
 #include "ir/statement.h"
+#include <memory>
 
 namespace toycc::ir {
     // ------------ Expressions
@@ -35,12 +37,8 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::ERROR, "Assignment destination must be an lvalue");
         std::shared_ptr<ExpressionResult> source = decode_assignment_expression(context->assignmentExpression());
 
-        if (op.has_value()) {
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(destination->load(location), source->load(location), location);
-            std::shared_ptr<Declaration> result = declare_temporary(converted_left->spec, location);
-            current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(locate(context), op.value(), result, converted_left, converted_right));
-            source = make_expression(result, false);  // The value to assign is now the result of that operation
-        }
+        if (op.has_value())
+            source = emit_binary_operation(op.value(), destination, source, location);
 
         destination->store(source->load(location), location);
         return source;
@@ -119,13 +117,10 @@ namespace toycc::ir {
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
             std::shared_ptr<ExpressionResult> right = decode_multiplicative_expression(operands[operation_index + 1]);
-            if (left->result->spec.is_pointer_type() || right->result->spec.is_pointer_type())
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Pointer arithmetic is not implemented");
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(left->load(location), right->load(location), location);
-
-            std::shared_ptr<Declaration> result = declare_temporary(converted_left->spec, location);
-            current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(locate(context), decode_additive_operator(operators[operation_index]), result, converted_left, converted_right));
-            left = make_expression(result, false);
+            if (left->type()->is_arithmetic() && right->type()->is_arithmetic())
+                left = emit_binary_operation(decode_additive_operator(operators[operation_index]), left, right, location);
+            else
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic additive expressions are not implemented");
         }
         return left;
     }
@@ -138,11 +133,10 @@ namespace toycc::ir {
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
             std::shared_ptr<ExpressionResult> right = decode_cast_expression(operands[operation_index + 1]);
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(left->load(location), right->load(location), location);
-
-            std::shared_ptr<Declaration> result = declare_temporary(converted_left->spec, location);
-            current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(location, decode_multiplicative_operator(operators[operation_index]), result, converted_left, converted_right));
-            left = make_expression(result, false);
+            if (left->type()->is_arithmetic() && right->type()->is_arithmetic())
+                left = emit_binary_operation(decode_multiplicative_operator(operators[operation_index]), left, right, location);
+            else
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic multiplicative expressions are not implemented");
         }
         return left;
     }
@@ -191,25 +185,24 @@ namespace toycc::ir {
         if (!operand->is_lvalue)
             throw Diagnostic(DiagnosticLevel::ERROR, "Can't take the address of an rvalue", locate(context));
 
-        ir::TypeSpecification result_spec = operand->type();
-        result_spec.pointer_spec.emplace(result_spec.pointer_spec.cbegin());
-
-        std::shared_ptr<Declaration> result = declare_temporary(result_spec, location);
+        std::shared_ptr<Type> pointer_type = PointerType::make(anonymous_type(), location, operand->type());
+        std::shared_ptr<Declaration> result = declare_temporary(pointer_type, location);
         current_scope()->add_statement(std::make_shared<stmt::AddressOf>(location, result, operand->lvalue()));
-        return make_expression(result, true);
+        return make_expression(result, true, false);
     }
 
     std::shared_ptr<Generator::ExpressionResult> Generator::decode_unary_dereference(CParser::UnaryExpressionContext* context) {
         const CodeLocation location = locate(context);
 
         std::shared_ptr<ExpressionResult> operand = decode_cast_expression(context->castExpression());
-        ir::TypeSpecification operand_spec = operand->type();
-        if (!operand_spec.is_pointer_type())
+        std::shared_ptr<Type> pointer_type = operand->type();
+        if (pointer_type->category != TypeCategory::POINTER)
             throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to dereference a non-pointer object", location);
 
         std::shared_ptr<ExpressionResult> result = std::make_shared<ExpressionResult>(*operand);
         result->indices.insert(result->indices.cbegin(), nullptr);  // nullptr is a shortcut for a simple dereference here
         result->is_lvalue = true;
+        result->is_constexpr = false;
         return result;
     }
 
@@ -255,11 +248,11 @@ namespace toycc::ir {
     std::shared_ptr<Generator::ExpressionResult> Generator::decode_primary_expression(CParser::PrimaryExpressionContext* context) {
         const CodeLocation location = locate(context);
         if (context->Identifier())
-            return make_expression(resolve(context->Identifier()->getText(), location), true);
+            return make_expression(resolve(context->Identifier()->getText(), location), true, false);  // FIXME : if the named variable is constexpr, this may also be constexpr ?
         else if (context->Constant())
-            return make_expression(decode_constant(context->Constant()), false);
+            return make_expression(decode_constant(context->Constant()), false, true);
         else if (!context->StringLiteral().empty())
-            return make_expression(decode_string_literal(context->StringLiteral()), false);
+            return make_expression(decode_string_literal(context->StringLiteral()), false, false);  // The actual type is a pointer, which can't be constexpr. Is that a problem ?'
         else if (context->LeftParen() && context->expression() && context->RightParen())
             return decode_expression(context->expression());
         else if (context->genericSelection())
@@ -268,26 +261,30 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Generator::ExpressionResult> Generator::decode_function_call(std::shared_ptr<Declaration> function, CParser::PostfixOperatorContext* call) {
+        if (function->type->category != TypeCategory::FUNCTION)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't call object of type `{}` as a function", function->type->text()), locate(call));
+        std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType> (function->type);
+
         std::vector<std::shared_ptr<Declaration>> parameters;
         if (call->argumentExpressionList()) {
             std::vector<CParser::AssignmentExpressionContext*> parameter_expressions = call->argumentExpressionList()->assignmentExpression();
-            if (parameter_expressions.size() != function->spec.parameters.size())
-                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found {}, expected {}", parameter_expressions.size(), function->spec.parameters.size()), locate(call));
+            if (parameter_expressions.size() != function_type->parameters.size())
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found {}, expected {}", parameter_expressions.size(), function_type->parameters.size()), locate(call));
 
             for (size_t param = 0; param < parameter_expressions.size(); param++) {
                 const CodeLocation param_location = locate(parameter_expressions[param]);
                 std::shared_ptr<ExpressionResult> expression_result = decode_assignment_expression(parameter_expressions[param]);
-                std::shared_ptr<Declaration> parameter = emit_implicit_conversion(function->spec.parameters[param].spec, expression_result->load(param_location), param_location);
+                std::shared_ptr<Declaration> parameter = emit_implicit_conversion(function_type->parameters[param].type, expression_result->load(param_location), param_location);
                 parameters.push_back(parameter);
             }
         } else {
-            if (!function->spec.parameters.empty())
-                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found 0, expected {}", function->spec.parameters.size()), locate(call));
+            if (!function_type->parameters.empty())
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Invalid number of arguments : found 0, expected {}", function_type->parameters.size()), locate(call));
         }
 
-        std::shared_ptr<Declaration> destination = declare_temporary(function->spec.return_type(), locate(call));
+        std::shared_ptr<Declaration> destination = declare_temporary(function_type->return_type, locate(call));
         current_scope()->add_statement(std::make_shared<stmt::Call>(locate(call), destination, function, parameters));
-        return make_expression(destination, false);
+        return make_expression(destination, false, false);  // FIXME : May be constexpr when the function is inline ?
     }
 
 
@@ -317,5 +314,60 @@ namespace toycc::ir {
         if      (context->Plus())  return stmt::BinaryOperator::PLUS;
         else if (context->Minus()) return stmt::BinaryOperator::MINUS;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown additive operator `{}`", context->getText()), locate(context));
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::emit_binary_operation(stmt::BinaryOperator op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location) {
+        std::shared_ptr<Type> left_type = left->type(), right_type = right->type();
+
+        if (!is_operator_valid(op, left_type, right_type))
+            throw Diagnostic(DiagnosticLevel::ERROR, "Operation `{}` + `{}` is not valid");
+
+        if (left_type->is_arithmetic() && right_type->is_arithmetic()) {
+            auto [converted_left, converted_right] = emit_arithmetic_conversion(left->load(location), right->load(location), location);
+            std::shared_ptr<Declaration> result = declare_temporary(converted_left->type, location);
+            current_scope()->add_statement(std::make_shared<stmt::BinaryOp>(location, op, result, converted_left, converted_right));
+            return make_expression(result, false, left->is_constexpr && right->is_constexpr);
+        } else {
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic operations are not implemented", location);
+        }
+    }
+
+    bool Generator::is_operator_valid(stmt::BinaryOperator op, std::shared_ptr<Type> left, std::shared_ptr<Type> right) {
+        std::shared_ptr<Type> left_unqualified = left->dequalify(), right_unqualified = right->dequalify();
+        switch (op) {
+            case stmt::BinaryOperator::MUL:
+            case stmt::BinaryOperator::DIV:
+            case stmt::BinaryOperator::MOD:
+                return left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic();
+
+            case stmt::BinaryOperator::PLUS:
+                return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||
+                       (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic()) ||
+                       (left_unqualified->is_arithmetic() && right_unqualified->category == TypeCategory::POINTER);
+
+            case stmt::BinaryOperator::MINUS:
+                return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||
+                       (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic());
+
+            case stmt::BinaryOperator::LSHIFT:
+            case stmt::BinaryOperator::RSHIFT:
+            case stmt::BinaryOperator::BITWISE_AND:
+            case stmt::BinaryOperator::BITWISE_XOR:
+            case stmt::BinaryOperator::BITWISE_OR:
+                return left_unqualified->is_integral() && right_unqualified->is_integral();
+
+            case stmt::BinaryOperator::LT:
+            case stmt::BinaryOperator::LE:
+            case stmt::BinaryOperator::GE:
+            case stmt::BinaryOperator::GT:
+            case stmt::BinaryOperator::EQ:
+            case stmt::BinaryOperator::NE:
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Relational operators are not implemented");
+
+            case stmt::BinaryOperator::LOGICAL_AND:
+            case stmt::BinaryOperator::LOGICAL_OR:
+                return left_unqualified->has_truth_value() && right_unqualified->has_truth_value();
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown binary operator");
     }
 }

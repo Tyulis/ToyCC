@@ -3,57 +3,56 @@
 #include "arch/x86_64.h"
 
 namespace toycc::ir {
+    constexpr static CodeLocation BUILTIN_LOCATION = {.filename = "<built-in>", .line = 0, .character = 0};
+
     void Generator::init_global_scope() {
         // Initialize the global scope
         scope_stack.push_back(std::make_shared<Scope>(ScopeType::GLOBAL, nullptr));
         current_scope()->function = nullptr;
 
         using namespace toycc::arch;
-        TypeIdentifier void_identifier = {.category = TypeCategory::VOID, .name = "void"};
-        current_scope()->add_type(std::make_shared<Type> (void_identifier, CodeLocation {.filename = "<built-in>", .line = 1, .character = 1}));
+        current_scope()->add_type(std::make_shared<Type> (TypeCategory::VOID, std::string("void"), BUILTIN_LOCATION));
+        boolean_type = current_scope()->add_type(std::make_shared<BooleanType> ("bool", BUILTIN_LOCATION, BOOL_SIZE, BOOL_ALIGNMENT));
 
-        add_primitive_type("bool",                   false, PrimitiveSemantic::BOOL,    BOOL_SIZE,        BOOL_ALIGNMENT);
-        add_primitive_type("signed char",            true,  PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
-        add_primitive_type("unsigned char",          false, PrimitiveSemantic::INTEGER, CHAR_SIZE,        CHAR_ALIGNMENT);
-        add_primitive_type("signed short int",       true,  PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
-        add_primitive_type("unsigned short int",     false, PrimitiveSemantic::INTEGER, SHORT_SIZE,       SHORT_ALIGNMENT);
-        add_primitive_type("signed int",             true,  PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
-        add_primitive_type("unsigned int",           false, PrimitiveSemantic::INTEGER, INT_SIZE,         INT_ALIGNMENT);
-        add_primitive_type("signed long int",        true,  PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
-        add_primitive_type("unsigned long int",      false, PrimitiveSemantic::INTEGER, LONG_SIZE,        LONG_ALIGNMENT);
-        add_primitive_type("signed long long int",   false, PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
-        add_primitive_type("unsigned long long int", false, PrimitiveSemantic::INTEGER, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
-        add_primitive_type("float",                  true,  PrimitiveSemantic::FLOAT,   FLOAT_SIZE,       FLOAT_ALIGNMENT);
-        add_primitive_type("double",                 true,  PrimitiveSemantic::FLOAT,   DOUBLE_SIZE,      DOUBLE_ALIGNMENT);
-        add_primitive_type("long double",            true,  PrimitiveSemantic::FLOAT,   LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT);
+        character_type = add_integer_type("signed char", true, CHAR_SIZE,   CHAR_ALIGNMENT);
+        add_integer_type("unsigned char",          false, CHAR_SIZE,        CHAR_ALIGNMENT);
+        add_integer_type("signed short int",       true,  SHORT_SIZE,       SHORT_ALIGNMENT);
+        add_integer_type("unsigned short int",     false, SHORT_SIZE,       SHORT_ALIGNMENT);
+        enum_underlying_type = add_integer_type("signed int", true, INT_SIZE, INT_ALIGNMENT);
+        add_integer_type("unsigned int",           false, INT_SIZE,         INT_ALIGNMENT);
+        add_integer_type("signed long int",        true,  LONG_SIZE,        LONG_ALIGNMENT);
+        add_integer_type("unsigned long int",      false, LONG_SIZE,        LONG_ALIGNMENT);
+        add_integer_type("signed long long int",   false, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
+        add_integer_type("unsigned long long int", false, LONG_LONG_SIZE,   LONG_LONG_ALIGNMENT);
+        add_floating_point_type("float",                  FLOAT_SIZE,       FLOAT_ALIGNMENT);
+        add_floating_point_type("double",                 DOUBLE_SIZE,      DOUBLE_ALIGNMENT);
+        add_floating_point_type("long double",            LONG_DOUBLE_SIZE, LONG_DOUBLE_ALIGNMENT);
 
         add_builtin_type("__builtin_va_list");
     }
 
-    void Generator::add_builtin_type(std::string name) {
-        TypeIdentifier identifier = {.category = TypeCategory::BUILTIN, .name = name};
-        CodeLocation location = {.filename = "<built-in>", .line = 1, .character = 1};
-        std::shared_ptr<Type> type_decl = std::make_shared<Type> (identifier, location);
-        current_scope()->add_type(type_decl);
-
-        // Built-in types will be identified as typedef names in the syntax, define them as such
-        std::shared_ptr<Declaration> typedef_decl = std::make_shared<Declaration>
-        (Declaration {.name = name, .location = location, .storage = StorageClass::TYPEDEF, .spec = {}});
-        typedef_decl->spec.type = type_decl;
-        current_scope()->add_typedef(typedef_decl);
+    std::shared_ptr<Type> Generator::add_builtin_type(std::string name) {
+        return current_scope()->add_type(std::make_shared<Type>(TypeCategory::BUILTIN, name, BUILTIN_LOCATION));
     }
 
-    void Generator::add_primitive_type(std::string name, bool is_signed, PrimitiveSemantic semantic, size_t size, size_t alignment) {
-        TypeIdentifier identifier = {.category = TypeCategory::PRIMITIVE, .name = name};
-        current_scope()->add_type(std::make_shared<PrimitiveType>(name, is_signed, semantic, size, alignment));
+    std::shared_ptr<Type> Generator::add_integer_type(std::string name, bool is_signed, size_t size, size_t alignment) {
+        return current_scope()->add_type(std::make_shared<IntegerType>(name, BUILTIN_LOCATION, size * 8, alignment * 8, is_signed));
+    }
+
+    std::shared_ptr<Type> Generator::add_floating_point_type(std::string name, size_t size, size_t alignment) {
+        return current_scope()->add_type(std::make_shared<FloatingPointType>(name, BUILTIN_LOCATION, size * 8, alignment * 8));
     }
 
 
     std::shared_ptr<Scope> Generator::create_function_scope(std::shared_ptr<Declaration> declaration) {
         std::shared_ptr<Scope> scope = std::make_shared<Scope>(ScopeType::FUNCTION, declaration);
-        for (const Declaration& parameter : declaration->spec.parameters)
+        if (declaration->type->category != TypeCategory::FUNCTION)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to create the function scope for a non-function type");
+
+        const FunctionType& function_type = static_cast<const FunctionType&> (*declaration->type);
+        for (const Member& parameter : function_type.parameters)
             if (!parameter.name.empty())
-                scope->add_local(std::make_shared<Declaration>(parameter));
+                scope->add_local(std::make_shared<Declaration>(parameter, StorageClass::AUTO | StorageClass::PARAMETER));
 
         return scope;
     }
@@ -62,7 +61,7 @@ namespace toycc::ir {
         std::optional<CodeLocation> existing_location = locate_name(declaration.name);
         if (existing_location.has_value())
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name {} was already declared", declaration.name), declaration.location)
-            .add_note(DiagnosticLevel::NOTE, "Previously declared here", existing_location.value());
+                  .add_note(DiagnosticLevel::NOTE, "Previously declared here", existing_location.value());
 
         if (declaration.storage & StorageClass::TYPEDEF)
             return current_scope()->add_typedef(std::make_shared<Declaration>(declaration));
@@ -71,30 +70,21 @@ namespace toycc::ir {
     }
 
 
-    std::shared_ptr<Declaration> Generator::declare_temporary(TypeSpecification spec, CodeLocation location) {
-        Declaration declaration = {.name = anonymous_identifier(), .location = location, .storage = StorageClass::AUTO | StorageClass::TEMPORARY, .spec = spec};
+    std::shared_ptr<Declaration> Generator::declare_temporary(std::shared_ptr<Type> type, CodeLocation location) {
+        Declaration declaration(anonymous_identifier(), type, location, StorageClass::AUTO | StorageClass::TEMPORARY);
         return declare(declaration);
     }
 
-    std::shared_ptr<Declaration> Generator::declare_temporary_predicate(CodeLocation location) {
-        TypeSpecification bool_spec = resolve_type(TypeIdentifier {.category = TypeCategory::PRIMITIVE, .name = "bool"}, location);
-        return declare_temporary(bool_spec, location);
-    }
-
     std::optional<CodeLocation> Generator::locate_name(std::string name, bool current_scope_only) {
-        std::vector<TypeIdentifier> type_identifiers = {{.category = TypeCategory::PRIMITIVE, .name = name},
-        {.category = TypeCategory::BUILTIN,   .name = name},
-        {.category = TypeCategory::VOID,      .name = name}};
+        const TypeIdentifier identifier = {.tag = TypeTag::DIRECT, .name = name};
         // Structs, unions and enums aren't single names, they have `struct` / `union` / `enum` in front
 
         for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
             std::shared_ptr<Scope> scope = *it;
 
-            for (TypeIdentifier identifier :type_identifiers) {
-                std::shared_ptr<Type> type = scope->find_type(identifier);
-                if (type.get() != nullptr)
-                    return type->location;
-            }
+            std::shared_ptr<Type> type = scope->find_type(identifier);
+            if (type.get() != nullptr)
+                return type->location;
 
             std::shared_ptr<Declaration> typedef_decl = scope->find_typedef(name);
             if (typedef_decl.get() != nullptr)
@@ -130,30 +120,27 @@ namespace toycc::ir {
         return declaration;
     }
 
-    std::optional<TypeSpecification> Generator::resolve_type_without_error(TypeIdentifier identifier) {
+    std::shared_ptr<Type> Generator::resolve_type_without_error(TypeIdentifier identifier) {
         for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
             std::shared_ptr<Scope> scope = *it;
-            if (identifier.category == TypeCategory::TYPEDEF) {
+            if (identifier.tag == TypeTag::TYPEDEF) {
                 std::shared_ptr<Declaration> typedef_decl = scope->find_typedef(identifier.name);
                 if (typedef_decl.get() != nullptr)
-                    return typedef_decl->spec;
+                    return typedef_decl->type;
             } else {
                 std::shared_ptr<Type> type = scope->find_type(identifier);
-                if (type.get() != nullptr) {
-                    TypeSpecification spec;
-                    spec.type = type;
-                    return spec;
-                }
+                if (type.get() != nullptr)
+                    return type;
             }
         }
 
-        return {};
+        return nullptr;
     }
 
-    TypeSpecification Generator::resolve_type(TypeIdentifier identifier, CodeLocation location) {
-        std::optional<TypeSpecification> spec = resolve_type_without_error(identifier);
-        if (!spec.has_value())
+    std::shared_ptr<Type> Generator::resolve_type(TypeIdentifier identifier, CodeLocation location) {
+        std::shared_ptr<Type> type = resolve_type_without_error(identifier);
+        if (type.get() == nullptr)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` was not declared", identifier.text()), location);
-        return spec.value();
+        return type;
     }
 }

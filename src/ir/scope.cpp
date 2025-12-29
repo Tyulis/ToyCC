@@ -15,7 +15,7 @@ namespace toycc::ir {
 
         std::stringstream code;
         for (std::pair<TypeIdentifier, std::shared_ptr<Type>> item : types)
-            code << item.second->ir_code() << ";\n";
+            code << "#type " << item.second->ir_code() << " " << item.second->name << ";\n";
         for (std::shared_ptr<Declaration> item : typedefs)
             code << item->ir_code() << ";\n";
         for (std::shared_ptr<Declaration> item : locals)
@@ -53,12 +53,12 @@ namespace toycc::ir {
 
 
     std::shared_ptr<Type> Scope::add_type(std::shared_ptr<Type> type) {
-        auto existing_type = types.find(type->identifier);
+        auto existing_type = types.find(type->identifier());
         if (existing_type != types.end())
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` is already defined in this scope", type->identifier.name), type->location)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` is already defined in this scope", type->identifier().name), type->location)
                   .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_type->second->location);
 
-        types[type->identifier] = type;
+        types[type->identifier()] = type;
         return type;
     }
 

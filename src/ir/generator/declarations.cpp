@@ -1,5 +1,6 @@
 #include "code_location.h"
 #include "diagnostic.h"
+#include "ir/type_expressions.h"
 #include "ir/generator.h"
 
 namespace toycc::ir {
@@ -11,6 +12,7 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute declarations are not implemented", locate(context));
 
         Declaration base_declaration;
+        base_declaration.location = locate(context);
         decode_declaration_specifiers(base_declaration, context->declarationSpecifiers());
 
         // First, only process the declarations
@@ -18,9 +20,7 @@ namespace toycc::ir {
         if (context->initDeclaratorList()) {
             for (CParser::InitDeclaratorContext* declarator : context->initDeclaratorList()->initDeclarator()) {
                 Declaration declaration = base_declaration;
-                std::optional<std::string> name = decode_declarator(declaration.spec, declarator->declarator());
-                if (name.has_value())
-                    declaration.name = name.value();
+                decode_declarator(declaration, declarator->declarator());
                 declarations.push_back(declaration);
             }
         } else {
@@ -29,7 +29,7 @@ namespace toycc::ir {
 
         std::vector<std::shared_ptr<Declaration>> declared_variables;
         for (const Declaration& declaration : declarations) {
-            declaration.check(false);
+            declaration.check();
             declared_variables.push_back(declare(declaration));
         }
 
@@ -52,51 +52,63 @@ namespace toycc::ir {
 
     void Generator::decode_declaration_specifiers(Declaration& declaration, CParser::DeclarationSpecifiersContext* specifiers) {
         std::vector<CParser::TypeSpecifierContext*> type_specifiers;
+        Flags<TypeQualifier> qualifiers;
+        std::optional<size_t> custom_alignment_bits;
+
         for (CParser::DeclarationSpecifierContext* specifier : specifiers->declarationSpecifier()) {
             if (specifier->storageClassSpecifier())
                 declaration.storage |= decode_storage_class(specifier->storageClassSpecifier());
             else if (specifier->typeSpecifier())
                 type_specifiers.push_back(specifier->typeSpecifier());
             else if (specifier->typeQualifier())
-                declaration.spec.qualifiers |= decode_type_qualifier(specifier->typeQualifier());
+                qualifiers |= decode_type_qualifier(specifier->typeQualifier());
             else if (specifier->functionSpecifier())
-                declaration.spec.function_spec |= decode_function_specifier(specifier->functionSpecifier());
+                declaration.function_spec |= decode_function_specifier(specifier->functionSpecifier());
             else if (specifier->alignmentSpecifier())
-                declaration.spec.custom_alignment = resolve_alignment_specifier(specifier->alignmentSpecifier());
-            else
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declaration specifier `{}`", specifier->getText()), locate(specifier));
+                custom_alignment_bits = resolve_alignment_specifier(specifier->alignmentSpecifier());
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declaration specifier `{}`", specifier->getText()), locate(specifier));
         }
 
         if (!declaration.storage)  // No specific keyword used -> auto storage duration
             declaration.storage = StorageClass::AUTO;
 
         const bool is_typedef = declaration.storage & StorageClass::TYPEDEF;
-        TypeSpecification initial_spec = resolve_type_specifier(type_specifiers, is_typedef);
-        declaration.spec = initial_spec.merge(declaration.spec, locate(specifiers));
+        declaration.type = resolve_type_specifiers(type_specifiers, is_typedef);
+        if (qualifiers)
+            declaration.type = QualifiedType::make(anonymous_type(), declaration.location, declaration.type, qualifiers);
+        if (custom_alignment_bits.has_value())
+            declaration.type = AlignedType::make(anonymous_type(), declaration.location, declaration.type, custom_alignment_bits.value());
     }
 
-    TypeSpecification Generator::decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context) {
+    std::shared_ptr<Type> Generator::decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context) {
+        const CodeLocation location = locate(context);
+
         if (context->gnuAttributes())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not supported", locate(context));
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not supported", location);
         if (context->attributeSpecifierSequence())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not supported", locate(context));
-        TypeSpecification spec;
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not supported", location);
 
         std::vector<CParser::TypeSpecifierQualifierContext*> specifiers = context->typeSpecifierQualifier();
         std::vector<CParser::TypeSpecifierContext*> type_specifiers;
+        Flags<TypeQualifier> qualifiers;
+        std::optional<size_t> custom_alignment_bits;
         for (CParser::TypeSpecifierQualifierContext* specifier : specifiers) {
             if (specifier->typeSpecifier())
                 type_specifiers.push_back(specifier->typeSpecifier());
             else if (specifier->typeQualifier())
-                spec.qualifiers |= decode_type_qualifier(specifier->typeQualifier());
+                qualifiers |= decode_type_qualifier(specifier->typeQualifier());
             else if (specifier->alignmentSpecifier())
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Alignment specifiers are not supported", locate(context));
+                custom_alignment_bits = resolve_alignment_specifier(specifier->alignmentSpecifier());
             else
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown specifier qualifier `{}`", specifier->getText()), locate(context));
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown specifier qualifier `{}`", specifier->getText()), locate(specifier));
         }
 
-        TypeSpecification initial_spec = resolve_type_specifier(type_specifiers, false);
-        return initial_spec.merge(spec, locate(context));
+        std::shared_ptr<Type> type = resolve_type_specifiers(type_specifiers, false);
+        if (qualifiers)
+            type = QualifiedType::make(anonymous_type(), location, type, qualifiers);
+        if (custom_alignment_bits.has_value())
+            type = AlignedType::make(anonymous_type(), location, type, custom_alignment_bits.value());
+        return type;
     }
 
     Flags<StorageClass> Generator::decode_storage_class(CParser::StorageClassSpecifierContext* context) {
@@ -137,22 +149,26 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Alignment specifiers are not implemented", locate(context));
     }
 
-    TypeSpecification Generator::resolve_type_specifier(std::vector<CParser::TypeSpecifierContext*> type_specifiers, bool is_typedef) {
+    std::shared_ptr<Type> Generator::resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> type_specifiers, bool is_typedef) {
         const CodeLocation location = locate(type_specifiers[0]);
 
         TypeIdentifier identifier = decode_type_specifiers(type_specifiers);
-        std::optional<TypeSpecification> spec = resolve_type_without_error(identifier);
+        std::shared_ptr<Type> type = resolve_type_without_error(identifier);
 
         // Declare incomplete types in typedefs
-        if (!spec.has_value() && is_typedef && (identifier.category == TypeCategory::STRUCT || identifier.category == TypeCategory::UNION || identifier.category == TypeCategory::ENUM)) {
-            current_scope()->add_type(std::make_shared<CompoundType>(identifier, location));
-            spec = resolve_type(identifier, location);
+        if (type.get() == nullptr && is_typedef && (identifier.tag == TypeTag::STRUCT || identifier.tag == TypeTag::UNION || identifier.tag == TypeTag::ENUM)) {
+            switch (identifier.tag) {
+                case TypeTag::STRUCT:  type = current_scope()->add_type(StructType::make(identifier.name, location, false));                 break;
+                case TypeTag::UNION:   type = current_scope()->add_type(UnionType::make (identifier.name, location, false));                 break;
+                case TypeTag::ENUM:    type = current_scope()->add_type(EnumType::make  (identifier.name, location, enum_underlying_type));  break;
+                default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type tag in incomplete typedef push", location);
+            }
         }
 
-        if (!spec.has_value())
+        if (type.get() == nullptr)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` was not declared", identifier.text()), location);
 
-        return spec.value();
+        return type;
     }
 
     // Decode a type specifier, push eventual anonymous struct/enum/union declarations to the current scope and return the type identifier
@@ -174,7 +190,7 @@ namespace toycc::ir {
             if (specifier->Void()) {
                 if (identifier.has_value())
                     throw Diagnostic(DiagnosticLevel::ERROR, "Void types can't have more than one identifier", location);
-                identifier = TypeIdentifier {.category = TypeCategory::VOID, .name = token};
+                identifier = TypeIdentifier {.tag = TypeTag::DIRECT, .name = token};
             } else if (specifier->Char() || specifier->Short() || specifier->Int() || specifier->Long() || specifier->Float() || specifier->Double() || specifier->Bool()) {
                 primitive_type_tokens.insert(token);
             } else if (specifier->Signed() || specifier->Unsigned()) {
@@ -184,7 +200,7 @@ namespace toycc::ir {
             } else if (specifier->typedefName()) {
                 if (identifier.has_value())
                     throw Diagnostic(DiagnosticLevel::ERROR, "Non-primitive types can't have more than one identifier", location);
-                identifier = TypeIdentifier {.category = TypeCategory::TYPEDEF, .name = token};
+                identifier = TypeIdentifier {.tag = TypeTag::TYPEDEF, .name = token};
             }
             else if (specifier->Complex())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Complex types are unsupported", location);
@@ -219,7 +235,7 @@ namespace toycc::ir {
         if (primitive_type_tokens.contains("_Bool") || primitive_type_tokens.contains("bool")) {
             if (primitive_type_tokens.size() > 1 || sign_token.has_value())
                 throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type bool can't have other type specifiers", base_location);
-            return {TypeCategory::PRIMITIVE, "bool"};
+            return {.tag = TypeTag::DIRECT, .name = "bool"};
         }
 
         // Floating-point types
@@ -230,14 +246,14 @@ namespace toycc::ir {
             if (primitive_type_tokens.contains("float")) {
                 if (primitive_type_tokens.size() > 1)
                     throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `float` can't have any other type specifiers", base_location);
-                return {TypeCategory::PRIMITIVE, "float"};
+                return {.tag = TypeTag::DIRECT, .name = "float"};
             }
 
             // From now on, only double remains
             if (primitive_type_tokens.contains("long") && primitive_type_tokens.size() == 2)
-                return {TypeCategory::PRIMITIVE, "long double"};
+                return {.tag = TypeTag::DIRECT, .name = "long double"};
             else if (primitive_type_tokens.size() == 1)
-                return {TypeCategory::PRIMITIVE, "double"};
+                return {.tag = TypeTag::DIRECT, .name = "double"};
             else
                 throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `double` can't have any type specifiers other than `long`", base_location);
         }
@@ -255,22 +271,22 @@ namespace toycc::ir {
         if (primitive_type_tokens.contains("char")) {
             if (primitive_type_tokens.size() > 1)
                 throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `char` can't have type specifiers other than `signed`/`unsigned`", base_location);
-            return {TypeCategory::PRIMITIVE, std::format("{} char", sign_token.value())};
+            return {.tag = TypeTag::DIRECT, .name = std::format("{} char", sign_token.value())};
         }
 
         // From now on, only short, int and long remain
         if (primitive_type_tokens.contains("short")) {
             if (primitive_type_tokens.contains("long"))
                 throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type `short` can't also be `long`", base_location);
-            return {TypeCategory::PRIMITIVE, std::format("{} short int", sign_token.value())};
+            return {.tag = TypeTag::DIRECT, .name = std::format("{} short int", sign_token.value())};
         }
 
         // From now on, only long and int remain
         const size_t nof_longs = primitive_type_tokens.count("long");
         switch (nof_longs) {
-            case 0:  return {TypeCategory::PRIMITIVE, std::format("{} int", sign_token.value())};
-            case 1:  return {TypeCategory::PRIMITIVE, std::format("{} long int", sign_token.value())};
-            case 2:  return {TypeCategory::PRIMITIVE, std::format("{} long long int", sign_token.value())};
+            case 0:  return {.tag = TypeTag::DIRECT, .name = std::format("{} int", sign_token.value())};
+            case 1:  return {.tag = TypeTag::DIRECT, .name = std::format("{} long int", sign_token.value())};
+            case 2:  return {.tag = TypeTag::DIRECT, .name = std::format("{} long long int", sign_token.value())};
             default: throw Diagnostic(DiagnosticLevel::ERROR, "Primitive type specifier `long` can't be given more than twice", base_location);
         }
     }
@@ -290,13 +306,19 @@ namespace toycc::ir {
         if (context->Identifier()) identifier.name = context->Identifier()->getText();
         else                       identifier.name = anonymous_identifier();
 
-        if      (context->structOrUnion()->Struct())  identifier.category = TypeCategory::STRUCT;
-        else if (context->structOrUnion()->Union())   identifier.category = TypeCategory::UNION;
+        if      (context->structOrUnion()->Struct())  identifier.tag = TypeTag::STRUCT;
+        else if (context->structOrUnion()->Union())   identifier.tag = TypeTag::UNION;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown struct or union keyword `{}`", context->structOrUnion()->getText()), location);
 
         if (context->memberDeclarationList()) {
-            std::shared_ptr<CompoundType> definition = std::make_shared<CompoundType>(identifier, location);
-            current_scope()->add_type(definition);  // Push the incomplete type to the current scope to allow struct members to use it
+            // Push the incomplete type to the current scope to allow struct members to use it
+            std::shared_ptr<CompoundType> definition;
+            switch (identifier.tag) {
+                case TypeTag::STRUCT:  definition = StructType::make(identifier.name, location);  break;
+                case TypeTag::UNION:   definition = UnionType::make (identifier.name, location);  break;
+                default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a compound type", location);
+            }
+            current_scope()->add_type(definition);
 
             for (CParser::MemberDeclarationContext* declaration : context->memberDeclarationList()->memberDeclaration())
                 definition->members.append_range(decode_member_declaration(declaration));
@@ -309,7 +331,7 @@ namespace toycc::ir {
     }
 
 
-    std::vector<StructMember> Generator::decode_member_declaration(CParser::MemberDeclarationContext* context) {
+    std::vector<Member> Generator::decode_member_declaration(CParser::MemberDeclarationContext* context) {
         const CodeLocation location = locate(context);
 
         if (context->attributeSpecifierSequence())
@@ -319,27 +341,25 @@ namespace toycc::ir {
         if (context->KW__extension__())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU extensions are not supported", location);
 
-        TypeSpecification base_spec = decode_specifier_qualifier_list(context->specifierQualifierList());
-        if (!context->memberDeclaratorList()) {
-            StructMember member = {.name = anonymous_identifier(), .location = location, .spec = base_spec};
-            return {member};
-        } else {
-            return decode_member_declarator_list(context->memberDeclaratorList(), base_spec);
-        }
+        std::shared_ptr<Type> type = decode_specifier_qualifier_list(context->specifierQualifierList());
+        if (!context->memberDeclaratorList())
+            return {Member {anonymous_identifier(), type, location}};
+        else
+            return decode_member_declarator_list(context->memberDeclaratorList(), type);
     }
 
-    std::vector<StructMember> Generator::decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, TypeSpecification base_spec) {
+    std::vector<Member> Generator::decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, std::shared_ptr<Type> base_type) {
         if (!context->gnuAttributes().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not supported", locate(context));
 
-        std::vector<StructMember> members;
+        std::vector<Member> members;
         for (CParser::StructDeclaratorContext* declarator : context->structDeclarator())
-            members.push_back(decode_struct_declarator(declarator, base_spec));
+            members.push_back(decode_struct_declarator(declarator, base_type));
 
         return members;
     }
 
-    StructMember Generator::decode_struct_declarator(CParser::StructDeclaratorContext* context, TypeSpecification base_spec) {
+    Member Generator::decode_struct_declarator(CParser::StructDeclaratorContext* context, std::shared_ptr<Type> base_type) {
         const CodeLocation location = locate(context);
         if (context->gnuAttributes())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "GNU attributes are not implemented", location);
@@ -348,13 +368,15 @@ namespace toycc::ir {
         else if (!context->declarator())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Anonymous bitfields are not implemented", location);
 
-        TypeSpecification member_spec = base_spec;
-        std::optional<std::string> name = decode_declarator(member_spec, context->declarator());
-        std::string member_name = name.value_or(anonymous_identifier());
-        return {.name = member_name, .location = location, .spec = member_spec};
+        Member member({}, base_type, location);
+        decode_declarator(member, context->declarator());
+        if (member.name.empty())
+            member.name = anonymous_identifier();
+        return member;
     }
 
-    std::optional<std::string> Generator::decode_declarator(TypeSpecification& spec, CParser::DeclaratorContext* context) {
+    // Decode a member or variable declarator, updates its type with the qualifiers found in the declarator, and may update its name if one is provided
+    void Generator::decode_declarator(Member& member, CParser::DeclaratorContext* context) {
         if (context->gnuAttribute())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not implemented", locate(context));
         if (!context->gccDeclaratorExtension().empty())
@@ -363,29 +385,29 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Declarator-level specifiers are not implemented", locate(context));
 
         if (context->pointer())
-            spec.pointer_spec.insert_range(spec.pointer_spec.cbegin(), decode_pointer_spec(context->pointer()));
+            member.type = decode_pointer_spec(context->pointer(), member.type);
 
         if (context->declarator())
-            return decode_declarator(spec, context->declarator());
+            return decode_declarator(member, context->declarator());
         else if (context->directDeclarator())
-            return decode_direct_declarator(spec, context->directDeclarator());
+            return decode_direct_declarator(member, context->directDeclarator());
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()));
     }
 
-    std::optional<std::string> Generator::decode_direct_declarator(TypeSpecification& spec, CParser::DirectDeclaratorContext* context) {
+    void Generator::decode_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
         const CodeLocation location = locate(context);
 
         if (context->attributeSpecifierSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", location);
 
         if (context->Identifier() && !context->DigitSequence())  // Identifier alternative
-            return context->Identifier()->getText();
+            member.name = context->Identifier()->getText();
         else if (context->declarator() && context->LeftParen() && context->RightParen())  // Parenthesized alternative
-            return decode_declarator(spec, context->declarator());
+            decode_declarator(member, context->declarator());
         else if (context->directDeclarator() && context->LeftBracket() && context->RightBracket())  // Array alternatives
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Array declarators are not implemented", location);
         else if (context->directDeclarator() && context->LeftParen() && context->RightParen())  // Function alternative
-            return decode_function_direct_declarator(spec, context);
+            return decode_function_direct_declarator(member, context);
         else if (context->Identifier() && context->DigitSequence())  // Bitfield alternative
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfields are not implemented", location);
         else if (context->vcSpecificModifer())  // VC-specific alternatives
@@ -395,50 +417,45 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()), location);
     }
 
-    std::optional<std::string> Generator::decode_function_direct_declarator(TypeSpecification& spec, CParser::DirectDeclaratorContext* context) {
+    void Generator::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
         if (context->attributeSpecifierSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
 
-        spec.is_function_type = true;
-        std::optional<std::string> name = decode_direct_declarator(spec, context->directDeclarator());
-
+        decode_direct_declarator(member, context->directDeclarator());
+        std::shared_ptr<FunctionType> function_type = FunctionType::make(anonymous_type(), locate(context), member.type);
         if (context->parameterTypeList())
-            spec.parameters.append_range(decode_parameter_type_list(context->parameterTypeList()));
+            function_type->parameters = decode_parameter_type_list(context->parameterTypeList());
         // Otherwise, no parameters
 
-        return name;
+        member.type = function_type;
     }
 
-    std::vector<Declaration> Generator::decode_parameter_type_list(CParser::ParameterTypeListContext* context) {
+    std::vector<Member> Generator::decode_parameter_type_list(CParser::ParameterTypeListContext* context) {
         if (context->Ellipsis())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Variadic functions are not implemented", locate(context));
 
         return decode_parameter_list(context->parameterList());
     }
 
-    std::vector<Declaration> Generator::decode_parameter_list(CParser::ParameterListContext* context) {
-        std::vector<Declaration> parameters;
-        for (CParser::ParameterDeclarationContext* parameter : context->parameterDeclaration()) {
-            Declaration declaration = decode_parameter_declaration(parameter);
-            if (declaration.spec.is_void()) {
-                if (!declaration.name.empty() || context->parameterDeclaration().size() > 1)
-                    throw Diagnostic(DiagnosticLevel::ERROR, "Invalid void parameter declaration", locate(parameter));
-            } else {
-                parameters.push_back(declaration);  // Only add non-void parameters
-            }
-        }
+    std::vector<Member> Generator::decode_parameter_list(CParser::ParameterListContext* context) {
+        std::vector<Member> parameters;
+        for (CParser::ParameterDeclarationContext* parameter : context->parameterDeclaration())
+            parameters.push_back(decode_parameter_declaration(parameter));
 
         return parameters;
     }
 
-    Declaration Generator::decode_parameter_declaration(CParser::ParameterDeclarationContext* context) {
+    Member Generator::decode_parameter_declaration(CParser::ParameterDeclarationContext* context) {
         Declaration parameter;
-
         decode_declaration_specifiers(parameter, context->declarationSpecifiers());
+
+        // The syntax allows it, but the semantics don't
+        if (parameter.storage.without(StorageClass::AUTO) || parameter.function_spec)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Function parameters can't have storage classes or function specifiers", locate(context));
 
         std::optional<std::string> name;
         if (context->declarator())
-            name = decode_declarator(parameter.spec, context->declarator());
+            decode_declarator(parameter, context->declarator());
         else if (context->abstractDeclarator())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Abstract parameter declarators are not implemented", locate(context));
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No declarator found in parameter declaration", locate(context));
@@ -446,22 +463,19 @@ namespace toycc::ir {
         if (name.has_value())
             parameter.name = name.value();
 
-        parameter.storage |= StorageClass::PARAMETER;
-        return parameter;
+        return static_cast<Member>(parameter);
     }
 
-    std::vector<Flags<TypeQualifier>> Generator::decode_pointer_spec(CParser::PointerContext* context) {
-        std::vector<Flags<TypeQualifier>> pointer_spec;
+    std::shared_ptr<Type> Generator::decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> type) {
         for (CParser::PointerLevelContext* level : context->pointerLevel()) {
             if (level->Caret())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Carets in pointer specification are not supported", locate(level));
 
+            type = PointerType::make(anonymous_type(), locate(level), type);
             if (level->typeQualifierList())
-                pointer_spec.push_back(decode_type_qualifier_list(level->typeQualifierList()));
-            else
-                pointer_spec.emplace_back();
+                type = QualifiedType::make(anonymous_type(), locate(level), type, decode_type_qualifier_list(level->typeQualifierList()));
         }
 
-        return pointer_spec;
+        return type;
     }
 }

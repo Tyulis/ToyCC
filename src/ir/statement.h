@@ -28,7 +28,7 @@ namespace toycc::ir {
         };
 
         enum class ConversionOperation {
-            COPY, FLOAT_TO_FLOAT, INT_TO_FLOAT, BOOL_TO_FLOAT, BOOL_TO_INT,
+            COPY, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT,
         };
     }
 

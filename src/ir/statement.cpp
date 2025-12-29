@@ -69,8 +69,7 @@ namespace toycc::ir::stmt {
             case ConversionOperation::COPY:           return "COPY";
             case ConversionOperation::FLOAT_TO_FLOAT: return "FLOAT_TO_FLOAT";
             case ConversionOperation::INT_TO_FLOAT:   return "INT_TO_FLOAT";
-            case ConversionOperation::BOOL_TO_FLOAT:  return "BOOL_TO_FLOAT";
-            case ConversionOperation::BOOL_TO_INT:    return "BOOL_TO_INT";
+            case ConversionOperation::FLOAT_TO_INT:   return "FLOAT_TO_INT";
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid conversion operation");
     }

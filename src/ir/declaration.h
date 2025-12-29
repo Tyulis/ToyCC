@@ -3,7 +3,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <optional>
 
 #include "code_location.h"
 #include "ir/type.h"
@@ -23,62 +22,32 @@ namespace toycc::ir {
         ADDRESSED    = 0x100,  // Something requires the memory address of this variable
     };
 
-    enum class TypeQualifier {
-        CONST    = 0x01,
-        VOLATILE = 0x02,
-        RESTRICT = 0x04,
-        ATOMIC   = 0x08,
-    };
-
     enum class FunctionSpecifier {
         INLINE      = 0x01,
         NORETURN    = 0x02,
         STDCALL     = 0x04,
     };
 
-    struct Declaration;
+    struct Member {
+        std::string name;
+        std::shared_ptr<Type> type;
+        CodeLocation location;
 
-    struct TypeSpecification {
-        std::vector<std::shared_ptr<Declaration>> array_spec;
-
-        bool is_function_type = false;
-        Flags<FunctionSpecifier> function_spec;
-        std::vector<Declaration> parameters;
-
-        std::vector<Flags<TypeQualifier>> pointer_spec;
-
-        std::shared_ptr<ir::Type> type;
-        Flags<TypeQualifier> qualifiers;
-        std::optional<size_t> custom_alignment;
-        std::optional<size_t> bitfield_length;
-
-        void check(bool in_struct, CodeLocation location) const;
-        TypeSpecification merge (TypeSpecification overriding, CodeLocation location) const;
-        bool is_void() const;
-        bool is_pointer_type() const;
-        bool is_array_type() const;
-        bool is_object_type() const;
+        Member() = default;
+        Member(std::string name, std::shared_ptr<Type> type, CodeLocation location);
         std::string ir_code() const;
-
-        // The "priority" here is array > function > pointer > object
-        TypeSpecification element_type() const;
-        TypeSpecification return_type() const;
-        TypeSpecification referenced_type() const;
-
-        bool operator== (const TypeSpecification& spec) const;
-        bool can_be_assigned_from(const TypeSpecification& spec) const;
     };
 
-    struct Declaration {
-        std::string name;
-        CodeLocation location;
+    struct Declaration : public Member {
         Flags<StorageClass> storage;
-        TypeSpecification spec;
+        Flags<FunctionSpecifier> function_spec;
 
-        void check(bool is_struct) const;
+        Declaration() = default;
+        Declaration(Member member, Flags<StorageClass> storage = {}, Flags<FunctionSpecifier> function_spec = {});
+        Declaration(std::string name, std::shared_ptr<Type> type, CodeLocation location, Flags<StorageClass> storage = {}, Flags<FunctionSpecifier> function_spec = {});
+
+        void check() const;
         std::string ir_code() const;
-
-        bool operator== (const Declaration& decl) const;
     };
 
     struct LValue {

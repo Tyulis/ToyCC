@@ -2,8 +2,8 @@
 #include "ir/generator.h"
 
 namespace toycc::ir {
-    Generator::ExpressionResult::ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, Generator& generator)
-        : location(location), result(result), is_lvalue(is_lvalue), generator(generator) {}
+    Generator::ExpressionResult::ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, bool is_constexpr, Generator& generator)
+        : location(location), result(result), is_lvalue(is_lvalue), is_constexpr(is_constexpr), generator(generator) {}
 
     std::shared_ptr<Declaration> Generator::ExpressionResult::load(CodeLocation location) {
         if (indices.empty())
@@ -38,14 +38,11 @@ namespace toycc::ir {
         if (!is_lvalue)
             throw Diagnostic(DiagnosticLevel::ERROR, "Postfix increment and decrement operations are only available on lvalues", location);
 
-        if (result->spec.is_pointer_type()) {
-            return apply_pointer_postfix_operations();
-        } else if (result->spec.is_object_type() && result->spec.type->identifier.category == TypeCategory::PRIMITIVE) {
-            const PrimitiveType& primitive = static_cast<const PrimitiveType&> (*result->spec.type);
-            if (primitive.semantic == PrimitiveSemantic::INTEGER)
-                apply_integer_postfix_operations();
-            else throw Diagnostic(DiagnosticLevel::ERROR, "Postfix increment and decrement operations are only available on integer and pointer lvalues", location);
-        } else throw Diagnostic(DiagnosticLevel::ERROR, "Postfix increment and decrement operations are only available on integer and pointer lvalues", location);
+        switch (result->type->category) {
+            case TypeCategory::POINTER:  return apply_pointer_postfix_operations();
+            case TypeCategory::INTEGER:  return apply_integer_postfix_operations();
+            default: throw Diagnostic(DiagnosticLevel::ERROR, "Postfix increment and decrement operations are only available on integer and pointer lvalues", location);
+        }
     }
 
     void Generator::ExpressionResult::apply_pointer_postfix_operations() {
@@ -56,11 +53,11 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Integer postfix operations are not implemented", location);
     }
 
-    ir::TypeSpecification Generator::ExpressionResult::type() const {
-        ir::TypeSpecification spec = result->spec;
+    std::shared_ptr<Type> Generator::ExpressionResult::type() const {
+        std::shared_ptr<Type> type = result->type;
         for (std::shared_ptr<Declaration> index : indices)
-            spec = spec.referenced_type();
-        return spec;
+            type = type->dereference(location);
+        return type;
     }
 
     LValue Generator::ExpressionResult::lvalue() const {
@@ -70,7 +67,7 @@ namespace toycc::ir {
     }
 
     // Wrap a simple declaration into an ExpressionResult
-    std::shared_ptr<Generator::ExpressionResult> Generator::make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue) {
-        return std::make_shared<ExpressionResult>(declaration->location, declaration, is_lvalue, *this);
+    std::shared_ptr<Generator::ExpressionResult> Generator::make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue, bool is_constexpr) {
+        return std::make_shared<ExpressionResult>(declaration->location, declaration, is_lvalue, is_constexpr, *this);
     }
 }

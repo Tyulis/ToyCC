@@ -32,13 +32,12 @@ namespace toycc::ir {
 
         Declaration declaration;
         decode_declaration_specifiers(declaration, context->declarationSpecifiers());
-        std::optional<std::string> name = decode_declarator(declaration.spec, context->declarator());
+        decode_declarator(declaration, context->declarator());
 
-        if (!name.has_value())
+        if (declaration.name.empty())
             throw Diagnostic(DiagnosticLevel::ERROR, "Anonymous functions are not allowed", locate(context));
-        declaration.name = name.value();
 
-        if (!declaration.spec.is_function_type)
+        if (declaration.type->category != TypeCategory::FUNCTION)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Function definition does not contain a function declaration", locate(context));
 
         std::shared_ptr<Declaration> function_decl = declare(declaration);
