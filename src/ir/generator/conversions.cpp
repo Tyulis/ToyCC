@@ -13,7 +13,7 @@ namespace toycc::ir {
             return ConversionValidity::INVALID;
 
         // Exact same type -> OK for coercion. From now on, types are not equal
-        if (destination == source)
+        if (*destination == *source)
             return ConversionValidity::IMPLICIT;
 
         // Get modifiers out of the way
