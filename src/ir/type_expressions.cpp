@@ -4,7 +4,7 @@
 #include "code_location.h"
 #include "ir/type.h"
 #include "ir/type_expressions.h"
-#include "arch/x86_64.h"
+#include "arch/datamodel.h"
 #include "util/alignment.hpp"
 
 
@@ -32,11 +32,11 @@ namespace toycc::ir {
     }
 
     size_t PointerType::size(CodeLocation) const {
-        return toycc::arch::POINTER_SIZE;
+        return arch::DATAMODEL->pointer_size();
     }
 
     size_t PointerType::alignment(CodeLocation) const {
-        return toycc::arch::POINTER_ALIGNMENT;
+        return arch::DATAMODEL->pointer_alignment();
     }
 
     bool PointerType::operator== (const Type& rhs) const {

@@ -54,6 +54,11 @@ add_executable(${PROJECT_NAME}
 	src/source_map.cpp
 	src/xml_output.cpp
 
+	src/arch/codegen.cpp
+	src/arch/datamodel.cpp
+	src/arch/x86_64/datamodel.cpp
+	src/arch/x86_64/exports.cpp
+
 	src/ir/declaration.cpp
 	src/ir/scope.cpp
 	src/ir/statement.cpp

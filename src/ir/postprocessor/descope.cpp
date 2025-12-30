@@ -16,12 +16,7 @@ namespace toycc::ir {
                 std::shared_ptr<stmt::Block> block = std::static_pointer_cast<stmt::Block>(statement);
                 descope(block->scope);
 
-                // Scope prefix to rename local variables but keep them identifiable
-                std::string scope_prefix;
-                if (statement->tag == stmt::Tag::FUNCTION)
-                    scope_prefix = make_scope_prefix(std::static_pointer_cast<stmt::Function>(block)->declaration->name);
-                else
-                    scope_prefix = make_scope_prefix();
+                std::string scope_prefix = make_scope_prefix();  // Scope prefix to rename local variables but keep them identifiable
 
                 // Move all statements of the block scope into the global scope
                 std::ranges::copy(block->scope->statements, std::inserter(scope->statements, scope->statements.begin() + position + 1));

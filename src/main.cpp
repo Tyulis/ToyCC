@@ -14,22 +14,30 @@
 #include "ir/postprocessor.h"
 #include "util/log.h"
 
+#include "arch/datamodel.h"
+#include "arch/x86_64/codegen.h"
+#include "arch/x86_64/datamodel.h"
+
 enum class SequenceStep : unsigned int {
     NONE = 0,
     PREPROCESS = 1,
     SOURCE_MAP = 2,
     PARSE = 3,
     POSTPROCESS = 4,
+    CODEGEN = 5,
 };
 
 int main(int argc, char** argv) {
+    toycc::arch::DATAMODEL = &toycc::arch::x86_64::DATAMODEL;  // Only x86_64 for now
+
     boost::program_options::options_description sequence_options("Sequence options");
     sequence_options.add_options()("preprocess,E",   "Only preprocess the source code")
                                   ("source-map",     "Preprocess and annotate the source lines")
                                   ("parse-lisp",     "Output the AST as Lisp")
                                   ("parse-xml",      "Output the AST as XML")
                                   ("parse-ir",       "Output the intermediate representation after semantic analysis")
-                                  ("process-ir",     "Output the postprocessed intermediate representation");
+                                  ("process-ir",     "Output the postprocessed intermediate representation")
+                                  ("codegen,S",      "Output the generated assembly code");
 
     boost::program_options::options_description generic_options("Generic options");
     generic_options.add_options()("help,h",        "Show this help message")
@@ -59,7 +67,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    SequenceStep target_step = SequenceStep::POSTPROCESS;
+    SequenceStep target_step = SequenceStep::CODEGEN;
     if (options.count("preprocess"))
         target_step = SequenceStep::PREPROCESS;
     if (options.count("source-map"))
@@ -128,6 +136,15 @@ int main(int argc, char** argv) {
             return 0;
         }
 
+        // -------- Code generation
+        std::stringstream assembly;
+        toycc::arch::x86_64::CodeGenerator codegen(processed_ir);
+        codegen(assembly);
+
+        if (target_step == SequenceStep::CODEGEN) {
+            output_stream.get() << assembly.str() << std::endl;
+            return 0;
+        }
     } catch (toycc::Diagnostic const& diagnostic) {
         toycc::log(diagnostic);
         return 2;

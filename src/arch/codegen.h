@@ -6,5 +6,12 @@
 #include "ir/scope.h"
 
 namespace toycc::arch {
-    void generate(std::ostream& output, std::shared_ptr<ir::Scope> scope);
+    class CodeGenerator {
+        public:
+            CodeGenerator(std::shared_ptr<ir::Scope> scope);
+            virtual void operator() (std::ostream& output) = 0;
+
+        private:
+            std::shared_ptr<ir::Scope> global_scope;
+    };
 }
