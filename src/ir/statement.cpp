@@ -11,7 +11,7 @@ namespace toycc::ir {
 
     std::string Statement::tag_repr() const {
         switch (tag) {
-            case stmt::Tag::NOP:         return "NOP";
+            case stmt::Tag::MARKER:      return "MARKER";
             case stmt::Tag::BLOCK:       return "BLOCK";
             case stmt::Tag::FUNCTION:    return "FUNCTION";
 
@@ -74,6 +74,10 @@ namespace toycc::ir::stmt {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid conversion operation");
     }
 
+    Marker::Marker(CodeLocation location) : Statement(Tag::MARKER, location) {}
+    std::string Marker::ir_code() const {
+        return "";
+    }
 
     Block::Block(CodeLocation location, std::shared_ptr<Scope> scope) : Statement(Tag::BLOCK, location), scope(scope) {}
     Block::Block(Tag tag, CodeLocation location, std::shared_ptr<Scope> scope) : Statement(tag, location), scope(scope) {}

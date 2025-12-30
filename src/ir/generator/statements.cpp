@@ -72,12 +72,12 @@ namespace toycc::ir {
         if (context->Else()) {
             const std::string label_after_else = anonymous_label();
             current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_after_else));  // If we entered the `if`, skip the `else` part
-            current_scope()->add_label(label_after_if);  // Must be after the `else` skip otherwise the `else` path jumps to the second jump statement
+            current_scope()->add_label(LabelType::INTERNAL, label_after_if, {}, locate(context));  // Must be after the `else` skip otherwise the `else` path jumps to the second jump statement
 
             decode_statement(context->statement(1), ScopeType::CONDITIONAL);
-            current_scope()->add_label(label_after_else);
+            current_scope()->add_label(LabelType::INTERNAL, label_after_else, {}, locate(context));
         } else {
-            current_scope()->add_label(label_after_if);
+            current_scope()->add_label(LabelType::INTERNAL, label_after_if, {}, locate(context));
         }
     }
 
@@ -105,13 +105,13 @@ namespace toycc::ir {
         emit_conditional_jump(entry_predicate_expression, exit_label, false, predicate_location);
 
         // Then the loop body
-        current_scope()->add_label(entry_label);
+        current_scope()->add_label(LabelType::INTERNAL, entry_label, {}, locate(context));
         decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
         // Second evaluation of the predicate into the loop : when true, jump back to the beginning of the loop
         std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
         emit_conditional_jump(loop_predicate_expression, entry_label, true, predicate_location);
-        current_scope()->add_label(exit_label);
+        current_scope()->add_label(LabelType::INTERNAL, exit_label, {}, locate(context));
     }
 
     void Generator::decode_do_while_statement(CParser::IterationStatementContext* context) {
@@ -119,13 +119,13 @@ namespace toycc::ir {
         const std::string exit_label  = anonymous_label();
 
         // Loop body, enter unconditionally
-        current_scope()->add_label(entry_label);
+        current_scope()->add_label(LabelType::INTERNAL, entry_label, {}, locate(context));
         decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
         // Evaluate the predicate at the end : when true, jump back to the beginning of the loop, otherwise fall through to exit
         std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
         emit_conditional_jump(loop_predicate_expression, entry_label, true, locate(context->expression()));
-        current_scope()->add_label(exit_label);
+        current_scope()->add_label(LabelType::INTERNAL, exit_label, {}, locate(context));
     }
 
     void Generator::decode_for_statement(CParser::IterationStatementContext* context) {
@@ -157,7 +157,7 @@ namespace toycc::ir {
             }
 
             // Then the loop body
-            current_scope()->add_label(entry_label);
+            current_scope()->add_label(LabelType::INTERNAL, entry_label, {}, locate(context));
             decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
             if (predicate_context) {
@@ -177,7 +177,7 @@ namespace toycc::ir {
             }
 
             // After the loop
-            current_scope()->add_label(exit_label);
+            current_scope()->add_label(LabelType::INTERNAL, exit_label, {}, locate(context));
         }
 
         current_scope()->add_statement(std::make_shared<stmt::Block>(locate(context), scope));

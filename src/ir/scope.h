@@ -24,6 +24,8 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> function;
             std::string entry_label;
             std::string exit_label;
+            std::vector<std::shared_ptr<Statement>> statements;
+            std::unordered_map<std::string, Label> labels;
 
             Scope(ScopeType type, std::shared_ptr<Declaration> function, std::string entry_label = {}, std::string exit_label = {});
 
@@ -37,12 +39,13 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> add_typedef(std::shared_ptr<Declaration> declaration);
             std::shared_ptr<Declaration> add_local(std::shared_ptr<Declaration> declaration);
             std::shared_ptr<Statement>   add_statement(std::shared_ptr<Statement> statement);
-            size_t add_label(std::string label);
+            size_t add_label(LabelType type, std::string name, std::string source_name, CodeLocation location);
 
-        private:
-            struct insertion_index {};
-            struct name_index {};
+            void clear_types();
 
+
+            struct insertion_index_tag {};
+            struct name_index_tag {};
             struct extract_declaration_name {
                 using result_type = std::string;
                 std::string operator() (std::shared_ptr<Declaration> decl) const {
@@ -51,12 +54,16 @@ namespace toycc::ir {
             };
 
             using ordered_declaration_map = multi_index_container<std::shared_ptr<Declaration>,
-                    indexed_by<random_access<tag<insertion_index>>, hashed_unique<tag<name_index>, extract_declaration_name>>>;
+                    indexed_by<random_access<tag<insertion_index_tag>>, hashed_unique<tag<name_index_tag>, extract_declaration_name>>>;
+            using insertion_index = ordered_declaration_map::index<insertion_index_tag>::type;
+            using name_index = ordered_declaration_map::index<name_index_tag>::type;
 
+            insertion_index& locals_list();
+
+        private:
             std::unordered_map<ir::TypeIdentifier, std::shared_ptr<Type>> types;
             ordered_declaration_map typedefs;
             ordered_declaration_map locals;
-            std::vector<std::shared_ptr<Statement>> statements;
-            std::unordered_map<std::string, size_t> labels;  // Label -> index in `statements`
+
     };
 }

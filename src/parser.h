@@ -8,6 +8,7 @@
 #include "source_map.h"
 #include "parser/CLexer.h"
 #include "parser/CParser.h"
+#include "ir/scope.h"
 
 namespace toycc {
     class ErrorHandler : public antlr4::BaseErrorListener {
@@ -30,7 +31,7 @@ namespace toycc {
 
             std::string to_lisp();
             std::string to_xml();
-            std::string to_ir();
+            std::shared_ptr<ir::Scope> to_ir();
 
         private:
             SourceMap source_map;

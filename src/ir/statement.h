@@ -7,7 +7,7 @@
 namespace toycc::ir {
     namespace stmt {
         enum class Tag {
-            NOP, BLOCK, FUNCTION,
+            MARKER, BLOCK, FUNCTION,
             LOAD_CONST, DEREF_LOAD, DEREF_STORE, COPY,
             ADDRESS_OF, UNARY_OP, BINARY_OP, CALL,
             JUMP, RETURN,
@@ -41,8 +41,26 @@ namespace toycc::ir {
         virtual std::string ir_code() const = 0;
     };
 
+    enum class LabelType {
+        NAMED, INTERNAL, FUNCTION,
+    };
+
+    struct Label {
+        LabelType type;
+        std::string name;
+        std::string source_name;
+        std::shared_ptr<Statement> target;
+        CodeLocation location;
+    };
+
     struct Scope;  // Forward declaration for compound statements
     namespace stmt {
+        // No-op statement used to mark label positions without needing to update all positions when labels are moved around
+        struct Marker : public Statement {
+            Marker(CodeLocation location);
+            virtual std::string ir_code() const override;
+        };
+
         struct Block : public Statement {
             std::shared_ptr<Scope> scope;
 

@@ -36,8 +36,8 @@ for test_source in $(find ${TESTSUITE_DIR} -iname '*.c') ; do
     NOF_TESTS_RUN=$(($NOF_TESTS_RUN + 1))
 
     case $1 in
-        --parse-ir)
-            CMD="$CC --parse-ir -o ${test_compiled} ${test_source}"
+        --parse-ir|--process-ir)
+            CMD="$CC $1 -o ${test_compiled} ${test_source}"
             echo "" >> ${TEST_LOG}
             echo ${CMD} >> ${TEST_LOG}
             if ${CMD} >> ${TEST_LOG} 2>&1 && [ -f ${test_compiled} ] ; then

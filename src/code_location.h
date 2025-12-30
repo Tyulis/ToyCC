@@ -8,4 +8,6 @@ namespace toycc {
         size_t line = 0;
         size_t character = 0;
     };
+
+    constexpr CodeLocation BUILTIN_LOCATION = {.filename = "<built-in>", .line = 0, .character = 0};
 }

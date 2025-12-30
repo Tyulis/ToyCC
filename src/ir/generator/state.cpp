@@ -2,15 +2,15 @@
 
 namespace toycc::ir {
     std::string Generator::anonymous_identifier() {
-        return std::format("@I{}", unique_id++);
+        return std::format("@G.I{}", unique_id++);
     }
 
     std::string Generator::anonymous_label() {
-        return std::format("@L{}", unique_id++);
+        return std::format("@G.L{}", unique_id++);
     }
 
     std::string Generator::anonymous_type() {
-        return std::format("@T{}", unique_id++);
+        return std::format("@G.T{}", unique_id++);
     }
 
     std::shared_ptr<Scope> Generator::current_scope() {

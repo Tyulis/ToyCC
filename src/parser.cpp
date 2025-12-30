@@ -57,11 +57,11 @@ namespace toycc {
         return listener.result();
     }
 
-    std::string Parser::to_ir() {
+    std::shared_ptr<ir::Scope> Parser::to_ir() {
         toycc::CParser::CompilationUnitContext* unit = parser.compilationUnit();
         std::shared_ptr<ir::Scope> ir = ir::generate_ir(source_map, unit);
 
         error_handler.check();
-        return ir->ir_code();
+        return ir;
     }
 }

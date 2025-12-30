@@ -1,5 +1,6 @@
 #include <list>
 #include <sstream>
+#include <algorithm>
 
 #include "diagnostic.h"
 #include "ir/scope.h"
@@ -11,8 +12,12 @@ namespace toycc::ir {
 
     std::string Scope::ir_code() const {
         std::vector<std::list<std::string>> label_positions(statements.size() + 1);
-        for (std::pair<std::string, size_t> label : labels)
-            label_positions[label.second].push_back(label.first);
+        for (std::pair<std::string, Label> label : labels) {
+            auto it = std::ranges::find(statements, label.second.target);
+            if (it == statements.end())
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Marker for label `{}` not found in the current scope", label.second.name), label.second.location);
+            label_positions[it - statements.begin()].push_back(label.first);
+        }
 
         std::stringstream code;
         for (std::pair<TypeIdentifier, std::shared_ptr<Type>> item : types)
@@ -25,7 +30,9 @@ namespace toycc::ir {
         for (size_t statement_index = 0; statement_index < statements.size(); statement_index++) {
             for (std::string label : label_positions[statement_index])
                 code << label << ":\n";
-            code << statements[statement_index]->ir_code() << ";\n";
+            std::string statement_code = statements[statement_index]->ir_code();
+            if (!statement_code.empty())
+                code << statement_code << ";\n";
         }
         for (std::string label : label_positions[statements.size()])
             code << label << ":\n";
@@ -39,14 +46,14 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Declaration> Scope::find_typedef(std::string name) {
-        auto& index = typedefs.get<name_index>();
+        auto& index = typedefs.get<name_index_tag>();
         auto element = index.find(name);
         if (element == index.end())  return nullptr;
         else                         return *element;
     }
 
     std::shared_ptr<Declaration> Scope::find_local(std::string name) {
-        auto& index = locals.get<name_index>();
+        auto& index = locals.get<name_index_tag>();
         auto element = index.find(name);
         if (element == index.end())  return nullptr;
         else                         return *element;
@@ -64,21 +71,19 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Declaration> Scope::add_typedef(std::shared_ptr<Declaration> declaration) {
-        auto& index = typedefs.get<name_index>();
-        auto existing_typedef = index.find(declaration->name);
-        if (existing_typedef != index.end())
+        std::shared_ptr<Declaration> existing_typedef = find_typedef(declaration->name);
+        if (existing_typedef.get() != nullptr)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Typedef `{}` is already defined in this scope", declaration->name), declaration->location)
-                  .add_note(DiagnosticLevel::NOTE, "Already defined here", (*existing_typedef)->location);
+                  .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_typedef->location);
         typedefs.push_back(declaration);
         return declaration;
     }
 
     std::shared_ptr<Declaration> Scope::add_local(std::shared_ptr<Declaration> declaration) {
-        auto& index = locals.get<name_index>();
-        auto existing_decl = index.find(declaration->name);
-        if (existing_decl != index.end())
+        std::shared_ptr<Declaration> existing_decl = find_local(declaration->name);
+        if (existing_decl.get() != nullptr)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name `{}` is already defined in this scope", declaration->name), declaration->location)
-            .add_note(DiagnosticLevel::NOTE, "Already defined here", (*existing_decl)->location);
+                  .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_decl->location);
         locals.push_back(declaration);
         return declaration;
     }
@@ -88,11 +93,22 @@ namespace toycc::ir {
         return statement;
     }
 
-    size_t Scope::add_label(std::string label) {
-        auto existing_label = labels.find(label);
+    size_t Scope::add_label(LabelType type, std::string name, std::string source_name, CodeLocation location) {
+        auto existing_label = labels.find(name);
         if (existing_label != labels.end())
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label `{}` already exists in this scope", label));
-        labels[label] = statements.size();
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label `{}` already exists in this scope", name));
+
+        std::shared_ptr<Statement> marker = add_statement(std::make_shared<stmt::Marker>(location));
+        labels[name] = Label {.type = type, .name = name, .source_name = source_name, .target = marker, .location = location};
         return statements.size();
+    }
+
+    void Scope::clear_types() {
+        types.clear();
+        typedefs.clear();
+    }
+
+    Scope::insertion_index& Scope::locals_list() {
+        return locals.get<insertion_index_tag>();
     }
 }

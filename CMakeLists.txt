@@ -73,6 +73,11 @@ add_executable(${PROJECT_NAME}
 	src/ir/generator/symbols.cpp
 	src/ir/generator/temporarygenerator.cpp
 
+	src/ir/postprocessor/descope.cpp
+	src/ir/postprocessor/detype.cpp
+	src/ir/postprocessor/exports.cpp
+	src/ir/postprocessor/state.cpp
+
 	src/parserbase/CParserBase.cpp
 	src/parserbase/SymbolTable.cpp
 

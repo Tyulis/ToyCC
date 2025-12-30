@@ -10,6 +10,8 @@
 #include "source_map.h"
 #include "diagnostic.h"
 #include "preprocess.h"
+#include "ir/scope.h"
+#include "ir/postprocessor.h"
 #include "util/log.h"
 
 enum class SequenceStep : unsigned int {
@@ -17,6 +19,7 @@ enum class SequenceStep : unsigned int {
     PREPROCESS = 1,
     SOURCE_MAP = 2,
     PARSE = 3,
+    POSTPROCESS = 4,
 };
 
 int main(int argc, char** argv) {
@@ -25,7 +28,8 @@ int main(int argc, char** argv) {
                                   ("source-map",     "Preprocess and annotate the source lines")
                                   ("parse-lisp",     "Output the AST as Lisp")
                                   ("parse-xml",      "Output the AST as XML")
-                                  ("parse-ir",       "Output the intermediate representation");
+                                  ("parse-ir",       "Output the intermediate representation after semantic analysis")
+                                  ("process-ir",     "Output the postprocessed intermediate representation");
 
     boost::program_options::options_description generic_options("Generic options");
     generic_options.add_options()("help,h",        "Show this help message")
@@ -55,13 +59,15 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    SequenceStep target_step = SequenceStep::PARSE;
+    SequenceStep target_step = SequenceStep::POSTPROCESS;
     if (options.count("preprocess"))
         target_step = SequenceStep::PREPROCESS;
     if (options.count("source-map"))
         target_step = SequenceStep::SOURCE_MAP;
     if (options.count("parse-lisp") || options.count("parse-xml") || options.count("parse-ir"))
         target_step = SequenceStep::PARSE;
+    if (options.count("process-ir"))
+        target_step = SequenceStep::POSTPROCESS;
 
     if (target_step == SequenceStep::NONE)
         return 0;
@@ -108,9 +114,20 @@ int main(int argc, char** argv) {
             else if (options.count("parse-xml"))
                 output_stream.get() << parser.to_xml() << std::endl;
             else  // if (options.count("parse-ir"))  // Default to IR
-                output_stream.get() << parser.to_ir() << std::endl;
+                output_stream.get() << parser.to_ir()->ir_code() << std::endl;
             return 0;
         }
+
+        // -------- Postprocessing
+        std::shared_ptr<toycc::ir::Scope> ir = parser.to_ir();
+        toycc::ir::PostProcessor postprocessor(ir);
+        std::shared_ptr<toycc::ir::Scope> processed_ir = postprocessor();
+
+        if (target_step == SequenceStep::POSTPROCESS) {
+            output_stream.get() << processed_ir->ir_code() << std::endl;
+            return 0;
+        }
+
     } catch (toycc::Diagnostic const& diagnostic) {
         toycc::log(diagnostic);
         return 2;

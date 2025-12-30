@@ -314,6 +314,7 @@ namespace toycc::ir {
         if (underlying_type->category != TypeCategory::BOOL || underlying_type->category != TypeCategory::INTEGER)
             throw Diagnostic(DiagnosticLevel::ERROR, "A bitfield type must be built upon a boolean or integer type", location);
 
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Should bitfields be simplified in semantic analysis ?", location);
         return std::make_shared<BitfieldType> (BitfieldType {name, location, underlying_type, size_bits});
     }
 

@@ -3,8 +3,6 @@
 #include "arch/x86_64.h"
 
 namespace toycc::ir {
-    constexpr static CodeLocation BUILTIN_LOCATION = {.filename = "<built-in>", .line = 0, .character = 0};
-
     void Generator::init_global_scope() {
         // Initialize the global scope
         scope_stack.push_back(std::make_shared<Scope>(ScopeType::GLOBAL, nullptr));

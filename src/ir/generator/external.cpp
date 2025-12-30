@@ -42,6 +42,8 @@ namespace toycc::ir {
 
         std::shared_ptr<Declaration> function_decl = declare(declaration);
         std::shared_ptr<Scope> function_scope = create_function_scope(function_decl);
+
+        current_scope()->add_label(LabelType::FUNCTION, declaration.name, declaration.name, locate(context));
         current_scope()->add_statement(std::make_shared<stmt::Function>(locate(context), function_scope, function_decl));
         decode_compound_statement(context->compoundStatement(), function_scope);
     }
