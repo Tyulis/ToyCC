@@ -103,6 +103,19 @@ namespace toycc::ir {
         return statements.size();
     }
 
+    std::shared_ptr<Declaration> Scope::pop_local(std::string name) {
+        auto& index = locals.get<name_index_tag>();
+        auto element = index.find(name);
+        if (element == index.end()) {
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Attempted to pop local name `{}`, not found in this scope", name));
+        } else {
+            std::shared_ptr<Declaration> declaration = *element;
+            index.erase(element);
+            return declaration;
+        }
+
+    }
+
     void Scope::clear_types() {
         types.clear();
         typedefs.clear();

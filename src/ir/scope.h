@@ -41,6 +41,8 @@ namespace toycc::ir {
             std::shared_ptr<Statement>   add_statement(std::shared_ptr<Statement> statement);
             size_t add_label(LabelType type, std::string name, std::string source_name, CodeLocation location);
 
+            std::shared_ptr<Declaration> pop_local(std::string name);
+
             void clear_types();
 
 
