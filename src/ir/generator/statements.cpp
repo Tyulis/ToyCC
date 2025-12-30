@@ -115,7 +115,17 @@ namespace toycc::ir {
     }
 
     void Generator::decode_do_while_statement(CParser::IterationStatementContext* context) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Do/while statements are not implemented", locate(context));
+        const std::string entry_label = anonymous_label();
+        const std::string exit_label  = anonymous_label();
+
+        // Loop body, enter unconditionally
+        current_scope()->add_label(entry_label);
+        decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
+
+        // Evaluate the predicate at the end : when true, jump back to the beginning of the loop, otherwise fall through to exit
+        std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
+        emit_conditional_jump(loop_predicate_expression, entry_label, true, locate(context->expression()));
+        current_scope()->add_label(exit_label);
     }
 
     void Generator::decode_for_statement(CParser::IterationStatementContext* context) {
