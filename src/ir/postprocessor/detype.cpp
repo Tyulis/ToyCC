@@ -82,7 +82,10 @@ namespace toycc::ir {
         for (Member parameter : type->parameters)
             detyped_parameters.emplace_back(parameter.name, to_storage_type(parameter.type), parameter.location);
 
-        return FunctionType::make(type->name, type->location, to_storage_type(type->return_type), detyped_parameters);
+        std::shared_ptr<Type> return_type = type->return_type;
+        if (return_type->category != TypeCategory::VOID)
+            return_type = to_storage_type(return_type);
+        return FunctionType::make(type->name, type->location, return_type, detyped_parameters);
     }
 
     std::shared_ptr<Type> PostProcessor::to_bitfield_storage_type(std::shared_ptr<BitfieldType> type) {
