@@ -2,19 +2,23 @@
 
 namespace toycc::ir {
     std::string Generator::anonymous_identifier() {
-        return std::format("@G.I{}", unique_id++);
+        return std::format(".GI{}", unique_id++);
     }
 
     std::string Generator::anonymous_label() {
-        return std::format("@G.L{}", unique_id++);
+        return std::format(".GL{}", unique_id++);
     }
 
     std::string Generator::anonymous_type() {
-        return std::format("@G.T{}", unique_id++);
+        return std::format(".GT{}", unique_id++);
     }
 
     std::shared_ptr<Scope> Generator::current_scope() {
         return scope_stack.back();
+    }
+
+    ScopeFrame Generator::in_scope(std::shared_ptr<Scope> scope) {
+        return {scope_stack, scope};
     }
 
     CodeLocation Generator::locate(antlr4::ParserRuleContext* context) const {

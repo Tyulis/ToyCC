@@ -7,6 +7,7 @@
 #include "ir/type_expressions.h"
 #include "ir/declaration.h"
 #include "ir/scope.h"
+#include "ir/scopeframe.h"
 #include "ir/statement.h"
 #include "ir/type.h"
 #include "parser/CParser.h"
@@ -19,7 +20,7 @@ namespace toycc::ir {
     class Generator {
     private:
         const SourceMap& source_map;
-        std::deque<std::shared_ptr<Scope>> scope_stack;
+        ScopeStack scope_stack;
 
         size_t unique_id = 0;
 
@@ -212,11 +213,12 @@ namespace toycc::ir {
         std::string anonymous_identifier();
         std::string anonymous_label();
         std::string anonymous_type();
+
         std::shared_ptr<Scope> current_scope();
+        ScopeFrame in_scope(std::shared_ptr<Scope> scope);
 
         CodeLocation locate(antlr4::ParserRuleContext* context) const;
         CodeLocation locate(antlr4::tree::TerminalNode* context) const;
-
 
         // -------- Symbol management -> ir/generator/symbols.cpp
         void init_global_scope();
@@ -234,17 +236,5 @@ namespace toycc::ir {
         std::shared_ptr<Declaration> resolve(std::string name, CodeLocation location);
         std::shared_ptr<Type> resolve_type_without_error(TypeIdentifier identifier);
         std::shared_ptr<Type> resolve_type(TypeIdentifier identifier, CodeLocation location);
-
-        // -------- RAII class for pushing and popping scopes off the scope stack -> ir/generator/scopeframe.cpp
-        class ScopeFrame {
-            public:
-                ScopeFrame(std::deque<std::shared_ptr<Scope>>& scope_stack, std::shared_ptr<Scope> scope);
-                ~ScopeFrame();
-
-            private:
-                std::deque<std::shared_ptr<Scope>>& scope_stack;
-        };
-
-        ScopeFrame in_scope(std::shared_ptr<Scope> scope);
     };
 }

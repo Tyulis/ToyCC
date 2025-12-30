@@ -25,7 +25,8 @@ namespace toycc::ir {
             std::string entry_label;
             std::string exit_label;
             std::vector<std::shared_ptr<Statement>> statements;
-            std::unordered_map<std::string, Label> labels;
+            std::unordered_map<std::string, std::shared_ptr<Label>> labels;
+            std::unordered_multimap<std::shared_ptr<Statement>, std::shared_ptr<Label>> markers;
 
             Scope(ScopeType type, std::shared_ptr<Declaration> function, std::string entry_label = {}, std::string exit_label = {});
 
@@ -39,7 +40,9 @@ namespace toycc::ir {
             std::shared_ptr<Declaration> add_typedef(std::shared_ptr<Declaration> declaration);
             std::shared_ptr<Declaration> add_local(std::shared_ptr<Declaration> declaration);
             std::shared_ptr<Statement>   add_statement(std::shared_ptr<Statement> statement);
-            size_t add_label(LabelType type, std::string name, std::string source_name, CodeLocation location);
+            std::shared_ptr<Label>       add_label(LabelType type, std::string name, CodeLocation location);
+            std::shared_ptr<Label>       add_label(LabelType type, std::string name, std::shared_ptr<Statement> marker, CodeLocation location);
+            std::shared_ptr<Label>       add_label(std::shared_ptr<Label> label);
 
             std::shared_ptr<Declaration> pop_local(std::string name);
 

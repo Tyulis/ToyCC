@@ -1,6 +1,4 @@
-#include <list>
 #include <sstream>
-#include <algorithm>
 
 #include "diagnostic.h"
 #include "ir/scope.h"
@@ -11,14 +9,6 @@ namespace toycc::ir {
         : type(type), function(function), entry_label(entry_label), exit_label(exit_label) {}
 
     std::string Scope::ir_code() const {
-        std::vector<std::list<std::string>> label_positions(statements.size() + 1);
-        for (std::pair<std::string, Label> label : labels) {
-            auto it = std::ranges::find(statements, label.second.target);
-            if (it == statements.end())
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Marker for label `{}` not found in the current scope", label.second.name), label.second.location);
-            label_positions[it - statements.begin()].push_back(label.first);
-        }
-
         std::stringstream code;
         for (std::pair<TypeIdentifier, std::shared_ptr<Type>> item : types)
             code << "#type " << item.second->ir_code() << " " << item.second->name << ";\n";
@@ -27,15 +17,14 @@ namespace toycc::ir {
         for (std::shared_ptr<Declaration> item : locals)
             code << item->ir_code() << ";\n";
 
-        for (size_t statement_index = 0; statement_index < statements.size(); statement_index++) {
-            for (std::string label : label_positions[statement_index])
-                code << label << ":\n";
-            std::string statement_code = statements[statement_index]->ir_code();
+        for (std::shared_ptr<Statement> statement : statements) {
+            const auto [begin, end] = markers.equal_range(statement);
+            for (auto label_it = begin; label_it != end; label_it++)
+                code << label_it->second->name << ":\n";
+            std::string statement_code = statement->ir_code();
             if (!statement_code.empty())
                 code << statement_code << ";\n";
         }
-        for (std::string label : label_positions[statements.size()])
-            code << label << ":\n";
         return rtrim(code.str());
     }
 
@@ -84,6 +73,12 @@ namespace toycc::ir {
         if (existing_decl.get() != nullptr)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name `{}` is already defined in this scope", declaration->name), declaration->location)
                   .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_decl->location);
+
+        auto existing_label = labels.find(declaration->name);
+        if (existing_label != labels.end())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name `{}` is already used for a label", declaration->name))
+                  .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_label->second->location);
+
         locals.push_back(declaration);
         return declaration;
     }
@@ -93,14 +88,30 @@ namespace toycc::ir {
         return statement;
     }
 
-    size_t Scope::add_label(LabelType type, std::string name, std::string source_name, CodeLocation location) {
-        auto existing_label = labels.find(name);
+    std::shared_ptr<Label> Scope::add_label(std::shared_ptr<Label> label) {
+        auto existing_label = labels.find(label->name);
         if (existing_label != labels.end())
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label `{}` already exists in this scope", name));
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label `{}` already exists in this scope", label->name), label->location)
+                  .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_label->second->location);
 
+        std::shared_ptr<Declaration> existing_decl = find_local(label->name);
+        if (existing_decl.get() != nullptr)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label name `{}` is already used for a declaration in this scope", label->name), label->location)
+                  .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_decl->location);
+
+        labels.insert({label->name, label});
+        markers.insert({label->marker, label});
+        return label;
+    }
+
+    std::shared_ptr<Label> Scope::add_label(LabelType type, std::string name, std::shared_ptr<Statement> marker, CodeLocation location) {
+        std::shared_ptr<Label> label = std::make_shared<Label>(type, name, marker, location);
+        return add_label(label);
+    }
+
+    std::shared_ptr<Label> Scope::add_label(LabelType type, std::string name, CodeLocation location) {
         std::shared_ptr<Statement> marker = add_statement(std::make_shared<stmt::Marker>(location));
-        labels[name] = Label {.type = type, .name = name, .source_name = source_name, .target = marker, .location = location};
-        return statements.size();
+        return add_label(type, name, marker, location);
     }
 
     std::shared_ptr<Declaration> Scope::pop_local(std::string name) {

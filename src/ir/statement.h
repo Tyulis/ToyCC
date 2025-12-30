@@ -48,8 +48,7 @@ namespace toycc::ir {
     struct Label {
         LabelType type;
         std::string name;
-        std::string source_name;
-        std::shared_ptr<Statement> target;
+        std::shared_ptr<Statement> marker;
         CodeLocation location;
     };
 

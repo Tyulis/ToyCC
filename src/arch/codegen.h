@@ -11,7 +11,7 @@ namespace toycc::arch {
             CodeGenerator(std::shared_ptr<ir::Scope> scope);
             virtual void operator() (std::ostream& output) = 0;
 
-        private:
+        protected:
             std::shared_ptr<ir::Scope> global_scope;
     };
 }

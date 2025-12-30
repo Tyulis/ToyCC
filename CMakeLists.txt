@@ -58,9 +58,14 @@ add_executable(${PROJECT_NAME}
 	src/arch/datamodel.cpp
 	src/arch/x86_64/datamodel.cpp
 	src/arch/x86_64/exports.cpp
+	src/arch/x86_64/global.cpp
+	src/arch/x86_64/state.cpp
+	src/arch/x86_64/statements.cpp
+	src/arch/x86_64/write.cpp
 
 	src/ir/declaration.cpp
 	src/ir/scope.cpp
+	src/ir/scopeframe.cpp
 	src/ir/statement.cpp
 	src/ir/type.cpp
 	src/ir/type_expressions.cpp
@@ -72,7 +77,6 @@ add_executable(${PROJECT_NAME}
 	src/ir/generator/expressions.cpp
 	src/ir/generator/external.cpp
 	src/ir/generator/literals.cpp
-	src/ir/generator/scopeframe.cpp
 	src/ir/generator/state.cpp
 	src/ir/generator/statements.cpp
 	src/ir/generator/symbols.cpp
