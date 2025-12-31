@@ -1,47 +1,80 @@
 #include "diagnostic.h"
 #include "ir/generator.h"
+#include <variant>
 
 namespace toycc::ir {
-    Generator::ExpressionResult::ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, bool is_constexpr, Generator& generator)
-        : location(location), result(result), is_lvalue(is_lvalue), is_constexpr(is_constexpr), generator(generator) {}
+    Generator::ExpressionResult::ExpressionResult(LValue result, CodeLocation location, Generator& generator)
+        : result(result), location(location), generator(generator) {}
 
-    std::shared_ptr<Declaration> Generator::ExpressionResult::load(CodeLocation location) {
-        if (indices.empty())
-            return result;
-
-        // Otherwise emit a dereference
-        std::shared_ptr<Declaration> destination = generator.declare_temporary(type(), location);
-        generator.current_scope()->add_statement(std::make_shared<stmt::DerefLoad>(location, destination, lvalue()));
-        return destination;
-    }
-
-    void Generator::ExpressionResult::store(std::shared_ptr<Declaration> source, CodeLocation location) {
-        if (!is_lvalue)
-            throw Diagnostic(DiagnosticLevel::ERROR, "Can't store into an rvalue", location);
-
-        std::shared_ptr<Declaration> stored_value = generator.emit_implicit_conversion(type(), source, location);
-
-        if (indices.empty())
-            generator.current_scope()->add_statement(std::make_shared<stmt::Copy>(location, stmt::ConversionOperation::COPY, result, stored_value));
-        else
-            generator.current_scope()->add_statement(std::make_shared<stmt::DerefStore>(location, lvalue(), stored_value));
-    }
+    Generator::ExpressionResult::ExpressionResult(RValue result, CodeLocation location, Generator& generator)
+        : result(result), location(location), generator(generator) {}
 
     Generator::ExpressionResult::~ExpressionResult() {
         if (!postfix_increments.empty())
             apply_postfix_operations();
     }
 
+    std::shared_ptr<Type> Generator::ExpressionResult::type() const {
+        return std::visit([&](auto&& val) {return val.type();}, result);
+    }
+
+    bool Generator::ExpressionResult::is_lvalue() const {
+        return std::holds_alternative<LValue>(result);
+    }
+
+    LValue Generator::ExpressionResult::lvalue() const {
+        if (!is_lvalue())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to convert an rvalue expression result to an lvalue", location);
+        return std::get<LValue>(result);
+    }
+
+    RValue Generator::ExpressionResult::load(CodeLocation location) const {
+        if (std::holds_alternative<RValue>(result))
+            return std::get<RValue>(result);
+
+        LValue lvalue = std::get<LValue>(result);
+        if (lvalue.indices.empty())
+            return lvalue.base;
+
+        // Otherwise emit a dereference
+        std::shared_ptr<Declaration> destination = generator.declare_temporary(type(), location);
+        generator.emit(Statement::make_load(location, lvalue, destination));
+        return destination;
+    }
+
+    void Generator::ExpressionResult::store(RValue source, CodeLocation location) const {
+        if (!is_lvalue())
+            throw Diagnostic(DiagnosticLevel::ERROR, "Can't store into an rvalue", location);
+
+        LValue lvalue = std::get<LValue>(result);
+        RValue stored_value = generator.emit_implicit_conversion(lvalue.type(), source, location);
+        generator.emit(Statement::make_unary_operation(location, StatementTag::COPY, stored_value, lvalue));
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::ExpressionResult::dereference(RValue index, CodeLocation location) const {
+        if (is_lvalue()) {
+            LValue lvalue = std::get<LValue>(result);
+            lvalue.indices.push_back(index);
+            return generator.make_expression(lvalue, location);
+        } else {
+            RValue pointer = std::get<RValue>(result);
+            LValue dereferenced(pointer, location, {generator.make_constant_zero(TypeCategory::INTEGER, location)});
+            return generator.make_expression(dereferenced, location);
+        }
+    }
+
     void Generator::ExpressionResult::apply_postfix_operations() {
         // When the expression goes out of scope, apply the postfix operations
         // ++ and -- are only valid on pointer and integer lvalues
-        if (!is_lvalue)
+        if (!is_lvalue())
             throw Diagnostic(DiagnosticLevel::ERROR, "Postfix increment and decrement operations are only available on lvalues", location);
 
-        switch (result->type->category) {
-            case TypeCategory::POINTER:  return apply_pointer_postfix_operations();
-            case TypeCategory::INTEGER:  return apply_integer_postfix_operations();
-            default: throw Diagnostic(DiagnosticLevel::ERROR, "Postfix increment and decrement operations are only available on integer and pointer lvalues", location);
+        LValue destination = std::get<LValue>(result);
+        RValue left = load(location);
+
+        for (int increment : postfix_increments) {
+            Constant right = {.value = IntegerConstant(increment), .location = location, .type = generator.literal_integer_type};
+            generator.emit(Statement::make_binary_operation(location, StatementTag::PLUS, left, right, destination));
         }
     }
 
@@ -53,21 +86,13 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Integer postfix operations are not implemented", location);
     }
 
-    std::shared_ptr<Type> Generator::ExpressionResult::type() const {
-        std::shared_ptr<Type> type = result->type;
-        for (std::shared_ptr<Declaration> index : indices)
-            type = type->dereference(location);
-        return type;
-    }
-
-    LValue Generator::ExpressionResult::lvalue() const {
-        if (!is_lvalue)
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to convert an rvalue expression result to an lvalue", location);
-        return {.base_declaration = result, .location = location, .indices = indices};
-    }
 
     // Wrap a simple declaration into an ExpressionResult
-    std::shared_ptr<Generator::ExpressionResult> Generator::make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue, bool is_constexpr) {
-        return std::make_shared<ExpressionResult>(declaration->location, declaration, is_lvalue, is_constexpr, *this);
+    std::shared_ptr<Generator::ExpressionResult> Generator::make_expression(LValue lvalue, CodeLocation location) {
+        return std::make_shared<ExpressionResult> (lvalue, location, *this);
+    }
+
+    std::shared_ptr<Generator::ExpressionResult> Generator::make_expression(RValue rvalue, CodeLocation location) {
+        return std::make_shared<ExpressionResult> (rvalue, location, *this);
     }
 }

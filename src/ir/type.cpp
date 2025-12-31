@@ -95,6 +95,10 @@ namespace toycc::ir {
         return std::make_shared<Type> (*this);
     }
 
+    std::shared_ptr<Type> Type::storage_type() const {
+        return std::make_shared<Type> (*this);
+    }
+
     TypeIdentifier Type::identifier() const {
         return {.tag = to_tag(category), .name = name};
     }

@@ -51,15 +51,19 @@ namespace toycc::ir {
         return referenced_type;
     }
 
+    std::shared_ptr<Type> PointerType::storage_type() const {
+        return std::make_shared<IntegerType> (".Tptr", location, 8 * arch::DATAMODEL->pointer_size(), 8 * arch::DATAMODEL->pointer_alignment(), false);
+    }
+
     std::string PointerType::ir_code() const {
         return std::format("{}*", referenced_type->ir_code());
     }
 
     // -------- ArrayType
-    ArrayType::ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, std::shared_ptr<Declaration> length)
+    ArrayType::ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length)
         : Type(TypeCategory::ARRAY, name, location), element_type(element_type), length(length) {}
 
-    std::shared_ptr<ArrayType> ArrayType::make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, std::shared_ptr<Declaration> length) {
+    std::shared_ptr<ArrayType> ArrayType::make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length) {
         if (element_type->category == TypeCategory::VOID)
             throw Diagnostic(DiagnosticLevel::ERROR, "Can't make arrays of void", location);
         return std::make_shared<ArrayType> (ArrayType {name, location, element_type, length});
@@ -86,8 +90,12 @@ namespace toycc::ir {
         return element_type;
     }
 
+    std::shared_ptr<Type> ArrayType::storage_type() const {
+        return ArrayType::make(name, location, element_type->storage_type(), length);
+    }
+
     std::string ArrayType::ir_code() const {
-        return std::format("{}[{}]", element_type->ir_code(), length->name);
+        return std::format("{}[{}]", element_type->ir_code(), length.ir_code());
     }
 
     // -------- CompoundType
@@ -111,6 +119,16 @@ namespace toycc::ir {
         } else {
             return false;
         }
+    }
+
+    std::shared_ptr<Type> CompoundType::storage_type() const {
+        if (!is_complete)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to use the storage type of an incomplete type", location);
+
+        std::vector<Member> storage_members;
+        for (const Member& member : members)
+            storage_members.push_back(member.to_storage_type());
+        return std::make_shared<CompoundType>(CompoundType {category, name, location, is_complete, storage_members});
     }
 
     std::string CompoundType::ir_code() const {
@@ -198,6 +216,10 @@ namespace toycc::ir {
         return underlying_type->alignment(location);
     }
 
+    std::shared_ptr<Type> EnumType::storage_type() const {
+        return underlying_type->storage_type();
+    }
+
     bool EnumType::operator== (const Type& rhs) const {
         return (category == rhs.category) && *this == static_cast<const EnumType&>(rhs);
     }
@@ -242,6 +264,13 @@ namespace toycc::ir {
 
     size_t FunctionType::alignment(CodeLocation location) const {
         throw Diagnostic(DiagnosticLevel::ERROR, "Can't query the alignment of a function type", location);
+    }
+
+    std::shared_ptr<Type> FunctionType::storage_type() const {
+        std::vector<Member> storage_parameters;
+        for (const Member& parameter : parameters)
+            storage_parameters.push_back(parameter.to_storage_type());
+        return FunctionType::make(name, location, return_type->storage_type(), storage_parameters);
     }
 
     bool FunctionType::operator== (const Type& rhs) const {
@@ -324,6 +353,11 @@ namespace toycc::ir {
 
     size_t BitfieldType::alignment(CodeLocation location) const {
         throw Diagnostic(DiagnosticLevel::ERROR, "Can't query the alignment of a bitfield type", location);
+    }
+
+    std::shared_ptr<Type> BitfieldType::storage_type() const {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfields are currently not simplified by Bitfield::make", location);
+        return BitfieldType::make(name, location, underlying_type->storage_type(), size_bits);
     }
 
     bool BitfieldType::operator== (const Type& rhs) const {
@@ -413,6 +447,10 @@ namespace toycc::ir {
         return TypeModifier::operator== (rhs) && alignment_bits == rhs.alignment_bits;
     }
 
+    std::shared_ptr<Type> AlignedType::storage_type() const {
+        return AlignedType::make(name, location, underlying_type->storage_type(), alignment_bits);
+    }
+
     std::string AlignedType::ir_code() const {
         return std::format("{}|{}", underlying_type->ir_code(), alignment_bits);
     }
@@ -461,6 +499,10 @@ namespace toycc::ir {
 
     bool QualifiedType::operator== (const QualifiedType& rhs) const {
         return TypeModifier::operator== (rhs) && qualifiers == rhs.qualifiers;
+    }
+
+    std::shared_ptr<Type> QualifiedType::storage_type() const {
+        return QualifiedType::make(name, location, underlying_type->storage_type(), qualifiers);
     }
 
     std::string QualifiedType::ir_code() const {

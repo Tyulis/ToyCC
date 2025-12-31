@@ -37,6 +37,7 @@ namespace toycc::ir {
 
         virtual std::shared_ptr<Type> dereference(CodeLocation location) const;  // Type emitted by a dereference of this type. Defaults to a throw.
         virtual std::shared_ptr<Type> dequalify() const;                         // Type without modifiers, default to the same type
+        virtual std::shared_ptr<Type> storage_type() const;                      // Physical storage type, defaults to the same type
 
         TypeIdentifier identifier() const;
         bool is_arithmetic() const;

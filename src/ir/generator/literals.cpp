@@ -3,7 +3,7 @@
 #include "util/strings.h"
 
 namespace toycc::ir {
-    std::shared_ptr<Declaration> Generator::decode_constant(antlr4::tree::TerminalNode* terminal) {
+    RValue Generator::decode_constant(antlr4::tree::TerminalNode* terminal) {
         const std::string text = terminal->getText();
         if (text.starts_with("'") || text.starts_with("L'") || text.starts_with("u'") || text.starts_with("U'"))
             return decode_character_constant(terminal);
@@ -13,7 +13,7 @@ namespace toycc::ir {
             return decode_integer_constant(terminal);
     }
 
-    std::shared_ptr<Declaration> Generator::decode_character_constant(antlr4::tree::TerminalNode* terminal) {
+    RValue Generator::decode_character_constant(antlr4::tree::TerminalNode* terminal) {
         const CodeLocation location = locate(terminal);
         std::string text = terminal->getText();
 
@@ -42,83 +42,54 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Character literal must resolve to a single character"), location);
 
         // Declare the character constant
-        stmt::LoadConst::Constant value = static_cast<ssize_t>(text[0]);
-        std::shared_ptr<Declaration> declaration = declare_temporary(character_type, location);
-
-        current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, declaration, value));
-        return declaration;
+        return Constant {IntegerConstant(text[0]), location, literal_character_type};
     }
 
-    std::shared_ptr<Declaration> Generator::decode_floating_constant(antlr4::tree::TerminalNode* terminal) {
+    RValue Generator::decode_floating_constant(antlr4::tree::TerminalNode* terminal) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Floating constants are not implemented", locate(terminal));
     }
 
-    std::shared_ptr<Declaration> Generator::decode_integer_constant(antlr4::tree::TerminalNode* terminal) {
-        const std::string text = terminal->getText();
+    RValue Generator::decode_integer_constant(antlr4::tree::TerminalNode* terminal) {
+        const CodeLocation location = locate(terminal);
+        std::string text = terminal->getText();
+
+        const size_t suffix_position = text.find_first_of("uUlL");
+        std::string suffix;
+        if (suffix_position != std::string::npos) {
+            suffix = text.substr(suffix_position);
+            text = text.substr(0, suffix_position);
+        }
+
+        size_t value;
         if (text.at(0) == '0') {
             if (text.length() == 1)
-                return decode_decimal_constant(terminal);  // Literal 0
+                value = 0;
             else if (text.at(1) == 'x' || text.at(1) == 'X')
-                return decode_hexadecimal_constant(terminal);
+                value = std::stoull(text.substr(2), nullptr, 16);
             else if (text.at(1) == 'b' || text.at(1) == 'B')
-                return decode_binary_constant(terminal);
+                value = std::stoull(text.substr(2), nullptr, 2);
             else
-                return decode_octal_constant(terminal);
+                value = std::stoull(text.substr(1), nullptr, 8);
         } else {
-            return decode_decimal_constant(terminal);
+            value = std::stoull(text, nullptr, 10);
         }
-    }
 
-    std::shared_ptr<Declaration> Generator::decode_decimal_constant(antlr4::tree::TerminalNode* terminal) {
-        const std::string text = terminal->getText();
-        const size_t suffix_position = text.find_first_not_of("0123456789");
-
-        size_t decimal_end;
-        const size_t value = std::stoull(text, &decimal_end);
-        if (decimal_end != text.length() && decimal_end != suffix_position)
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Found garbage in decimal constant `{}`", text), locate(terminal));
-
-        std::string suffix;
-        if (suffix_position != std::string::npos)
-            suffix = text.substr(suffix_position);
-        return declare_integer_constant(value, suffix, locate(terminal));
-    }
-
-    std::shared_ptr<Declaration> Generator::decode_hexadecimal_constant(antlr4::tree::TerminalNode* terminal) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Hexadecimal constants are not implemented", locate(terminal));
-    }
-
-    std::shared_ptr<Declaration> Generator::decode_binary_constant(antlr4::tree::TerminalNode* terminal) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Binary constants are not implemented", locate(terminal));
-    }
-
-    std::shared_ptr<Declaration>Generator::decode_octal_constant(antlr4::tree::TerminalNode* terminal) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Octal constants are not implemented", locate(terminal));
-    }
-
-
-    std::shared_ptr<Declaration> Generator::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "String literals are not implemented", locate(terminals[0]));
-    }
-
-
-    std::shared_ptr<Declaration> Generator::declare_integer_constant(size_t base_value, std::string suffix, CodeLocation location) {
         to_lower_inplace(suffix);
         TypeIdentifier type_identifier = {.tag = TypeTag::DIRECT, .name = {}};
-        stmt::LoadConst::Constant value;
 
-        if      (suffix.empty())                     { value = static_cast<ssize_t> (base_value); type_identifier.name = "signed int";             }
-        else if (suffix == "u")                      { value = static_cast<size_t>  (base_value); type_identifier.name = "unsigned int";           }
-        else if (suffix == "l")                      { value = static_cast<ssize_t> (base_value); type_identifier.name = "signed long int";        }
-        else if (suffix == "ll")                     { value = static_cast<ssize_t> (base_value); type_identifier.name = "signed long long int";   }
-        else if (suffix == "ul" || suffix == "lu")   { value = static_cast<size_t>  (base_value); type_identifier.name = "unsigned long int";      }
-        else if (suffix == "ull" || suffix == "llu") { value = static_cast<size_t>  (base_value); type_identifier.name = "unsigned long long int"; }
+        if      (suffix.empty())                     { type_identifier.name = "signed int";             }
+        else if (suffix == "u")                      { type_identifier.name = "unsigned int";           }
+        else if (suffix == "l")                      { type_identifier.name = "signed long int";        }
+        else if (suffix == "ll")                     { type_identifier.name = "signed long long int";   }
+        else if (suffix == "ul" || suffix == "lu")   { type_identifier.name = "unsigned long int";      }
+        else if (suffix == "ull" || suffix == "llu") { type_identifier.name = "unsigned long long int"; }
         else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Unknown integer literal suffix `{}`", suffix), location);
 
         std::shared_ptr<Type> type = resolve_type(type_identifier, location);
-        std::shared_ptr<Declaration> declaration = declare_temporary(type, location);
+        return Constant {IntegerConstant(value), location, type};
+    }
 
-        current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, declaration, value));
-        return declaration;
+    RValue Generator::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "String literals are not implemented", locate(terminals[0]));
     }
 }

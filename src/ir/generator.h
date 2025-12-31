@@ -26,7 +26,9 @@ namespace toycc::ir {
 
         std::shared_ptr<Type> enum_underlying_type;
         std::shared_ptr<Type> boolean_type;
-        std::shared_ptr<Type> character_type;
+        std::shared_ptr<Type> literal_character_type;
+        std::shared_ptr<Type> literal_integer_type;
+        std::shared_ptr<Type> literal_floating_type;
 
     public:
         Generator(const SourceMap& source_map, CParser::CompilationUnitContext* context);
@@ -41,32 +43,34 @@ namespace toycc::ir {
 
         // -------- RAII expression result to keep track of lvalues and lingering effects -> ir/generator/expressionresult.cpp
         struct ExpressionResult {
-        public:
-            CodeLocation location;
-            std::shared_ptr<Declaration> result;
-            bool is_lvalue;
-            bool is_constexpr;
+            public:
+                std::variant<LValue, RValue> result;
+                CodeLocation location;
+                std::vector<int> postfix_increments;
 
-            std::vector<std::shared_ptr<Declaration>> indices;
-            std::vector<int> postfix_increments;
+                ExpressionResult(LValue result, CodeLocation location, Generator& generator);
+                ExpressionResult(RValue result, CodeLocation location, Generator& generator);
+                ~ExpressionResult();
 
-            ExpressionResult(CodeLocation location, std::shared_ptr<Declaration> result, bool is_lvalue, bool is_constexpr, Generator& generator);
-            ~ExpressionResult();
-            std::shared_ptr<Type> type() const;
-            LValue lvalue() const;
+                std::shared_ptr<Type> type() const;
+                bool is_lvalue() const;
 
-            std::shared_ptr<Declaration> load(CodeLocation location);
-            void store(std::shared_ptr<Declaration> source, CodeLocation location);
+                LValue lvalue() const;
+                RValue load(CodeLocation location) const;
+                void store(RValue source, CodeLocation location) const;
 
-        private:
-            Generator& generator;
+                std::shared_ptr<ExpressionResult> dereference(RValue index, CodeLocation location) const;
 
-            void apply_postfix_operations();
-            void apply_pointer_postfix_operations();
-            void apply_integer_postfix_operations();
+            private:
+                Generator& generator;
+
+                void apply_postfix_operations();
+                void apply_pointer_postfix_operations();
+                void apply_integer_postfix_operations();
         };
 
-        std::shared_ptr<ExpressionResult> make_expression(std::shared_ptr<Declaration> declaration, bool is_lvalue, bool is_constexpr);
+        std::shared_ptr<ExpressionResult> make_expression(LValue lvalue, CodeLocation location);
+        std::shared_ptr<ExpressionResult> make_expression(RValue rvalue, CodeLocation location);
 
         // -------- Statements -> ir/generator/statements.cpp
         std::shared_ptr<Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type, std::string entry_label = {}, std::string exit_label = {});
@@ -143,28 +147,22 @@ namespace toycc::ir {
         std::shared_ptr<ExpressionResult> decode_unary_logical_not(CParser::UnaryExpressionContext* context);
         std::shared_ptr<ExpressionResult> decode_postfix_expression(CParser::PostfixExpressionContext* context);
         std::shared_ptr<ExpressionResult> decode_primary_expression(CParser::PrimaryExpressionContext* context);
-        std::shared_ptr<ExpressionResult> decode_function_call(std::shared_ptr<Declaration> function, CParser::PostfixOperatorContext* call);
+        std::shared_ptr<ExpressionResult> decode_function_call(std::shared_ptr<ExpressionResult> function, CParser::PostfixOperatorContext* call);
 
-        std::optional<stmt::BinaryOperator> decode_assignment_operator(CParser::AssignmentOperatorContext* context);
-        stmt::BinaryOperator decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
-        stmt::BinaryOperator decode_additive_operator(CParser::AdditiveOperatorContext* context);
+        StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
+        StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
+        StatementTag decode_additive_operator(CParser::AdditiveOperatorContext* context);
 
-        std::shared_ptr<ExpressionResult> emit_binary_operation(stmt::BinaryOperator op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
+        std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
 
-        bool is_operator_valid(stmt::BinaryOperator op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
+        bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
 
         // -------- Literals -> ir/generator/literals.cpp
-        std::shared_ptr<Declaration> decode_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_character_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_floating_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_integer_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_decimal_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_hexadecimal_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_binary_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_octal_constant(antlr4::tree::TerminalNode* terminal);
-        std::shared_ptr<Declaration> decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals);
-
-        std::shared_ptr<Declaration> declare_integer_constant(size_t value, std::string suffix, CodeLocation location);
+        RValue decode_constant(antlr4::tree::TerminalNode* terminal);
+        RValue decode_character_constant(antlr4::tree::TerminalNode* terminal);
+        RValue decode_floating_constant(antlr4::tree::TerminalNode* terminal);
+        RValue decode_integer_constant(antlr4::tree::TerminalNode* terminal);
+        RValue decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals);
 
         // -------- Convenience class to make temporaries of a given type only when necessary -> ir/generator/temporarygenerator.cpp
         class TemporaryGenerator {
@@ -186,28 +184,29 @@ namespace toycc::ir {
         };
 
         ConversionValidity get_conversion_validity(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source);
-        std::shared_ptr<Declaration> emit_implicit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location);
-        std::shared_ptr<Declaration> emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location);
+        RValue emit_implicit_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location);
+        RValue emit_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location);
 
         // Internals
-        std::shared_ptr<Declaration> emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
-                                                     CodeLocation location, TemporaryGenerator destination_generator);
-        std::shared_ptr<Declaration> emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
-                                                     CodeLocation location, TemporaryGenerator destination_generator);
-        std::shared_ptr<Declaration> emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
-                                                     CodeLocation location, TemporaryGenerator destination_generator);
-        std::shared_ptr<Declaration> emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
-                                                     CodeLocation location, TemporaryGenerator destination_generator);
-        std::shared_ptr<Declaration> emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
-                                                     CodeLocation location, TemporaryGenerator destination_generator);
-        std::shared_ptr<Declaration> emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> effective_source_type, std::shared_ptr<Declaration> source,
-                                                     CodeLocation location, TemporaryGenerator destination_generator);
+        RValue emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, RValue source,
+                            CodeLocation location, TemporaryGenerator destination_generator);
+        RValue emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> effective_source_type, RValue source,
+                            CodeLocation location, TemporaryGenerator destination_generator);
+        RValue emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> effective_source_type, RValue source,
+                            CodeLocation location, TemporaryGenerator destination_generator);
+        RValue emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> effective_source_type, RValue source,
+                            CodeLocation location, TemporaryGenerator destination_generator);
+        RValue emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, RValue source,
+                            CodeLocation location, TemporaryGenerator destination_generator);
+        RValue emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> effective_source_type, RValue source,
+                            CodeLocation location, TemporaryGenerator destination_generator);
 
-        std::shared_ptr<Declaration> emit_copy_conversion(std::shared_ptr<Declaration> source, CodeLocation location, TemporaryGenerator destination_generator,
-                                                          stmt::ConversionOperation op = stmt::ConversionOperation::COPY);
+        RValue emit_copy_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location, TemporaryGenerator destination_generator, StatementTag op = StatementTag::COPY);
 
-        std::array<std::shared_ptr<Declaration>, 2> emit_arithmetic_conversion(std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right, CodeLocation location);
-        void emit_copy(std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source, CodeLocation location, bool initialize);
+        std::array<RValue, 2> emit_arithmetic_conversion(RValue left, RValue right, CodeLocation location);
+        void emit_copy(LValue destination, RValue source, CodeLocation location, bool initialize);
+
+        RValue make_constant_zero(TypeCategory category, CodeLocation location);
 
         // -------- State management -> ir/generator/state.cpp
         std::string anonymous_identifier();
@@ -216,6 +215,9 @@ namespace toycc::ir {
 
         std::shared_ptr<Scope> current_scope();
         ScopeFrame in_scope(std::shared_ptr<Scope> scope);
+
+        std::shared_ptr<Statement> emit(std::shared_ptr<Statement> statement);
+        std::shared_ptr<Label> emit_label(LabelType type, std::string name, CodeLocation location);
 
         CodeLocation locate(antlr4::ParserRuleContext* context) const;
         CodeLocation locate(antlr4::tree::TerminalNode* context) const;

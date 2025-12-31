@@ -1,4 +1,5 @@
 #include "diagnostic.h"
+#include "ir/declaration.h"
 #include "ir/type_expressions.h"
 #include "ir/generator.h"
 #include "ir/statement.h"
@@ -17,27 +18,10 @@ namespace toycc::ir {
             return ConversionValidity::IMPLICIT;
 
         // Get modifiers out of the way
-        if (destination->category == TypeCategory::QUALIFIED || source->category == TypeCategory::QUALIFIED) {
-            Flags<TypeQualifier> destination_qualifiers = {}, source_qualifiers = {};
-
-            if (destination->category == TypeCategory::QUALIFIED) {
-                const QualifiedType qualified_destination = static_cast<const QualifiedType&>(*destination);
-                destination = qualified_destination.underlying_type;
-                destination_qualifiers = qualified_destination.qualifiers;
-            }
-
-            if (source->category == TypeCategory::QUALIFIED) {
-                const QualifiedType qualified_source = static_cast<const QualifiedType&>(*source);
-                source = qualified_source.underlying_type;
-                source_qualifiers = qualified_source.qualifiers;
-            }
-
-            ConversionValidity unqualified_conversion_validity = get_conversion_validity(destination, source);
-            if      (unqualified_conversion_validity == ConversionValidity::INVALID) return ConversionValidity::INVALID;
-            else if (destination_qualifiers.includes(source_qualifiers))             return unqualified_conversion_validity;
-            else                                                                     return ConversionValidity::EXPLICIT;
-        }
-
+        if (destination->category == TypeCategory::QUALIFIED)
+            return get_conversion_validity(static_cast<const QualifiedType&>(*destination).underlying_type, source);
+        if (source->category == TypeCategory::QUALIFIED)
+            return get_conversion_validity(destination, static_cast<const QualifiedType&>(*source).underlying_type);
         if (destination->category == TypeCategory::ALIGNED)
             return get_conversion_validity(static_cast<const AlignedType&>(*destination).underlying_type, source);
         if (source->category == TypeCategory::ALIGNED)
@@ -112,13 +96,13 @@ namespace toycc::ir {
     }
 
     // Return a declaration compatible with the `target` type specification. If necessary, emit an implicit cast and declare a new temporary with that target type
-    std::shared_ptr<Declaration> Generator::emit_implicit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const ConversionValidity validity = get_conversion_validity(destination_type, source->type);
+    RValue Generator::emit_implicit_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location) {
+        const ConversionValidity validity = get_conversion_validity(destination_type, source.type());
         switch (validity) {
             case ConversionValidity::INVALID:
-                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert type `{}` to `{}`", source->type->text(), destination_type->text()), location);
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert type `{}` to `{}`", source.type()->text(), destination_type->text()), location);
             case ConversionValidity::EXPLICIT:
-                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Conversion from `{}` to `{}` can't be implicit", source->type->text(), destination_type->text()), location);
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Conversion from `{}` to `{}` can't be implicit", source.type()->text(), destination_type->text()), location);
             case ConversionValidity::IMPLICIT:
                 return emit_conversion(destination_type, source, location);
         }
@@ -126,16 +110,16 @@ namespace toycc::ir {
     }
 
     // Main entry point. Internals won't recheck the validity of the conversion
-    std::shared_ptr<Declaration> Generator::emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Declaration> source, CodeLocation location) {
-        const ConversionValidity validity = get_conversion_validity(destination_type, source->type);
+    RValue Generator::emit_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location) {
+        const ConversionValidity validity = get_conversion_validity(destination_type, source.type());
         if (validity == ConversionValidity::INVALID)
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert from `{}` to `{}`", source->type->text(), destination_type->text()));
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert from `{}` to `{}`", source.type()->text(), destination_type->text()));
 
-        return emit_conversion(destination_type, source->type, source, location, make_temporary_generator(destination_type, location));
+        return emit_conversion(destination_type, source.type(), source, location, make_temporary_generator(destination_type, location));
     }
 
-    std::shared_ptr<Declaration> Generator::emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
-                                                            CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    RValue Generator::emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, RValue source,
+                                      CodeLocation location, Generator::TemporaryGenerator destination_generator)
     {
         // Qualifiers were already checked, they are irrelevant in conversions -> remove them
         if (destination_type->category == TypeCategory::QUALIFIED)
@@ -154,12 +138,13 @@ namespace toycc::ir {
             if (source_type->category == TypeCategory::ALIGNED)
                 source_unqualified = std::static_pointer_cast<AlignedType>(source_type)->underlying_type;
 
-            std::shared_ptr<Declaration> destination = emit_conversion(destination_unqualified, source_unqualified, source, location, destination_generator);
+            RValue destination = emit_conversion(destination_unqualified, source_unqualified, source, location, destination_generator);
 
             // No copy was emitted, but one is required to realign the source object
-            if (destination.get() == source.get() && destination_type->alignment(location) > source_type->alignment(location)) {
-                destination = destination_generator();
-                current_scope()->add_statement(std::make_shared<stmt::Copy>(location, stmt::ConversionOperation::COPY, destination, source));
+            if (!source.is_constant() && destination == source && destination_type->alignment(location) > source_type->alignment(location)) {
+                std::shared_ptr<Declaration> conversion_result = destination_generator();
+                emit(Statement::make_unary_operation(location, StatementTag::COPY, source, conversion_result));
+                destination = conversion_result;
             }
             return destination;
         }
@@ -171,15 +156,15 @@ namespace toycc::ir {
             case TypeCategory::BOOL:    return emit_conversion_to_bool   (std::static_pointer_cast<BooleanType>      (destination_type), source_type, source, location, destination_generator);
             case TypeCategory::INTEGER: return emit_conversion_to_integer(std::static_pointer_cast<IntegerType>      (destination_type), source_type, source, location, destination_generator);
             case TypeCategory::FLOAT:   return emit_conversion_to_float  (std::static_pointer_cast<FloatingPointType>(destination_type), source_type, source, location, destination_generator);
-            case TypeCategory::POINTER: return emit_conversion_to_pointer(                                            destination_type, source_type, source, location, destination_generator);
-            case TypeCategory::ARRAY:   return emit_conversion_to_pointer(                                            destination_type, source_type, source, location, destination_generator);
+            case TypeCategory::POINTER: return emit_conversion_to_pointer(                                            destination_type,  source_type, source, location, destination_generator);
+            case TypeCategory::ARRAY:   return emit_conversion_to_pointer(                                            destination_type,  source_type, source, location, destination_generator);
             case TypeCategory::ENUM:    return emit_conversion_to_enum   (std::static_pointer_cast<EnumType>         (destination_type), source_type, source, location, destination_generator);
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
         }
     }
 
-    std::shared_ptr<Declaration> Generator::emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
-                                                         CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    RValue Generator::emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> source_type, RValue source,
+                                              CodeLocation location, Generator::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::BOOL:
@@ -189,18 +174,7 @@ namespace toycc::ir {
             case TypeCategory::INTEGER:
             case TypeCategory::FLOAT: {
                 std::shared_ptr<Declaration> destination = destination_generator();
-                std::shared_ptr<Declaration> zero = declare_temporary(source_type, location);
-
-                stmt::LoadConst::Constant constant_zero;
-                if (source_type->category == TypeCategory::POINTER)     constant_zero = static_cast<size_t>(0);
-                else if (source_type->category == TypeCategory::FLOAT)  constant_zero = static_cast<long double>(0.0);
-                else if (source_type->category == TypeCategory::INTEGER) {
-                    if (std::static_pointer_cast<IntegerType>(source_type)->is_signed)  constant_zero = static_cast<ssize_t>(0);
-                    else                                                                constant_zero = static_cast<size_t>(0);
-                }
-
-                current_scope()->add_statement(std::make_shared<stmt::LoadConst> (location, zero, constant_zero));
-                current_scope()->add_statement(std::make_shared<stmt::BinaryOp> (location, stmt::BinaryOperator::EQ, destination, source, zero));
+                emit(Statement::make_binary_operation(location, StatementTag::EQ, source, make_constant_zero(source_type->category, location), destination));
                 return destination;
             }
 
@@ -208,21 +182,21 @@ namespace toycc::ir {
         }
     }
 
-    std::shared_ptr<Declaration> Generator::emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
-                                                                       CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    RValue Generator::emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> source_type, RValue source,
+                                                 CodeLocation location, Generator::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::BOOL:
                 if (destination_type->size(location) == source_type->size(location) && destination_type->alignment(location) >= source_type->alignment(location))
                     return source;
                 else
-                    return emit_copy_conversion(source, location, destination_generator);
+                    return emit_copy_conversion(destination_type, source, location, destination_generator);
 
             case TypeCategory::INTEGER: {
                 std::shared_ptr<IntegerType> source_integer = std::static_pointer_cast<IntegerType>(source_type);
                 if (destination_type->is_signed == source_integer->is_signed) {
                     if (destination_type->size_bits > source_integer->size_bits)
-                        return emit_copy_conversion(source, location, destination_generator);
+                        return emit_copy_conversion(destination_type, source, location, destination_generator);
                     else if (destination_type->size_bits == source_integer->size_bits)
                         return source;
                     else  // if (destination_primitive.primitive_size < source_primitive.primitive_size)
@@ -233,19 +207,19 @@ namespace toycc::ir {
             }
 
             case TypeCategory::FLOAT:
-                return emit_copy_conversion(source, location, destination_generator, stmt::ConversionOperation::FLOAT_TO_INT);
+                return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::FLOAT_TO_INT);
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
         }
     }
 
-    std::shared_ptr<Declaration> Generator::emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
-                                                                     CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    RValue Generator::emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> source_type, RValue source,
+                                               CodeLocation location, Generator::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
-                return emit_copy_conversion(source, location, destination_generator, stmt::ConversionOperation::INT_TO_FLOAT);
+                return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::INT_TO_FLOAT);
 
             case TypeCategory::FLOAT: {
                 std::shared_ptr<FloatingPointType> source_float = std::static_pointer_cast<FloatingPointType>(source_type);
@@ -253,9 +227,9 @@ namespace toycc::ir {
                     if (source_float->alignment_bits == destination_type->alignment_bits)
                         return source;
                     else
-                        return emit_copy_conversion(source, location, destination_generator);
+                        return emit_copy_conversion(destination_type, source, location, destination_generator);
                 } else {
-                    return emit_copy_conversion(source, location, destination_generator, stmt::ConversionOperation::FLOAT_TO_FLOAT);
+                    return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::FLOAT_TO_FLOAT);
                 }
             }
 
@@ -263,8 +237,8 @@ namespace toycc::ir {
         }
     }
 
-    std::shared_ptr<Declaration> Generator::emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
-                                                            CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    RValue Generator::emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, RValue source,
+                                                 CodeLocation location, Generator::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::ARRAY:  // Those are just pointers, nothing to do
@@ -275,14 +249,14 @@ namespace toycc::ir {
                 if (source_type->size(location) == destination_type->size(location))
                     return source;
                 else
-                    return emit_copy_conversion(source, location, destination_generator);
+                    return emit_copy_conversion(destination_type, source, location, destination_generator);
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
         }
     }
 
-    std::shared_ptr<Declaration> Generator::emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> source_type, std::shared_ptr<Declaration> source,
-                                                         CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    RValue Generator::emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> source_type, RValue source,
+                                              CodeLocation location, Generator::TemporaryGenerator destination_generator)
     {
         if (destination_type->underlying_type->category != TypeCategory::INTEGER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid enum underlying type", location);
@@ -290,18 +264,23 @@ namespace toycc::ir {
     }
 
 
-    std::shared_ptr<Declaration> Generator::emit_copy_conversion(std::shared_ptr<Declaration> source, CodeLocation location, TemporaryGenerator destination_generator, stmt::ConversionOperation op) {
-        std::shared_ptr<Declaration> destination = destination_generator();
-        current_scope()->add_statement(std::make_shared<stmt::Copy>(location, op, destination, source));
-        return destination;
+    RValue Generator::emit_copy_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location, TemporaryGenerator destination_generator, StatementTag op) {
+        if (source.is_constant()) {
+            // Don't emit copies for constant expressions, just give another type expression to the constant
+            return source.constant().as(destination_type);
+        } else {
+            std::shared_ptr<Declaration> destination = destination_generator();
+            emit(Statement::make_unary_operation(location, op, source, destination));
+            return destination;
+        }
     }
 
-    std::array<std::shared_ptr<Declaration>, 2> Generator::emit_arithmetic_conversion(std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right, CodeLocation location) {
+    std::array<RValue, 2> Generator::emit_arithmetic_conversion(RValue left, RValue right, CodeLocation location) {
         try {
-            left = emit_implicit_conversion(right->type, left, location);
+            left = emit_implicit_conversion(right.type(), left, location);
         } catch (const Diagnostic& left_conversion_diagnostic) {
             try {
-                right = emit_implicit_conversion(left->type, right, location);
+                right = emit_implicit_conversion(left.type(), right, location);
             } catch (const Diagnostic& right_conversion_diagnostic) {
                 throw Diagnostic(DiagnosticLevel::ERROR, "Can't perform any standard arithmetic conversions to make the operands compatible", location)
                 .add_note(left_conversion_diagnostic).add_note(right_conversion_diagnostic);
@@ -312,11 +291,25 @@ namespace toycc::ir {
     }
 
     // Copy source to destination, adding an implicit cast if necessary
-    void Generator::emit_copy(std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source, CodeLocation location, bool initialize) {
-        if (!initialize && destination->type->is_const())
+    void Generator::emit_copy(LValue destination, RValue source, CodeLocation location, bool initialize) {
+        if (!initialize && destination.type()->is_const())
             throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to assign a value to a constant after initialization", location);
 
-        source = emit_implicit_conversion(destination->type, source, location);
-        current_scope()->add_statement(std::make_shared<stmt::Copy>(location, stmt::ConversionOperation::COPY, destination, source));
+        source = emit_implicit_conversion(destination.type(), source, location);
+        emit(Statement::make_unary_operation(location, StatementTag::COPY, source, destination));
+    }
+
+    RValue Generator::make_constant_zero(TypeCategory category, CodeLocation location) {
+        switch (category) {
+            case TypeCategory::BOOL:
+            case TypeCategory::INTEGER:
+            case TypeCategory::POINTER:
+                return Constant {IntegerConstant(0), location, literal_integer_type};
+
+            case TypeCategory::FLOAT:
+                return Constant {FloatingPointConstant(0.0), location, literal_floating_type};
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a constant zero", location);
+        }
     }
 }

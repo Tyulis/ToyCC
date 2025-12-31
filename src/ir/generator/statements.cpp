@@ -6,7 +6,7 @@ namespace toycc::ir {
     std::shared_ptr<Scope> Generator::decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type, std::string entry_label, std::string exit_label) {
         std::shared_ptr<Scope> scope = std::make_shared<Scope>(type, current_scope()->function, entry_label, exit_label);
         decode_compound_statement(context, scope);
-        current_scope()->add_statement(std::make_shared<stmt::Block>(locate(context), scope));
+        emit(Statement::make_block(locate(context), scope));
         return scope;
     }
 
@@ -62,22 +62,21 @@ namespace toycc::ir {
     void Generator::decode_if_statement(CParser::SelectionStatementContext* context) {
         const CodeLocation predicate_location = locate(context->expression());
         std::shared_ptr<ExpressionResult> predicate_expression = decode_expression(context->expression());
-        std::shared_ptr<Declaration> predicate = emit_implicit_conversion(boolean_type, predicate_expression->load(predicate_location), predicate_location);
 
         const std::string label_after_if = anonymous_label();
-        current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_after_if, predicate, false));
+        emit_conditional_jump(predicate_expression, label_after_if, false, locate(context));
 
         decode_statement(context->statement(0), ScopeType::CONDITIONAL);
 
         if (context->Else()) {
             const std::string label_after_else = anonymous_label();
-            current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(context), label_after_else));  // If we entered the `if`, skip the `else` part
-            current_scope()->add_label(LabelType::INTERNAL, label_after_if, {}, locate(context));  // Must be after the `else` skip otherwise the `else` path jumps to the second jump statement
+            emit(Statement::make_jump(locate(context), label_after_else));     // If we entered the `if`, skip the `else` part
+            emit_label(LabelType::INTERNAL, label_after_if, locate(context));  // Must be after the `else` skip otherwise the `else` path jumps to the second jump statement
 
             decode_statement(context->statement(1), ScopeType::CONDITIONAL);
-            current_scope()->add_label(LabelType::INTERNAL, label_after_else, {}, locate(context));
+            emit_label(LabelType::INTERNAL, label_after_else, locate(context));
         } else {
-            current_scope()->add_label(LabelType::INTERNAL, label_after_if, {}, locate(context));
+            emit_label(LabelType::INTERNAL, label_after_if, locate(context));
         }
     }
 
@@ -105,13 +104,13 @@ namespace toycc::ir {
         emit_conditional_jump(entry_predicate_expression, exit_label, false, predicate_location);
 
         // Then the loop body
-        current_scope()->add_label(LabelType::INTERNAL, entry_label, {}, locate(context));
+        emit_label(LabelType::INTERNAL, entry_label, locate(context));
         decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
         // Second evaluation of the predicate into the loop : when true, jump back to the beginning of the loop
         std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
         emit_conditional_jump(loop_predicate_expression, entry_label, true, predicate_location);
-        current_scope()->add_label(LabelType::INTERNAL, exit_label, {}, locate(context));
+        emit_label(LabelType::INTERNAL, exit_label, locate(context));
     }
 
     void Generator::decode_do_while_statement(CParser::IterationStatementContext* context) {
@@ -119,13 +118,13 @@ namespace toycc::ir {
         const std::string exit_label  = anonymous_label();
 
         // Loop body, enter unconditionally
-        current_scope()->add_label(LabelType::INTERNAL, entry_label, {}, locate(context));
+        emit_label(LabelType::INTERNAL, entry_label, locate(context));
         decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
         // Evaluate the predicate at the end : when true, jump back to the beginning of the loop, otherwise fall through to exit
         std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
         emit_conditional_jump(loop_predicate_expression, entry_label, true, locate(context->expression()));
-        current_scope()->add_label(LabelType::INTERNAL, exit_label, {}, locate(context));
+        emit_label(LabelType::INTERNAL, exit_label, locate(context));
     }
 
     void Generator::decode_for_statement(CParser::IterationStatementContext* context) {
@@ -157,7 +156,7 @@ namespace toycc::ir {
             }
 
             // Then the loop body
-            current_scope()->add_label(LabelType::INTERNAL, entry_label, {}, locate(context));
+            emit_label(LabelType::INTERNAL, entry_label, locate(context));
             decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
             if (predicate_context) {
@@ -173,14 +172,14 @@ namespace toycc::ir {
             // When the loop predicate is true -> fall through to the increment statement then jump back to the beginning of the loop
             if (increment_context) {
                 decode_for_expression(increment_context);
-                current_scope()->add_statement(std::make_shared<stmt::Jump>(locate(predicate_context), entry_label));
+                emit(Statement::make_jump(locate(predicate_context), entry_label));
             }
 
             // After the loop
-            current_scope()->add_label(LabelType::INTERNAL, exit_label, {}, locate(context));
+            emit_label(LabelType::INTERNAL, exit_label, locate(context));
         }
 
-        current_scope()->add_statement(std::make_shared<stmt::Block>(locate(context), scope));
+        emit(Statement::make_block(locate(context->statement()), scope));
     }
 
     void Generator::decode_jump_statement(CParser::JumpStatementContext* context) {
@@ -211,18 +210,18 @@ namespace toycc::ir {
                 throw Diagnostic(DiagnosticLevel::ERROR, "Can't return a value in a function returning void", location);
 
             std::shared_ptr<ExpressionResult> expression_result = decode_expression(context->expression());
-            std::shared_ptr<Declaration> return_value = emit_implicit_conversion(function_type->return_type, expression_result->load(location), location);
-            current_scope()->add_statement(std::make_shared<stmt::Return>(location, return_value));
+            RValue return_value = emit_implicit_conversion(function_type->return_type, expression_result->load(location), location);
+            emit(Statement::make_return(location, return_value));
         } else {
             if (function_type->return_type->category != TypeCategory::VOID)
                 throw Diagnostic(DiagnosticLevel::ERROR, "Return without a value within a function with a non-void return type", location);
-            current_scope()->add_statement(std::make_shared<stmt::Return>(location));
+            emit(Statement::make_return(location));
         }
     }
 
 
     void Generator::emit_conditional_jump(std::shared_ptr<ExpressionResult> predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location) {
-        std::shared_ptr<Declaration> predicate = emit_implicit_conversion(boolean_type, predicate_expression->load(location), location);
-        current_scope()->add_statement(std::make_shared<stmt::Jump>(location, destination_label, predicate, jump_if_is));
+        RValue predicate = emit_implicit_conversion(boolean_type, predicate_expression->load(location), location);
+        emit(Statement::make_conditional_jump(location, predicate, destination_label, jump_if_is));
     }
 }

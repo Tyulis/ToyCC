@@ -21,7 +21,8 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const PointerType& rhs) const;
 
-            std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
 
@@ -32,21 +33,22 @@ namespace toycc::ir {
     struct ArrayType : public Type {
         public:
             std::shared_ptr<Type> element_type;
-            std::shared_ptr<Declaration> length;
+            RValue length;
 
-            static std::shared_ptr<ArrayType> make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, std::shared_ptr<Declaration> length);
+            static std::shared_ptr<ArrayType> make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length);
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const ArrayType& rhs) const;
 
-            std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
 
         protected:
-            ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, std::shared_ptr<Declaration> length);
+            ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length);
     };
 
     struct CompoundType : public Type {
@@ -57,6 +59,8 @@ namespace toycc::ir {
             virtual bool complete() const override;
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const CompoundType& rhs) const;
+
+            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
 
@@ -97,6 +101,8 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const EnumType& rhs) const;
 
+            virtual std::shared_ptr<Type> storage_type() const override;
+
             virtual std::string ir_code() const override;
 
         protected:
@@ -114,6 +120,8 @@ namespace toycc::ir {
             virtual size_t alignment(CodeLocation location) const override;
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const FunctionType& rhs) const;
+
+            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
 
@@ -150,6 +158,8 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const BitfieldType& rhs) const;
 
+            virtual std::shared_ptr<Type> storage_type() const override;
+
             virtual std::string ir_code() const override;
 
         protected:
@@ -165,6 +175,8 @@ namespace toycc::ir {
             virtual size_t alignment(CodeLocation location) const override;
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const AlignedType& rhs) const;
+
+            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
 
@@ -188,6 +200,8 @@ namespace toycc::ir {
             virtual bool is_const() const override;
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const QualifiedType& rhs) const;
+
+            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
 

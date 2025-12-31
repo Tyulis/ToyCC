@@ -20,7 +20,7 @@ namespace toycc::ir {
         for (std::shared_ptr<Statement> statement : statements) {
             const auto [begin, end] = markers.equal_range(statement);
             for (auto label_it = begin; label_it != end; label_it++)
-                code << label_it->second->name << ":\n";
+                code << label_it->second->name << ": ";
             std::string statement_code = statement->ir_code();
             if (!statement_code.empty())
                 code << statement_code << ";\n";
@@ -110,7 +110,7 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Label> Scope::add_label(LabelType type, std::string name, CodeLocation location) {
-        std::shared_ptr<Statement> marker = add_statement(std::make_shared<stmt::Marker>(location));
+        std::shared_ptr<Statement> marker = add_statement(Statement::make_marker(location));
         return add_label(type, name, marker, location);
     }
 

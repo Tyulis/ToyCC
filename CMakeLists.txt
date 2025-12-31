@@ -10,8 +10,7 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-find_package(Boost CONFIG REQUIRED
-             COMPONENTS program_options container)
+find_package(Boost CONFIG REQUIRED COMPONENTS program_options)
 
 # Include the ANTLR runtime
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -47,7 +46,9 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY
 
 # Compile the app
 add_executable(${PROJECT_NAME}
+	src/assembler.cpp
 	src/diagnostic.cpp
+	src/linker.cpp
 	src/main.cpp
 	src/parser.cpp
 	src/preprocess.cpp
@@ -92,6 +93,7 @@ add_executable(${PROJECT_NAME}
 
 	src/util/log.cpp
 	src/util/strings.cpp
+	src/util/tempfile.cpp
 
 	${ANTLR_CLexer_CXX_OUTPUTS}
 	${ANTLR_CParser_CXX_OUTPUTS})
@@ -107,4 +109,4 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
 	subprocess
 	antlr4_static
-	${Boost_LIBRARIES})
+	Boost::program_options)

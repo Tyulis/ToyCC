@@ -21,6 +21,14 @@ namespace toycc::ir {
         return {scope_stack, scope};
     }
 
+    std::shared_ptr<Statement> Generator::emit(std::shared_ptr<Statement> statement) {
+        return current_scope()->add_statement(statement);
+    }
+
+    std::shared_ptr<Label> Generator::emit_label(LabelType type, std::string name, CodeLocation location) {
+        return current_scope()->add_label(type, name, location);
+    }
+
     CodeLocation Generator::locate(antlr4::ParserRuleContext* context) const {
         antlr4::Token* start_token = context->getStart();
         LinePosition line = source_map.at(start_token->getLine());

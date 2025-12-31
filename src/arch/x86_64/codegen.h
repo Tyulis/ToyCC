@@ -21,13 +21,13 @@ namespace toycc::arch::x86_64 {
 
             // -------- Global constructs -> arch/x86_64/global.cpp
             void generate_global_scope(std::shared_ptr<Scope> scope);
-            void generate_function(std::shared_ptr<stmt::Function> function);
+            void generate_function(std::shared_ptr<Statement> function);
 
             void push_stack_frame();
             void pop_stack_frame();
 
             // -------- Statements -> arch/x86_64/statements.cpp
-            void generate_marker(std::shared_ptr<stmt::Marker> marker);
+            void generate_marker(std::shared_ptr<Statement> marker);
 
             // -------- Common code generation utilities -> arch/x86_64/write.cpp
             void write_label(std::string name);

@@ -1,44 +1,50 @@
 #pragma once
 
-#include <variant>
 #include "ir/declaration.h"
 
 
 namespace toycc::ir {
-    namespace stmt {
-        enum class Tag {
-            MARKER, BLOCK, FUNCTION,
-            LOAD_CONST, DEREF_LOAD, DEREF_STORE, COPY,
-            ADDRESS_OF, UNARY_OP, BINARY_OP, CALL,
-            JUMP, RETURN,
-        };
+    enum class StatementTag {
+        MARKER,  // No-op statement used to mark label positions without needing to update all positions when labels are moved around
+        BLOCK, FUNCTION,
+        LOAD, CALL,
+        JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, RETURN,
 
-        enum class UnaryOperator {
-            ADDRESSOF,
-        };
+        // Unary operators
+        COPY, ADDRESSOF, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT,
 
-        enum class BinaryOperator {
-            MUL, DIV, MOD,
-            PLUS, MINUS,
-            LSHIFT, RSHIFT,
-            LT, LE, GE, GT,
-            EQ, NE,
-            BITWISE_AND, BITWISE_XOR, BITWISE_OR,
-            LOGICAL_AND, LOGICAL_OR,
-        };
+        // Binary operators
+        MUL, DIV, MOD,
+        PLUS, MINUS,
+        LT, LE, GE, GT, EQ, NE,
+        BITWISE_AND, BITWISE_XOR, BITWISE_OR, LSHIFT, RSHIFT,
+        LOGICAL_AND, LOGICAL_OR,
+    };
 
-        enum class ConversionOperation {
-            COPY, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT,
-        };
-    }
-
+    struct Scope;  // Forward declaration for compound statements
     struct Statement {
-        stmt::Tag tag;
-        CodeLocation location;
+        public:
+            StatementTag tag;
+            CodeLocation location;
+            std::optional<LValue> lvalue_input;
+            std::vector<RValue> inputs;
+            std::optional<LValue> output;
+            std::optional<std::string> label;
+            std::shared_ptr<Scope> block;
 
-        Statement(stmt::Tag tag, CodeLocation location);
-        std::string tag_repr() const;
-        virtual std::string ir_code() const = 0;
+            std::string ir_code() const;
+
+            static std::shared_ptr<Statement> make_marker(CodeLocation location);
+            static std::shared_ptr<Statement> make_block(CodeLocation location, std::shared_ptr<Scope> block);
+            static std::shared_ptr<Statement> make_function(CodeLocation location, std::shared_ptr<Declaration> function, std::shared_ptr<Scope> block);
+            static std::shared_ptr<Statement> make_addressof(CodeLocation location, LValue object, LValue output);
+            static std::shared_ptr<Statement> make_unary_operation(CodeLocation location, StatementTag tag, RValue input, LValue output);
+            static std::shared_ptr<Statement> make_binary_operation(CodeLocation location, StatementTag tag, RValue left, RValue right, LValue output);
+            static std::shared_ptr<Statement> make_load(CodeLocation location, LValue source, LValue destination);
+            static std::shared_ptr<Statement> make_call(CodeLocation location, RValue function, std::vector<RValue> arguments, LValue return_value);
+            static std::shared_ptr<Statement> make_jump(CodeLocation location, std::string label);
+            static std::shared_ptr<Statement> make_conditional_jump(CodeLocation location, RValue predicate, std::string label, bool jump_if_is = true);
+            static std::shared_ptr<Statement> make_return(CodeLocation location, std::optional<RValue> return_value = {});
     };
 
     enum class LabelType {
@@ -51,120 +57,6 @@ namespace toycc::ir {
         std::shared_ptr<Statement> marker;
         CodeLocation location;
     };
-
-    struct Scope;  // Forward declaration for compound statements
-    namespace stmt {
-        // No-op statement used to mark label positions without needing to update all positions when labels are moved around
-        struct Marker : public Statement {
-            Marker(CodeLocation location);
-            virtual std::string ir_code() const override;
-        };
-
-        struct Block : public Statement {
-            std::shared_ptr<Scope> scope;
-
-            Block(CodeLocation location, std::shared_ptr<Scope> scope);
-            Block(Tag tag, CodeLocation location, std::shared_ptr<Scope> scope);
-            virtual std::string ir_code() const override;
-        };
-
-        struct Function : public Block {
-            std::shared_ptr<Declaration> declaration;
-
-            Function(CodeLocation location, std::shared_ptr<Scope> scope, std::shared_ptr<Declaration> declaration);
-            virtual std::string ir_code() const override;
-        };
-
-        struct LoadConst : public Statement {
-            using Constant = std::variant<ssize_t, size_t, long double, std::string>;
-
-            std::shared_ptr<Declaration> destination;
-            Constant value;
-
-            LoadConst(CodeLocation location, std::shared_ptr<Declaration> destination, Constant value);
-            virtual std::string ir_code() const override;
-        };
-
-        struct DerefLoad : public Statement {
-            std::shared_ptr<Declaration> destination;
-            LValue source_pointer;
-
-            DerefLoad(CodeLocation location, std::shared_ptr<Declaration> destination, LValue source_pointer);
-            virtual std::string ir_code() const override;
-        };
-
-        struct DerefStore: public Statement {
-            LValue destination_pointer;
-            std::shared_ptr<Declaration> source;
-
-            DerefStore(CodeLocation location, LValue destination_pointer, std::shared_ptr<Declaration> source);
-            virtual std::string ir_code() const override;
-        };
-
-        // Copy the value, with a format conversion when requested
-        struct Copy : public Statement {
-            ConversionOperation operation;
-            std::shared_ptr<Declaration> destination;
-            std::shared_ptr<Declaration> source;
-
-            Copy(CodeLocation location, ConversionOperation operation, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> source);
-            virtual std::string ir_code() const override;
-        };
-
-        struct AddressOf : public Statement {
-            std::shared_ptr<Declaration> destination;
-            LValue operand;
-
-            AddressOf(CodeLocation location, std::shared_ptr<Declaration> destination, LValue operand);
-            virtual std::string ir_code() const override;
-        };
-
-        struct UnaryOp : public Statement {
-            UnaryOperator op;
-            std::shared_ptr<Declaration> destination;
-            std::shared_ptr<Declaration> operand;
-
-            UnaryOp(CodeLocation location, UnaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> operand);
-            virtual std::string ir_code() const override;
-        };
-
-        struct BinaryOp : public Statement {
-            BinaryOperator op;
-            std::shared_ptr<Declaration> destination;
-            std::shared_ptr<Declaration> left;
-            std::shared_ptr<Declaration> right;
-
-            BinaryOp(CodeLocation location, BinaryOperator op, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> left, std::shared_ptr<Declaration> right);
-            virtual std::string ir_code() const override;
-        };
-
-        struct Call : public Statement {
-            std::shared_ptr<Declaration> destination;
-            std::shared_ptr<Declaration> function;
-            std::vector<std::shared_ptr<Declaration>> parameters;
-
-            Call(CodeLocation location, std::shared_ptr<Declaration> destination, std::shared_ptr<Declaration> function, std::vector<std::shared_ptr<Declaration>> parameters);
-            virtual std::string ir_code() const override;
-        };
-
-        struct Jump : public Statement {
-            std::string label;
-            std::shared_ptr<Declaration> predicate;
-            bool jump_if_is = true;
-
-            Jump(CodeLocation location, std::string label);
-            Jump(CodeLocation location, std::string label, std::shared_ptr<Declaration> predicate, bool jump_if_is = true);
-            virtual std::string ir_code() const override;
-        };
-
-        struct Return : public Statement {
-            std::shared_ptr<Declaration> declaration;
-
-            Return(CodeLocation location);
-            Return(CodeLocation location, std::shared_ptr<Declaration> declaration);
-            virtual std::string ir_code() const override;
-        };
-    }
 }
 
 #include "ir/scope.h"

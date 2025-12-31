@@ -2,6 +2,7 @@
 
 #include "diagnostic.h"
 #include "preprocess.h"
+#include "util/log.h"
 
 namespace toycc {
     void preprocess(std::string filename, std::ostream& output) {
@@ -13,7 +14,7 @@ namespace toycc {
         Diagnostic preprocessor_diagnostics(DiagnosticLevel::WARNING, process.cerr, filename);
         if (process.returncode == 0) {
             if (!process.cerr.empty())
-                std::cerr << preprocessor_diagnostics.level(DiagnosticLevel::WARNING).message() << std::endl;
+                log(preprocessor_diagnostics.level(DiagnosticLevel::WARNING));
         } else {
             throw preprocessor_diagnostics.level(DiagnosticLevel::ERROR);
         }

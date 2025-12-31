@@ -3,16 +3,20 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <filesystem>
 
 #include <boost/program_options.hpp>
 
+#include "linker.h"
 #include "parser.h"
+#include "assembler.h"
 #include "source_map.h"
 #include "diagnostic.h"
 #include "preprocess.h"
 #include "ir/scope.h"
 #include "ir/postprocessor.h"
 #include "util/log.h"
+#include "util/tempfile.h"
 
 #include "arch/datamodel.h"
 #include "arch/x86_64/codegen.h"
@@ -25,7 +29,11 @@ enum class SequenceStep : unsigned int {
     PARSE = 3,
     POSTPROCESS = 4,
     CODEGEN = 5,
+    ASSEMBLY = 6,
+    LINK = 7,
 };
+
+constexpr static std::string DEFAULT_OBJECT_FILE_NAME = "a.out";
 
 int main(int argc, char** argv) {
     toycc::arch::DATAMODEL = &toycc::arch::x86_64::DATAMODEL;  // Only x86_64 for now
@@ -37,7 +45,8 @@ int main(int argc, char** argv) {
                                   ("parse-xml",      "Output the AST as XML")
                                   ("parse-ir",       "Output the intermediate representation after semantic analysis")
                                   ("process-ir",     "Output the postprocessed intermediate representation")
-                                  ("codegen,S",      "Output the generated assembly code");
+                                  ("codegen,S",      "Output the generated assembly code")
+                                  ("compile,c",      "Compile to an object file");
 
     boost::program_options::options_description generic_options("Generic options");
     generic_options.add_options()("help,h",        "Show this help message")
@@ -67,7 +76,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    SequenceStep target_step = SequenceStep::CODEGEN;
+    SequenceStep target_step = SequenceStep::LINK;
     if (options.count("preprocess"))
         target_step = SequenceStep::PREPROCESS;
     if (options.count("source-map"))
@@ -76,6 +85,10 @@ int main(int argc, char** argv) {
         target_step = SequenceStep::PARSE;
     if (options.count("process-ir"))
         target_step = SequenceStep::POSTPROCESS;
+    if (options.count("codegen"))
+        target_step = SequenceStep::CODEGEN;
+    if (options.count("compile"))
+        target_step = SequenceStep::ASSEMBLY;
 
     if (target_step == SequenceStep::NONE)
         return 0;
@@ -145,6 +158,25 @@ int main(int argc, char** argv) {
             output_stream.get() << assembly.str() << std::endl;
             return 0;
         }
+
+        // -------- Assembly
+        toycc::TempFile temp_object_path(std::filesystem::path(input_file_name).filename().replace_extension("o"));
+        std::filesystem::path production_path;
+        if (options.count("output"))
+            production_path = options["output"].as<std::string>();
+        else
+            production_path = DEFAULT_OBJECT_FILE_NAME;
+
+        toycc::assemble(assembly.str(), temp_object_path);
+        if (target_step == SequenceStep::ASSEMBLY) {
+            std::filesystem::copy_file(temp_object_path, production_path);
+            return 0;
+        }
+
+        // -------- Linker
+        toycc::link(temp_object_path, production_path);
+        return 0;
+
     } catch (toycc::Diagnostic const& diagnostic) {
         toycc::log(diagnostic);
         return 2;
