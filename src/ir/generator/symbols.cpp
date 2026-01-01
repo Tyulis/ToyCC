@@ -57,6 +57,7 @@ namespace toycc::ir {
             if (!parameter.name.empty())
                 scope->add_local(std::make_shared<Declaration>(parameter, StorageClass::AUTO | StorageClass::PARAMETER));
 
+        scope->add_label(LabelType::FUNCTION, declaration->name, declaration->location);
         return scope;
     }
 

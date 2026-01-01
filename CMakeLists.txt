@@ -60,11 +60,11 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/datamodel.cpp
 	src/arch/x86_64/exports.cpp
 	src/arch/x86_64/global.cpp
-	src/arch/x86_64/state.cpp
 	src/arch/x86_64/statements.cpp
 	src/arch/x86_64/write.cpp
 
 	src/ir/declaration.cpp
+	src/ir/flow.cpp
 	src/ir/scope.cpp
 	src/ir/scopeframe.cpp
 	src/ir/statement.cpp
@@ -86,6 +86,7 @@ add_executable(${PROJECT_NAME}
 	src/ir/postprocessor/descope.cpp
 	src/ir/postprocessor/detype.cpp
 	src/ir/postprocessor/exports.cpp
+	src/ir/postprocessor/flow_analysis.cpp
 	src/ir/postprocessor/state.cpp
 
 	src/parserbase/CParserBase.cpp

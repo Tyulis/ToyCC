@@ -8,7 +8,7 @@
 #include <boost/multi_index/random_access_index.hpp>
 
 #include "ir/type.h"
-#include "ir/statement.h"
+#include "ir/label.h"
 #include "ir/declaration.h"
 
 namespace toycc::ir {
@@ -18,15 +18,15 @@ namespace toycc::ir {
         GLOBAL, BLOCK, FUNCTION, LOOP, CONDITIONAL, SWITCH,
     };
 
+    struct Statement;
     struct Scope {
         public:
             ScopeType type;
             std::shared_ptr<Declaration> function;
             std::string entry_label;
             std::string exit_label;
+            LabelMap labels;
             std::vector<std::shared_ptr<Statement>> statements;
-            std::unordered_map<std::string, std::shared_ptr<Label>> labels;
-            std::unordered_multimap<std::shared_ptr<Statement>, std::shared_ptr<Label>> markers;
 
             Scope(ScopeType type, std::shared_ptr<Declaration> function, std::string entry_label = {}, std::string exit_label = {});
 
@@ -35,6 +35,8 @@ namespace toycc::ir {
             std::shared_ptr<Type>        find_type(TypeIdentifier identifier);
             std::shared_ptr<Declaration> find_typedef(std::string name);
             std::shared_ptr<Declaration> find_local(std::string name);
+            std::shared_ptr<Label>       find_label(std::string name);
+            std::shared_ptr<Label>       find_label(std::shared_ptr<Statement> marker);
 
             std::shared_ptr<Type>        add_type(std::shared_ptr<Type> type);
             std::shared_ptr<Declaration> add_typedef(std::shared_ptr<Declaration> declaration);
@@ -50,7 +52,6 @@ namespace toycc::ir {
 
 
             struct insertion_index_tag {};
-            struct name_index_tag {};
             struct extract_declaration_name {
                 using result_type = std::string;
                 std::string operator() (std::shared_ptr<Declaration> decl) const {
@@ -69,6 +70,7 @@ namespace toycc::ir {
             std::unordered_map<ir::TypeIdentifier, std::shared_ptr<Type>> types;
             ordered_declaration_map typedefs;
             ordered_declaration_map locals;
-
     };
 }
+
+#include "ir/statement.h"

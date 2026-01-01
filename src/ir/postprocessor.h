@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+
+#include "ir/flow.h"
 #include "ir/scope.h"
 
 namespace toycc::ir {
@@ -8,7 +10,7 @@ namespace toycc::ir {
         public:
             // -------- Exported operations -> ir/postprocessor/exports.cpp
             PostProcessor(std::shared_ptr<Scope> global_scope);
-            std::shared_ptr<Scope> operator() ();
+            TranslationUnit operator() ();
 
         private:
             std::shared_ptr<Scope> global_scope;
@@ -19,6 +21,10 @@ namespace toycc::ir {
 
             // -------- Flatten all functions -> ir/postprocessor/descope.cpp
             void descope(std::shared_ptr<Scope> scope);
+
+            // -------- Control flow and instruction dependency analysis -> ir/postprocessor/flow_analysis.cpp
+            TranslationUnit analyse_flow(std::shared_ptr<Scope> global_scope);
+            Procedure analyse_procedure_flow(std::shared_ptr<Statement> function);
 
             // -------- State management -> ir/postprocessor/state.cpp
             std::string anonymous_identifier();

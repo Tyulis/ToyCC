@@ -2,39 +2,27 @@
 #include "arch/x86_64/codegen.h"
 
 namespace toycc::arch::x86_64 {
-    void CodeGenerator::generate_global_scope(std::shared_ptr<Scope> scope) {
-        ScopeFrame frame = in_scope(scope);
-
-        for (std::shared_ptr<Declaration> declaration : scope->locals_list()) {
+    void CodeGenerator::generate_translation_unit(const TranslationUnit& unit) {
+        for (const auto& [name, declaration] : unit.globals) {
             if (declaration->type->category == TypeCategory::FUNCTION)
                 continue;
 
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global declarations other than functions are not implemented", declaration->location);
         }
 
-        for (std::shared_ptr<Statement> statement : scope->statements) {
-            switch (statement->tag) {
-                case StatementTag::MARKER:    generate_marker  (statement);  break;
-                case StatementTag::FUNCTION:  generate_function(statement);  break;
-                default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unsupported statement type in the global scope", statement->location);
-            }
-        }
+        for (const auto& [name, procedure] : unit.procedures)
+            generate_procedure(procedure);
     }
 
-    void CodeGenerator::generate_function(std::shared_ptr<Statement> function) {
-        std::shared_ptr<Declaration> declaration = function->output->base.declaration();
-
+    void CodeGenerator::generate_procedure(const Procedure& procedure) {
         // Generate the function symbol
-        write_directive(std::format(".globl {}", declaration->name));
-        write_directive(std::format(".type {}, @function", declaration->name));
-        write_label(declaration->name);
+        write_directive(std::format(".globl {}", procedure.declaration->name));
+        write_directive(std::format(".type {}, @function", procedure.declaration->name));
+        write_label(procedure.declaration->name);
 
         // Then the actual code
         push_stack_frame();
-        for (std::shared_ptr<Declaration> local : function->block->locals_list())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Function definitions are not implemented", function->location);
-        for (std::shared_ptr<Statement> statement : function->block->statements)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Function definitions are not implemented", function->location);
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Code generation of procedures is not implemented", procedure.declaration->location);
         pop_stack_frame();
     }
 

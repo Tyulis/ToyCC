@@ -142,16 +142,16 @@ int main(int argc, char** argv) {
         // -------- Postprocessing
         std::shared_ptr<toycc::ir::Scope> ir = parser.to_ir();
         toycc::ir::PostProcessor postprocessor(ir);
-        std::shared_ptr<toycc::ir::Scope> processed_ir = postprocessor();
+        toycc::ir::TranslationUnit unit = postprocessor();
 
         if (target_step == SequenceStep::POSTPROCESS) {
-            output_stream.get() << processed_ir->ir_code() << std::endl;
+            output_stream.get() << unit.ir_code() << std::endl;
             return 0;
         }
 
         // -------- Code generation
         std::stringstream assembly;
-        toycc::arch::x86_64::CodeGenerator codegen(processed_ir);
+        toycc::arch::x86_64::CodeGenerator codegen(unit);
         codegen(assembly);
 
         if (target_step == SequenceStep::CODEGEN) {

@@ -6,6 +6,7 @@ int get_result(int argc) {
         a += b;
     }
     const int x = 4;
+
     return 'a' + argc * x;
 }
 

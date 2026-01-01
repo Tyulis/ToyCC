@@ -1,7 +1,7 @@
 #pragma once
 
+#include "ir/scope.h"
 #include "ir/declaration.h"
-
 
 namespace toycc::ir {
     enum class StatementTag {
@@ -21,7 +21,7 @@ namespace toycc::ir {
         LOGICAL_AND, LOGICAL_OR,
     };
 
-    struct Scope;  // Forward declaration for compound statements
+    struct Scope;
     struct Statement {
         public:
             StatementTag tag;
@@ -46,17 +46,4 @@ namespace toycc::ir {
             static std::shared_ptr<Statement> make_conditional_jump(CodeLocation location, RValue predicate, std::string label, bool jump_if_is = true);
             static std::shared_ptr<Statement> make_return(CodeLocation location, std::optional<RValue> return_value = {});
     };
-
-    enum class LabelType {
-        NAMED, INTERNAL, FUNCTION,
-    };
-
-    struct Label {
-        LabelType type;
-        std::string name;
-        std::shared_ptr<Statement> marker;
-        CodeLocation location;
-    };
 }
-
-#include "ir/scope.h"

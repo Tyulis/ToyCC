@@ -41,8 +41,8 @@ namespace toycc::ir {
                 }
 
                 // Move all labels of the block scope into the global scope
-                for (std::pair<std::string, std::shared_ptr<Label>> it : statement->block->labels)
-                    scope->add_label(it.second);
+                for (std::shared_ptr<Label> label : statement->block->labels)
+                    scope->add_label(label);
 
                 scope->statements.erase(scope->statements.begin() + position);  // Remove the block statement
                 position -= 1;                                                  // Point the next iteration to the first statement of the moved scope
