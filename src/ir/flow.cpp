@@ -40,6 +40,7 @@ namespace toycc::ir {
         if (statement->lvalue_input.has_value()) {
             if (statement->lvalue_input->is_dereference()) {
                 inputs = available_decls;
+                rvalues.push_back(statement->lvalue_input->base);
                 rvalues.append_range(statement->lvalue_input->indices);
             }
         }
@@ -48,6 +49,7 @@ namespace toycc::ir {
             // FIXME : Same for outputs
             if (statement->output->is_dereference()) {
                 outputs = available_decls;
+                rvalues.push_back(statement->output->base);
                 rvalues.append_range(statement->output->indices);
             } else {
                 outputs.insert(statement->output->base.declaration());
