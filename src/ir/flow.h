@@ -34,7 +34,11 @@ namespace toycc::ir {
             std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<Statement>> last_modification;
     };
 
-    using FlowGraph = Graph<LocalBlock>;
+    enum class FlowType {
+        FALLTHROUGH, JUMP,
+    };
+
+    using FlowGraph = Graph<LocalBlock, FlowType>;
 
     struct Procedure {
         public:

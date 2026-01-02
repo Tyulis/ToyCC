@@ -290,7 +290,7 @@ namespace toycc::ir {
 
                 // If the previous block may fall through (didn't end in an inconditional jump / return), connect it to the new block
                 if (previous_block.get() != nullptr)
-                    blocks.add_edge(previous_block, current_block);
+                    blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
                 previous_block = current_block;
 
                 current_block->add_statement(statement, used_decls);
@@ -303,7 +303,7 @@ namespace toycc::ir {
                 // We just exited a block with a conditional jump, so there's no label but we can still fall through from the previous block
                 // Create a new block and chain it after the previous block
                 current_block = blocks.emplace_node(LocalBlockType::INNER);
-                blocks.add_edge(previous_block, current_block);
+                blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
             }
 
             current_block->add_statement(statement, used_decls);
@@ -311,7 +311,7 @@ namespace toycc::ir {
             if (statement->tag == StatementTag::JUMP || statement->tag == StatementTag::JUMP_IF_TRUE || statement->tag == StatementTag::JUMP_IF_FALSE) {
                 // Jump -> exit this block, connect it to the target block
                 std::shared_ptr<Label> target = find_label(*statement->label);
-                blocks.add_edge(current_block, labeled_blocks[target]);
+                blocks.add_edge(current_block, labeled_blocks[target], FlowType::JUMP);
 
                 // Set the previous block to connect the next block : conditional jump -> allow connections, unconditional jump -> don't
                 if (statement->tag == StatementTag::JUMP)  previous_block = nullptr;
@@ -324,7 +324,7 @@ namespace toycc::ir {
                 current_block = nullptr;
             } else if (statement->tag == StatementTag::RETURN) {
                 // Return -> connect to the exit block, don't connect to the next block in the flat code
-                blocks.add_edge(current_block, exit_block);
+                blocks.add_edge(current_block, exit_block, FlowType::JUMP);
                 current_block  = nullptr;
                 previous_block = nullptr;
             }
@@ -338,7 +338,7 @@ namespace toycc::ir {
             std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType>(declaration->type);
             if (function_type->return_type->category == TypeCategory::VOID) {
                 block->add_statement(Statement::make_return(location), used_decls);
-                blocks.add_edge(block, exit_block);
+                blocks.add_edge(block, exit_block, FlowType::JUMP);
             } else throw Diagnostic(DiagnosticLevel::ERROR, "Some control flow paths reach the end of the function without returning a value", location);
         };
 

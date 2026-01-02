@@ -14,5 +14,10 @@ namespace toycc::ir {
     template <typename Register>
     using AllocationTable = std::unordered_map<std::shared_ptr<Declaration>, Allocation<Register>>;
 
-    using StackFrame = std::unordered_map<std::shared_ptr<Declaration>, size_t>;
+    struct StackFrame {
+        std::unordered_map<std::shared_ptr<Declaration>, size_t> locals;
+        size_t current_position = 0;
+
+        size_t position(std::shared_ptr<Declaration> declaration);
+    };
 }

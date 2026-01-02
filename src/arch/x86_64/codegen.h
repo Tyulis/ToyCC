@@ -4,6 +4,7 @@
 
 #include "ir/flow.h"
 #include "arch/codegen.h"
+#include "arch/x86_64/output.h"
 
 namespace toycc::arch::x86_64 {
     using namespace toycc::ir;
@@ -15,21 +16,11 @@ namespace toycc::arch::x86_64 {
             virtual void operator() (std::ostream& output) override;
 
         private:
-            std::optional<std::reference_wrapper<std::ostream>> output;
-
             // -------- Global constructs -> arch/x86_64/global.cpp
-            void generate_translation_unit(const TranslationUnit& unit);
-            void generate_procedure(const Procedure& procedure);
-
-            void push_stack_frame();
-            void pop_stack_frame();
+            void generate_translation_unit(CodeOutput& output, const TranslationUnit& unit);
+            void generate_procedure(CodeOutput& output, const Procedure& procedure);
 
             // -------- Statements -> arch/x86_64/statements.cpp
             void generate_marker(std::shared_ptr<Statement> marker);
-
-            // -------- Common code generation utilities -> arch/x86_64/write.cpp
-            void write_label(std::string name);
-            void write_statement(std::string code);
-            void write_directive(std::string code);
     };
 }
