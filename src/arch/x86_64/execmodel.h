@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ir/allocation.h"
+#include <array>
 
 namespace toycc::arch::x86_64 {
     enum class Register {
@@ -8,6 +8,5 @@ namespace toycc::arch::x86_64 {
         MM0, MM1, MM2, MM3, MM4, MM5, MM6, MM7, MM8, MM9, MM10, MM11, MM12, MM13, MM14, MM15,
     };
 
-    using Allocation = ir::Allocation<Register>;
-    using AllocationTable = ir::AllocationTable<Register>;
+    constexpr std::array<Register, 6> INTEGER_REGISTER_ARGUMENTS = {Register::DI, Register::SI, Register::D, Register::C, Register::R8, Register::R9};
 }

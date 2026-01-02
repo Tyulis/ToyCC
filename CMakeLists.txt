@@ -57,6 +57,7 @@ add_executable(${PROJECT_NAME}
 
 	src/arch/codegen.cpp
 	src/arch/datamodel.cpp
+	src/arch/x86_64/allocation.cpp
 	src/arch/x86_64/datamodel.cpp
 	src/arch/x86_64/exports.cpp
 	src/arch/x86_64/global.cpp

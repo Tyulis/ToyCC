@@ -31,7 +31,7 @@ namespace toycc::ir {
                 if (rvalue->is_constant())
                     rvalue->constant().type = rvalue->constant().type->storage_type();
 
-            // Convert array indices to pointer increments, using the newly detyped constants
+            // Convert array indices to pointer offsets, using the newly detyped constants
             if (statement->lvalue_input.has_value())
                 statement->lvalue_input = detype_lvalue(*statement->lvalue_input, scope);
             if (statement->output.has_value())
@@ -47,7 +47,7 @@ namespace toycc::ir {
         scope->clear_types();  // After that, we won't need to resolve any type names
     }
 
-    // Resolve the semantic array indices to increments in bytes relative to the pointer
+    // Resolve the semantic array indices to offsets in bytes relative to the pointer
     LValue PostProcessor::detype_lvalue(const LValue& original, std::shared_ptr<Scope> scope) {
         if (!original.is_dereference())  // Just an identifier, no problem
             return original;

@@ -3,8 +3,6 @@
 #include <string>
 #include <sstream>
 
-#include "ir/allocation.h"
-
 namespace toycc::arch::x86_64 {
     // x86_64 assembly code formatting helper
     class CodeOutput {
@@ -22,14 +20,5 @@ namespace toycc::arch::x86_64 {
             std::stringstream output;
     };
 
-    // Stack frame object that automatically generates its frame push and pop code
-    struct StackFrame : ir::StackFrame {
-        CodeOutput output;
-
-        std::string str() const;
-    };
-
     std::ostream& operator<< (std::ostream& output, const CodeOutput& code);
-    std::ostream& operator<< (std::ostream& output, const StackFrame& code);
-    CodeOutput& operator<< (CodeOutput& output, const StackFrame& code);
 }

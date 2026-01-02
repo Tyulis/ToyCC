@@ -1,5 +1,6 @@
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
+#include "arch/x86_64/allocation.h"
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_translation_unit(CodeOutput& output, const TranslationUnit& unit) {
@@ -21,7 +22,7 @@ namespace toycc::arch::x86_64 {
         output.label(procedure.declaration->name);
 
         // Then the actual code
-        StackFrame frame;
+        StackFrame frame(procedure);
         //throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Code generation of procedures is not implemented", procedure.declaration->location);
         output << frame;
     }
