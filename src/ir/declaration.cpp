@@ -183,6 +183,10 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "A constant can't be an lvalue without some form of dereferencing", location);
     }
 
+    bool LValue::is_dereference() const {
+        return !indices.empty();
+    }
+
     std::string LValue::ir_code() const {
         std::stringstream code;
         code << base.ir_code();

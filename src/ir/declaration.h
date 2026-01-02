@@ -103,6 +103,7 @@ namespace toycc::ir {
         LValue(std::shared_ptr<Declaration> declaration);
         LValue(RValue base_declaration, CodeLocation location, std::vector<RValue> indices = {});
 
+        bool is_dereference() const;
         std::shared_ptr<Type> type() const;
         std::string ir_code() const;
     };

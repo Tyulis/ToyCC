@@ -22,9 +22,8 @@ namespace toycc::ir {
             // -------- Flatten all functions -> ir/postprocessor/descope.cpp
             void descope(std::shared_ptr<Scope> scope);
 
-            // -------- Control flow and instruction dependency analysis -> ir/postprocessor/flow_analysis.cpp
+            // -------- Control flow analysis -> ir/postprocessor/flow_analysis.cpp
             TranslationUnit analyse_flow(std::shared_ptr<Scope> global_scope);
-            Procedure analyse_procedure_flow(std::shared_ptr<Statement> function);
 
             // -------- State management -> ir/postprocessor/state.cpp
             std::string anonymous_identifier();

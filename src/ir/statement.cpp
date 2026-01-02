@@ -44,9 +44,6 @@ namespace toycc::ir {
     }
 
     std::string Statement::ir_code() const {
-        if (tag == StatementTag::MARKER)
-            return "";
-
         std::stringstream code;
         code << tag_repr(tag);
         if (lvalue_input.has_value())

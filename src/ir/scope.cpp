@@ -22,9 +22,8 @@ namespace toycc::ir {
             for (auto label_it = begin; label_it != end; label_it++)
                 code << (*label_it)->name << ": ";
 
-            std::string statement_code = statement->ir_code();
-            if (!statement_code.empty())
-                code << statement_code << ";\n";
+            if (statement->tag != StatementTag::MARKER)
+                code << statement->ir_code() << ";\n";
         }
         return rtrim(code.str());
     }
