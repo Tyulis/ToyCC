@@ -1,10 +1,9 @@
 #pragma once
 
-#include <optional>
-
 #include "ir/flow.h"
 #include "arch/codegen.h"
 #include "arch/x86_64/output.h"
+#include "arch/x86_64/allocation.h"
 
 namespace toycc::arch::x86_64 {
     using namespace toycc::ir;
@@ -19,8 +18,11 @@ namespace toycc::arch::x86_64 {
             // -------- Global constructs -> arch/x86_64/global.cpp
             void generate_translation_unit(CodeOutput& output, const TranslationUnit& unit);
             void generate_procedure(CodeOutput& output, const Procedure& procedure);
+            void generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block);
 
             // -------- Statements -> arch/x86_64/statements.cpp
-            void generate_marker(std::shared_ptr<Statement> marker);
+            void generate_statement(StackFrame& frame, std::shared_ptr<Statement> statement);
+            void generate_marker(StackFrame& frame, std::shared_ptr<Statement> marker);
+            void generate_return(StackFrame& frame, std::shared_ptr<Statement> statement);
     };
 }

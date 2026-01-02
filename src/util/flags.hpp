@@ -65,7 +65,7 @@ namespace toycc {
     };
 
     template <typename T> requires(std::is_scoped_enum<T>::value)
-    Flags<T> operator| (T lhs, T rhs) {
+    constexpr Flags<T> operator| (T lhs, T rhs) {
         return Flags<T> {lhs} | rhs;
     }
 }

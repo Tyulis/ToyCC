@@ -59,6 +59,7 @@ add_executable(${PROJECT_NAME}
 	src/arch/datamodel.cpp
 	src/arch/x86_64/allocation.cpp
 	src/arch/x86_64/datamodel.cpp
+	src/arch/x86_64/execmodel.cpp
 	src/arch/x86_64/exports.cpp
 	src/arch/x86_64/global.cpp
 	src/arch/x86_64/output.cpp

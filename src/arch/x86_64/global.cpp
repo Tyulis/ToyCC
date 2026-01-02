@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/allocation.h"
@@ -23,7 +25,37 @@ namespace toycc::arch::x86_64 {
 
         // Then the actual code
         StackFrame frame(procedure);
-        //throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Code generation of procedures is not implemented", procedure.declaration->location);
+        std::shared_ptr<LocalBlock> current_block = procedure.entry_block;
+        std::unordered_set<std::shared_ptr<LocalBlock>> visited;
+        while (current_block != procedure.exit_block) {
+            generate_local_block(frame, current_block);
+            visited.insert(current_block);
+            FlowGraph::EdgeSet transitions = procedure.blocks.out_edges(current_block);
+
+            // Always prioritize fallthrough
+            for (const FlowGraph::Edge& transition : transitions) {
+                if (transition.attr == FlowType::FALLTHROUGH && !visited.contains(transition.exit)) {
+                    current_block = transition.exit;
+                    continue;
+                }
+            }
+
+            // FIXME : What to do then ? For now take the first block
+            for (const FlowGraph::Edge& transition : transitions) {
+                if (!visited.contains(transition.exit)) {
+                    current_block = transition.exit;
+                    continue;
+                }
+            }
+        }
+
         output << frame;
+    }
+
+    // FIXME : Trivial implementation for now
+    void CodeGenerator::generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block) {
+        std::vector<std::shared_ptr<Statement>> ordered_statements = block->statements.topological_sort();
+        for (std::shared_ptr<Statement> statement : ordered_statements)
+            generate_statement(frame, statement);
     }
 }

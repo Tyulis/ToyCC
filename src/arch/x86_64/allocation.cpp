@@ -5,7 +5,7 @@
 #include "util/alignment.hpp"
 
 namespace toycc::arch::x86_64 {
-    StackFrame::StackFrame(const ir::Procedure& procedure) {
+    StackFrame::StackFrame(const ir::Procedure& procedure) : procedure(procedure) {
         for (std::shared_ptr<ir::Declaration> declaration : procedure.locals)
             allocation[declaration] = {};
 
