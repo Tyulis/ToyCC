@@ -90,6 +90,7 @@ namespace toycc::ir {
         CodeLocation location() const;
         std::shared_ptr<Type> type() const;
         Constant constant() const;
+        Constant& constant();
         std::shared_ptr<Declaration> declaration() const;
 
         std::string ir_code() const;

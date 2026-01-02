@@ -158,6 +158,11 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location());
     }
 
+    Constant& RValue::constant() {
+        if (is_constant())  return std::get<Constant>(value);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location());
+    }
+
     std::shared_ptr<Declaration> RValue::declaration() const {
         if (!is_constant())  return std::get<std::shared_ptr<Declaration>>(value);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant rvalue", location());
