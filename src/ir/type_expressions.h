@@ -22,6 +22,7 @@ namespace toycc::ir {
             bool operator== (const PointerType& rhs) const;
 
             virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
@@ -43,6 +44,7 @@ namespace toycc::ir {
             bool operator== (const ArrayType& rhs) const;
 
             virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
@@ -74,6 +76,8 @@ namespace toycc::ir {
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
+
+            virtual std::shared_ptr<Type> dequalify() const override;
         protected:
             StructType(std::string name, CodeLocation location, bool is_complete = false, std::vector<Member> members = {});
     };
@@ -84,6 +88,8 @@ namespace toycc::ir {
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
+
+            virtual std::shared_ptr<Type> dequalify() const override;
         protected:
             UnionType(std::string name, CodeLocation location, bool is_complete = false, std::vector<Member> members = {});
     };
@@ -101,6 +107,7 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const EnumType& rhs) const;
 
+            virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
@@ -121,6 +128,7 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const FunctionType& rhs) const;
 
+            virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
@@ -140,9 +148,6 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const TypeModifier& rhs) const;
 
-            virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
-            virtual std::shared_ptr<Type> dequalify() const override;
-
         protected:
             TypeModifier(TypeCategory category, std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type);
     };
@@ -158,6 +163,8 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const BitfieldType& rhs) const;
 
+            virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
@@ -176,6 +183,8 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const AlignedType& rhs) const;
 
+            virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;
@@ -201,6 +210,8 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const QualifiedType& rhs) const;
 
+            virtual std::shared_ptr<Type> dereference(CodeLocation location) const override;
+            virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;

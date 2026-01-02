@@ -51,6 +51,10 @@ namespace toycc::ir {
         return referenced_type;
     }
 
+    std::shared_ptr<Type> PointerType::dequalify() const {
+        return std::make_shared<PointerType> (*this);
+    }
+
     std::shared_ptr<Type> PointerType::storage_type() const {
         return std::make_shared<IntegerType> (".Tptr", location, 8 * arch::DATAMODEL->pointer_size(), 8 * arch::DATAMODEL->pointer_alignment(), false);
     }
@@ -88,6 +92,10 @@ namespace toycc::ir {
 
     std::shared_ptr<Type> ArrayType::dereference(CodeLocation) const {
         return element_type;
+    }
+
+    std::shared_ptr<Type> ArrayType::dequalify() const {
+        return std::make_shared<ArrayType> (*this);
     }
 
     std::shared_ptr<Type> ArrayType::storage_type() const {
@@ -128,7 +136,12 @@ namespace toycc::ir {
         std::vector<Member> storage_members;
         for (const Member& member : members)
             storage_members.push_back(member.to_storage_type());
-        return std::make_shared<CompoundType>(CompoundType {category, name, location, is_complete, storage_members});
+
+        switch (category) {
+            case TypeCategory::STRUCT: return StructType::make(name, location, is_complete, storage_members);
+            case TypeCategory::UNION:  return UnionType::make (name, location, is_complete, storage_members);
+            default: throw Diagnostic(DiagnosticLevel::ERROR, "Invalid compound type category", location);
+        }
     }
 
     std::string CompoundType::ir_code() const {
@@ -165,6 +178,11 @@ namespace toycc::ir {
         return members[0].type->alignment(location);
     }
 
+    std::shared_ptr<Type> StructType::dequalify() const {
+        return std::make_shared<StructType> (*this);
+    }
+
+
     // -------- UnionType
     UnionType::UnionType(std::string name, CodeLocation location, bool is_complete, std::vector<Member> members)
         : CompoundType(TypeCategory::UNION, name, location, is_complete, members) {}
@@ -194,6 +212,11 @@ namespace toycc::ir {
         return union_alignment;
     }
 
+    std::shared_ptr<Type> UnionType::dequalify() const {
+        return std::make_shared<UnionType> (*this);
+    }
+
+
     // -------- EnumType
     EnumType::EnumType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, std::unordered_map<std::string, ssize_t> values)
         : Type(TypeCategory::ENUM, name, location), underlying_type(underlying_type), values(values) {}
@@ -214,6 +237,10 @@ namespace toycc::ir {
 
     size_t EnumType::alignment(CodeLocation location) const {
         return underlying_type->alignment(location);
+    }
+
+    std::shared_ptr<Type> EnumType::dequalify() const {
+        return std::make_shared<EnumType> (*this);
     }
 
     std::shared_ptr<Type> EnumType::storage_type() const {
@@ -264,6 +291,10 @@ namespace toycc::ir {
 
     size_t FunctionType::alignment(CodeLocation location) const {
         throw Diagnostic(DiagnosticLevel::ERROR, "Can't query the alignment of a function type", location);
+    }
+
+    std::shared_ptr<Type> FunctionType::dequalify() const {
+        return std::make_shared<FunctionType> (*this);
     }
 
     std::shared_ptr<Type> FunctionType::storage_type() const {
@@ -327,13 +358,6 @@ namespace toycc::ir {
         return Type::operator== (rhs) && *underlying_type == *rhs.underlying_type;
     }
 
-    std::shared_ptr<Type> TypeModifier::dereference(CodeLocation) const {
-        return underlying_type->dereference(location);
-    }
-
-    std::shared_ptr<Type> TypeModifier::dequalify() const {
-        return underlying_type->dequalify();
-    }
 
     // -------- BitfieldType
     BitfieldType::BitfieldType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits)
@@ -353,6 +377,14 @@ namespace toycc::ir {
 
     size_t BitfieldType::alignment(CodeLocation location) const {
         throw Diagnostic(DiagnosticLevel::ERROR, "Can't query the alignment of a bitfield type", location);
+    }
+
+    std::shared_ptr<Type> BitfieldType::dereference(CodeLocation) const {
+        return underlying_type->dereference(location);
+    }
+
+    std::shared_ptr<Type> BitfieldType::dequalify() const {
+        return underlying_type->dequalify();
     }
 
     std::shared_ptr<Type> BitfieldType::storage_type() const {
@@ -447,6 +479,14 @@ namespace toycc::ir {
         return TypeModifier::operator== (rhs) && alignment_bits == rhs.alignment_bits;
     }
 
+    std::shared_ptr<Type> AlignedType::dereference(CodeLocation) const {
+        return underlying_type->dereference(location);
+    }
+
+    std::shared_ptr<Type> AlignedType::dequalify() const {
+        return underlying_type->dequalify();
+    }
+
     std::shared_ptr<Type> AlignedType::storage_type() const {
         return AlignedType::make(name, location, underlying_type->storage_type(), alignment_bits);
     }
@@ -499,6 +539,14 @@ namespace toycc::ir {
 
     bool QualifiedType::operator== (const QualifiedType& rhs) const {
         return TypeModifier::operator== (rhs) && qualifiers == rhs.qualifiers;
+    }
+
+    std::shared_ptr<Type> QualifiedType::dereference(CodeLocation) const {
+        return underlying_type->dereference(location);
+    }
+
+    std::shared_ptr<Type> QualifiedType::dequalify() const {
+        return underlying_type->dequalify();
     }
 
     std::shared_ptr<Type> QualifiedType::storage_type() const {

@@ -22,6 +22,10 @@ namespace toycc::ir {
             // -------- Flatten all functions -> ir/postprocessor/descope.cpp
             void descope(std::shared_ptr<Scope> scope);
 
+            // -------- Flatten multi-level indexing -> ir/postprocessor/dereference.cpp
+            void dereference(std::shared_ptr<Scope> scope);
+            LValue dereference_lvalue(const LValue& original, std::shared_ptr<Scope> statements);
+
             // -------- Control flow analysis -> ir/postprocessor/flow_analysis.cpp
             TranslationUnit analyse_flow(std::shared_ptr<Scope> global_scope);
 
@@ -31,5 +35,6 @@ namespace toycc::ir {
             std::string anonymous_type();
             std::string make_scope_prefix();
             std::string make_scope_prefix(std::string name);
+            std::shared_ptr<Declaration> declare_temporary(std::shared_ptr<Scope> scope, std::shared_ptr<Type> type, CodeLocation location);
     };
 }

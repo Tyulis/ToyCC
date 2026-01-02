@@ -36,8 +36,8 @@ namespace toycc::ir {
         virtual bool operator== (const Type& rhs) const;  // Defaults to same category
 
         virtual std::shared_ptr<Type> dereference(CodeLocation location) const;  // Type emitted by a dereference of this type. Defaults to a throw.
-        virtual std::shared_ptr<Type> dequalify() const;                         // Type without modifiers, default to the same type
-        virtual std::shared_ptr<Type> storage_type() const;                      // Physical storage type, defaults to the same type
+        virtual std::shared_ptr<Type> dequalify() const;                         // Type without modifiers
+        virtual std::shared_ptr<Type> storage_type() const;                      // Physical storage type
 
         TypeIdentifier identifier() const;
         bool is_arithmetic() const;
@@ -65,6 +65,9 @@ namespace toycc::ir {
 
     struct BooleanType : public PrimitiveType {
         BooleanType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits);
+
+        virtual std::shared_ptr<Type> dequalify() const override;
+        virtual std::shared_ptr<Type> storage_type() const override;
     };
 
     struct IntegerType : public PrimitiveType {
@@ -75,11 +78,17 @@ namespace toycc::ir {
         virtual bool operator== (const Type& rhs) const override;
         bool operator== (const IntegerType& rhs) const;
 
+        virtual std::shared_ptr<Type> dequalify() const override;
+        virtual std::shared_ptr<Type> storage_type() const override;
+
         virtual std::string ir_code() const override;
     };
 
     struct FloatingPointType : public PrimitiveType {
         FloatingPointType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits);
+
+        virtual std::shared_ptr<Type> dequalify() const override;
+        virtual std::shared_ptr<Type> storage_type() const override;
     };
 
     std::string category_repr(TypeCategory category);

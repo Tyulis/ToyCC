@@ -42,6 +42,8 @@ namespace toycc::ir {
                 inputs = available_decls;
                 rvalues.push_back(statement->lvalue_input->base);
                 rvalues.append_range(statement->lvalue_input->indices);
+            } else {
+                inputs.insert(statement->lvalue_input->base.declaration());
             }
         }
 
@@ -212,8 +214,7 @@ namespace toycc::ir {
             }
         };
 
-        for (std::shared_ptr<LocalBlock> source : blocks.sources())
-            blocks.breadth_first_search(source, push_block);
+        blocks.breadth_first_search(push_block);
 
         for (size_t index = 0; index < block_order.size(); index++) {
             std::shared_ptr<LocalBlock> block = block_order[index];
@@ -332,7 +333,7 @@ namespace toycc::ir {
         // All possible control flow paths should eventually reach the exit block
         // For those who don't, if the function has no return value we can implicitely insert a return statement. Otherwise the procedure is ill-formed.
         auto insert_implicit_exit = [&](std::shared_ptr<LocalBlock> block) {
-            const CodeLocation location = scope->statements.back()->location;  // The algorithm above can only produce non-empty blocks
+            const CodeLocation location = scope->statements.back()->location;
 
             std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType>(declaration->type);
             if (function_type->return_type->category == TypeCategory::VOID) {
@@ -345,7 +346,6 @@ namespace toycc::ir {
             // First, ensure that all flow control paths are reachable from the entry block, prune those that don't
             // We need to do it first to avoid unreachable blocks from counting as non-returning paths in the next step
             // Unreachable blocks arise naturally from some constructs like if-statements at the end of a function, and they disturb the next steps
-            auto unreachable_blocks = blocks.unreachable_from(entry_block);
             for (std::shared_ptr<LocalBlock> unreachable : blocks.unreachable_from(entry_block))
                 blocks.pop_node(unreachable);
 
