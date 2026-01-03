@@ -8,19 +8,20 @@ namespace toycc::arch::x86_64 {
     // -------- StackFrame
     StackFrame::StackFrame(const ir::Procedure& procedure) : procedure(procedure) {
         auto& declaration_index = allocations.get<ir::declaration_tag>();
-        for (std::shared_ptr<ir::Declaration> declaration : procedure.locals)
-            declaration_index.insert(Allocation {declaration, LOC::NONE});
-
-        for (std::shared_ptr<ir::Declaration> declaration : procedure.globals)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variables are not implemented", declaration->location);
 
         size_t integer_parameter_index = 0;
         for (std::shared_ptr<ir::Declaration> parameter : procedure.parameters) {
-            auto it = declaration_index.find(parameter);
             if (parameter->type->category == ir::TypeCategory::INTEGER)
-                declaration_index.replace(it, Allocation {parameter, INTEGER_REGISTER_ARGUMENTS[integer_parameter_index++]});
+                declaration_index.insert(Allocation {parameter, INTEGER_REGISTER_ARGUMENTS[integer_parameter_index++]});
             else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer function parameters are not implemented", parameter->location);
         }
+
+        for (std::shared_ptr<ir::Declaration> declaration : procedure.locals)
+            if (!declaration_index.contains(declaration))
+                declaration_index.insert(Allocation {declaration, LOC::NONE});
+
+        for (std::shared_ptr<ir::Declaration> declaration : procedure.globals)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variables are not implemented", declaration->location);
     }
 
     LOC StackFrame::locate(std::shared_ptr<ir::Declaration> declaration) const {
