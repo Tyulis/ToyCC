@@ -22,7 +22,6 @@ namespace toycc::arch::x86_64 {
 
             // -------- Statements -> arch/x86_64/statements.cpp
             void generate_statement(StackFrame& frame, std::shared_ptr<Statement> statement);
-            void generate_marker(StackFrame& frame, std::shared_ptr<Statement> marker);
             void generate_return(StackFrame& frame, std::shared_ptr<Statement> statement);
 
             // -------- Operand management -> arch/x86_64/operands.cpp

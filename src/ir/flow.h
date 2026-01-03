@@ -30,7 +30,6 @@ namespace toycc::ir {
             void add_statement(std::shared_ptr<Statement> statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls);
 
         private:
-            std::shared_ptr<Statement> entry_marker;
             std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<Statement>> last_modification;
     };
 
@@ -44,7 +43,6 @@ namespace toycc::ir {
         public:
             std::shared_ptr<Declaration> declaration;
             CodeLocation location;
-            LabelMap labels;
             FlowGraph blocks;
             std::shared_ptr<LocalBlock> entry_block;
             std::shared_ptr<LocalBlock> exit_block;
@@ -54,10 +52,6 @@ namespace toycc::ir {
 
             Procedure() = default;
             Procedure(std::shared_ptr<Statement> function);
-            Procedure(std::shared_ptr<Declaration> declaration, LabelMap labels);
-
-            std::shared_ptr<Label> find_label(std::string name) const;
-            std::shared_ptr<Label> find_label(std::shared_ptr<Statement> marker) const;
 
             std::string ir_code() const;
 

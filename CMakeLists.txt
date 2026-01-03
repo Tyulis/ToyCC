@@ -40,7 +40,7 @@ antlr_target(CParser ${CPARSER_G4}
 
 # Add the CParserBase include in CParser.h
 add_custom_target(CParserDependencies
-                  COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CParserDependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/gen/parser/CParser.h
+                  COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/CParserDependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/gen/parser/CParser.h
                   DEPENDS ${ANTLR_CParser_CXX_OUTPUTS}
                   COMMENT "Adding the CParserBase.h include in CParser.h")
 

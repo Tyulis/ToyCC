@@ -61,6 +61,9 @@ namespace toycc::arch::x86_64 {
 
     // FIXME : Trivial implementation for now
     void CodeGenerator::generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block) {
+        if (block->label.get() != nullptr && block->label->name != frame.procedure.declaration->name)
+            frame.output.label(block->label->name);
+
         std::vector<std::shared_ptr<Statement>> ordered_statements = block->statements.topological_sort();
         for (std::shared_ptr<Statement> statement : ordered_statements)
             generate_statement(frame, statement);

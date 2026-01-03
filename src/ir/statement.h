@@ -22,6 +22,8 @@ namespace toycc::ir {
     };
 
     struct Scope;
+
+    // Semantic statement object
     struct Statement {
         public:
             StatementTag tag;

@@ -110,7 +110,7 @@ namespace toycc::ir {
         std::vector<RValue> indices;
 
         LValue(std::shared_ptr<Declaration> declaration);
-        LValue(RValue base_declaration, CodeLocation location, std::vector<RValue> indices = {});
+        LValue(RValue base, CodeLocation location, std::vector<RValue> indices = {});
 
         bool is_dereference() const;
         std::shared_ptr<Type> type() const;

@@ -16,7 +16,7 @@ namespace toycc::ir {
     }
 
     // -------- LocalBlock
-    LocalBlock::LocalBlock(LocalBlockType type, std::shared_ptr<Label> label) : type(type), label(label), entry_marker(statements.add_node(Statement::make_marker({}))) {}
+    LocalBlock::LocalBlock(LocalBlockType type, std::shared_ptr<Label> label) : type(type), label(label) {}
 
     void LocalBlock::add_statement(std::shared_ptr<Statement> statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls) {
         if (statement->block.get() != nullptr)
@@ -65,19 +65,16 @@ namespace toycc::ir {
         // Find where they come from and add edges
         for (std::shared_ptr<Declaration> input : inputs) {
             auto found = last_modification.find(input);
-            std::shared_ptr<Statement> origin = nullptr;
 
             if (found == last_modification.end()) {
                 // Not produced by this block -> link to the entry marker
                 input_variables.insert(input);
-                origin = entry_marker;
             } else {
-                origin = found->second;
+                std::shared_ptr<Statement> origin = found->second;
+                DependencyGraph::Edge edge = statements.find_edge(origin, statement).value_or({origin, statement, {}});
+                edge.attr.insert(input);
+                statements.add_edge(edge);
             }
-
-            DependencyGraph::Edge edge = statements.find_edge(origin, statement).value_or({origin, statement, {}});
-            edge.attr.insert(input);
-            statements.add_edge(edge);
         }
 
         for (std::shared_ptr<Declaration> output : outputs) {
@@ -171,7 +168,6 @@ namespace toycc::ir {
 
         std::shared_ptr<Scope> scope = function->block;
         declaration = function->output->base.declaration();
-        labels = scope->labels;
         entry_block = blocks.emplace_node(LocalBlockType::ENTRY);
         exit_block  = blocks.emplace_node(LocalBlockType::EXIT);
 
@@ -182,23 +178,6 @@ namespace toycc::ir {
         }
 
         build_flow_graph(scope);
-    }
-
-    Procedure::Procedure(std::shared_ptr<Declaration> declaration, LabelMap labels)
-        : declaration(declaration), labels(labels), entry_block(blocks.emplace_node(LocalBlockType::ENTRY)), exit_block(blocks.emplace_node(LocalBlockType::EXIT)) {}
-
-    std::shared_ptr<Label> Procedure::find_label(std::string name) const {
-        auto& index = labels.get<name_index_tag>();
-        auto element = index.find(name);
-        if (element == index.end())  return nullptr;
-        else                         return *element;
-    }
-
-    std::shared_ptr<Label> Procedure::find_label(std::shared_ptr<Statement> marker) const {
-        auto& index = labels.get<marker_index_tag>();
-        auto element = index.find(marker);
-        if (element == index.end())  return nullptr;
-        else                         return *element;
     }
 
     std::string Procedure::ir_code() const {
@@ -268,7 +247,7 @@ namespace toycc::ir {
 
         // Initialize the labeled blocks to have jump destinations
         std::unordered_map<std::shared_ptr<Label>, std::shared_ptr<LocalBlock>> labeled_blocks;
-        for (std::shared_ptr<Label> label : labels) {
+        for (std::shared_ptr<Label> label : scope->labels) {
             std::shared_ptr<LocalBlock> block = blocks.emplace_node(LocalBlockType::INNER, label);
             labeled_blocks[label] = block;
         }
@@ -285,15 +264,13 @@ namespace toycc::ir {
         for (std::shared_ptr<Statement> statement : scope->statements) {
             // Label = jump destination -> start a new block. FIXME : may benefit from a step to clear orphan labels
             if (statement->tag == StatementTag::MARKER) {
-                std::shared_ptr<Label> label = find_label(statement);
+                std::shared_ptr<Label> label = scope->find_label(statement);
                 current_block = labeled_blocks[label];  // The block already exists and has its type and label already set
 
                 // If the previous block may fall through (didn't end in an inconditional jump / return), connect it to the new block
                 if (previous_block.get() != nullptr)
                     blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
                 previous_block = current_block;
-
-                current_block->add_statement(statement, used_decls);
                 continue;
             } else if (current_block.get() == nullptr && previous_block.get() == nullptr) {
                 // We're right after an unconditional jump, and there's no label so nothing can jump here
@@ -310,7 +287,7 @@ namespace toycc::ir {
 
             if (statement->tag == StatementTag::JUMP || statement->tag == StatementTag::JUMP_IF_TRUE || statement->tag == StatementTag::JUMP_IF_FALSE) {
                 // Jump -> exit this block, connect it to the target block
-                std::shared_ptr<Label> target = find_label(*statement->label);
+                std::shared_ptr<Label> target = scope->find_label(*statement->label);
                 blocks.add_edge(current_block, labeled_blocks[target], FlowType::JUMP);
 
                 // Set the previous block to connect the next block : conditional jump -> allow connections, unconditional jump -> don't
