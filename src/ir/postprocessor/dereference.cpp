@@ -70,7 +70,7 @@ namespace toycc::ir {
 
             // Then apply that variable offset to the pointer
             std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, pointer_type, location);
-            scope->add_statement(Statement::make_binary_operation(location, StatementTag::PLUS, pointer, offset, offset_pointer));
+            scope->add_statement(Statement::make_binary_operation(location, StatementTag::ADD, pointer, offset, offset_pointer));
 
             // Now the lvalue is *(offset_pointer+0)
             return {offset_pointer, Constant {IntegerConstant(0), location, offset_type}};

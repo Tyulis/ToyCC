@@ -18,14 +18,16 @@ namespace toycc::ir {
             case StatementTag::RETURN:          return "RETURN";
             case StatementTag::COPY:            return "COPY";
             case StatementTag::ADDRESSOF:       return "ADDRESSOF";
+            case StatementTag::PLUS:            return "PLUS";
+            case StatementTag::MINUS:           return "MINUS";
             case StatementTag::FLOAT_TO_FLOAT:  return "FLOAT_TO_FLOAT";
             case StatementTag::INT_TO_FLOAT:    return "INT_TO_FLOAT";
             case StatementTag::FLOAT_TO_INT:    return "FLOAT_TO_INT";
             case StatementTag::MUL:             return "MUL";
             case StatementTag::DIV:             return "DIV";
             case StatementTag::MOD:             return "MOD";
-            case StatementTag::PLUS:            return "PLUS";
-            case StatementTag::MINUS:           return "MINUS";
+            case StatementTag::ADD:             return "ADD";
+            case StatementTag::SUB:             return "SUB";
             case StatementTag::LT:              return "LT";
             case StatementTag::LE:              return "LE";
             case StatementTag::GE:              return "GE";

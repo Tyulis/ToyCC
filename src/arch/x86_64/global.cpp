@@ -31,20 +31,29 @@ namespace toycc::arch::x86_64 {
             FlowGraph::EdgeSet transitions = procedure.blocks.out_edges(current_block);
 
             // Always prioritize fallthrough
+            std::shared_ptr<LocalBlock> fallthrough = nullptr;
+            std::shared_ptr<LocalBlock> non_fallthrough = nullptr;
+            bool goes_to_exit = false;
+
             for (const FlowGraph::Edge& transition : transitions) {
-                if (transition.attr == FlowType::FALLTHROUGH && !visited.contains(transition.exit)) {
-                    current_block = transition.exit;
+                if (visited.contains(transition.exit))
                     continue;
+
+                if (transition.exit == procedure.exit_block)
+                    goes_to_exit = true;
+
+                if (transition.attr == FlowType::FALLTHROUGH) {
+                    fallthrough = transition.exit;
+                    break;
+                } else {
+                    non_fallthrough = transition.exit;
                 }
             }
 
-            // FIXME : What to do then ? For now take the first block
-            for (const FlowGraph::Edge& transition : transitions) {
-                if (!visited.contains(transition.exit)) {
-                    current_block = transition.exit;
-                    continue;
-                }
-            }
+            if      (fallthrough.get()     != nullptr)  current_block = fallthrough;
+            else if (non_fallthrough.get() != nullptr)  current_block = non_fallthrough;
+            else if (goes_to_exit)                      break;
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Found a dead end local block");
         }
 
         output << frame;
@@ -55,5 +64,16 @@ namespace toycc::arch::x86_64 {
         std::vector<std::shared_ptr<Statement>> ordered_statements = block->statements.topological_sort();
         for (std::shared_ptr<Statement> statement : ordered_statements)
             generate_statement(frame, statement);
+
+        // FIXME : At least for now, move all output variables to memory at the end of the block
+        for (std::shared_ptr<Declaration> output : block->output_variables) {
+            FlowGraph::NodeSet next_blocks = frame.procedure.blocks.next_nodes(block);
+            const bool only_returns = (next_blocks.size() == 1) && (*next_blocks.begin() == frame.procedure.exit_block);
+
+            if (frame.procedure.globals.contains(output))
+                move_variable(frame, output, LOC::STATIC, ordered_statements.back()->location);
+            else if (only_returns)  // It's only useful to store local variables when that block doesn't unconditionally exit
+                move_variable(frame, output, LOC::STACK, ordered_statements.back()->location);
+        }
     }
 }

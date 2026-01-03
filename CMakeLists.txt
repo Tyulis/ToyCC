@@ -20,9 +20,12 @@ find_package(ANTLR REQUIRED)
 add_subdirectory(lib/subprocess)
 add_subdirectory(lib/antlr4/runtime/Cpp)
 
+file(MAKE_DIRECTORY
+     ${CMAKE_CURRENT_SOURCE_DIR}/gen/parser
+     ${CMAKE_CURRENT_SOURCE_DIR}/gen/arch/x86_64)
 
 # Generate the parser
-set(PARSER_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/parser)
+set(PARSER_SRC ${CMAKE_CURRENT_SOURCE_DIR}/gen/parser)
 set(CLEXER_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/CLexer.g4)
 set(CPARSER_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/CParser.g4)
 antlr_target(CLexer ${CLEXER_G4}
@@ -108,6 +111,7 @@ add_executable(${PROJECT_NAME}
 add_dependencies(${PROJECT_NAME} CParserDependencies)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
+	./
 	src/
 	lib/subprocess/src/cpp
 	${Boost_INCLUDE_DIRS}

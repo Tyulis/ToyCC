@@ -74,7 +74,7 @@ namespace toycc::ir {
 
         for (int increment : postfix_increments) {
             Constant right = {.value = IntegerConstant(increment), .location = location, .type = generator.literal_integer_type};
-            generator.emit(Statement::make_binary_operation(location, StatementTag::PLUS, left, right, destination));
+            generator.emit(Statement::make_binary_operation(location, StatementTag::ADD, left, right, destination));
         }
     }
 

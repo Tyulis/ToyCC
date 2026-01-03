@@ -11,11 +11,11 @@ namespace toycc::ir {
         JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, RETURN,
 
         // Unary operators
-        COPY, ADDRESSOF, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT,
+        COPY, PLUS, MINUS, ADDRESSOF, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT,
 
         // Binary operators
         MUL, DIV, MOD,
-        PLUS, MINUS,
+        ADD, SUB,
         LT, LE, GE, GT, EQ, NE,
         BITWISE_AND, BITWISE_XOR, BITWISE_OR, LSHIFT, RSHIFT,
         LOGICAL_AND, LOGICAL_OR,

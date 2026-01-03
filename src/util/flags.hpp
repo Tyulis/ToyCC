@@ -13,13 +13,13 @@ namespace toycc {
                 return static_cast<T>(first());
             }
 
-            constexpr FlagsetIterator operator++() const {
-                FlagsetIterator copy = *this;
-                copy++;
-                return copy;
+            constexpr FlagsetIterator operator++(int) const {
+                FlagsetIterator old = *this;
+                operator++();
+                return old;
             }
 
-            constexpr FlagsetIterator& operator++(int) {
+            constexpr FlagsetIterator& operator++() {
                 flags ^= first();
                 return *this;
             }

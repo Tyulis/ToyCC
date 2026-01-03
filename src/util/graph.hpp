@@ -236,11 +236,29 @@ namespace toycc {
                 return EdgeSet {begin, end};
             }
 
+            // Get all nodes with edges going to the given `node`
+            inline NodeSet previous_nodes(std::shared_ptr<Node> node) const {
+                NodeSet result;
+                const ExitEdgeIndex& exit_index = exit_edge_index();
+                for (auto [edge, end] = exit_index.equal_range(node); edge != end; edge++)
+                    result.insert(edge->exit);
+                return result;
+            }
+
             // Get all edges that come out of the requested node
             inline EdgeSet out_edges(std::shared_ptr<Node> node) const {
                 const EntryEdgeIndex& entry_index = entry_edge_index();
                 const auto [begin, end] = entry_index.equal_range(node);
                 return EdgeSet {begin, end};
+            }
+
+            // Get all nodes with edges coming from the given `node`
+            inline NodeSet next_nodes(std::shared_ptr<Node> node) const {
+                NodeSet result;
+                const EntryEdgeIndex& entry_index = entry_edge_index();
+                for (auto [edge, end] = entry_index.equal_range(node); edge != end; edge++)
+                    result.insert(edge->exit);
+                return result;
             }
 
             // -------- Set operations

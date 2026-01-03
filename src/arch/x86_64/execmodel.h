@@ -45,6 +45,12 @@ namespace toycc::arch::x86_64 {
         Flags<LOC> output;
     };
 
+    struct OperandLocation {
+        LOC lvalue_input = LOC::NONE;
+        std::vector<LOC> inputs = {};
+        LOC output = LOC::NONE;
+    };
+
     extern const std::unordered_map<ir::StatementTag, OperandSpec> OPERAND_SPECS;
     extern const std::unordered_map<LOC, std::unordered_map<size_t, std::string>> REGISTER_NAMES;
 }

@@ -301,8 +301,8 @@ namespace toycc::ir {
         else if (context->StarAssign())        return StatementTag::MUL;
         else if (context->DivAssign())         return StatementTag::DIV;
         else if (context->ModAssign())         return StatementTag::MOD;
-        else if (context->PlusAssign())        return StatementTag::PLUS;
-        else if (context->MinusAssign())       return StatementTag::MINUS;
+        else if (context->PlusAssign())        return StatementTag::ADD;
+        else if (context->MinusAssign())       return StatementTag::SUB;
         else if (context->LeftShiftAssign())   return StatementTag::LSHIFT;
         else if (context->RightShiftAssign())  return StatementTag::RSHIFT;
         else if (context->AndAssign())         return StatementTag::BITWISE_AND;
@@ -319,8 +319,8 @@ namespace toycc::ir {
     }
 
     StatementTag Generator::decode_additive_operator(CParser::AdditiveOperatorContext* context) {
-        if      (context->Plus())  return StatementTag::PLUS;
-        else if (context->Minus()) return StatementTag::MINUS;
+        if      (context->Plus())  return StatementTag::ADD;
+        else if (context->Minus()) return StatementTag::SUB;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown additive operator `{}`", context->getText()), locate(context));
     }
 
@@ -348,12 +348,12 @@ namespace toycc::ir {
             case StatementTag::MOD:
                 return left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic();
 
-            case StatementTag::PLUS:
+            case StatementTag::ADD:
                 return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||
                        (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic()) ||
                        (left_unqualified->is_arithmetic() && right_unqualified->category == TypeCategory::POINTER);
 
-            case StatementTag::MINUS:
+            case StatementTag::SUB:
                 return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||
                        (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic());
 

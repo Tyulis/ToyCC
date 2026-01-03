@@ -3,30 +3,34 @@
 #include "diagnostic.h"
 
 namespace toycc::arch::x86_64 {
-    void CodeGenerator::move_operands(StackFrame& frame, std::shared_ptr<Statement> statement) {
+    OperandLocation CodeGenerator::move_operands(StackFrame& frame, std::shared_ptr<Statement> statement) {
         auto it = OPERAND_SPECS.find(statement->tag);
         if (it == OPERAND_SPECS.end())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Statement `{}` has no operand spec", statement->ir_code()), statement->location);
 
         const OperandSpec& spec = it->second;
+        OperandLocation operands;
 
         if (statement->lvalue_input.has_value())
-            move_operand(frame, *statement->lvalue_input, spec.lvalue_input, statement->location);
+            operands.lvalue_input = move_operand(frame, *statement->lvalue_input, spec.lvalue_input, statement->location);
         for (const auto& [index, rvalue] : std::ranges::enumerate_view(statement->inputs))
-            move_operand(frame, rvalue, spec.inputs[index], statement->location);
+            operands.inputs.push_back(move_operand(frame, rvalue, spec.inputs[index], statement->location));
 
         if (statement->output.has_value())
-            clear_output(frame, *statement->output, spec.output, statement->location);
+            clear_output(frame, operands, *statement->output, spec.output, statement->location);
+
+        return operands;
     }
 
-    void CodeGenerator::move_operand(StackFrame&, const LValue&, Flags<LOC>, CodeLocation) {
+    LOC CodeGenerator::move_operand(StackFrame&, LValue&, Flags<LOC>, CodeLocation) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Lvalue inputs are not implemented");
+        return LOC::NONE;
     }
 
-    void CodeGenerator::move_operand(StackFrame& frame, const RValue& rvalue, Flags<LOC> allowed_locations, CodeLocation code_location) {
+    LOC CodeGenerator::move_operand(StackFrame& frame, RValue& rvalue, Flags<LOC> allowed_locations, CodeLocation code_location) {
         if (rvalue.is_constant()) {
             if (allowed_locations & LOC::CONSTANT)
-                return;
+                return LOC::CONSTANT;
 
             LOC destination = frame.available_location(allowed_locations);
             if (destination == LOC::NONE)
@@ -34,26 +38,29 @@ namespace toycc::arch::x86_64 {
             if (destination & MEMORY)
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Temporary constant loading to memory is not supported", code_location);
 
-            load_constant(frame, rvalue.constant(), destination, code_location);
+            rvalue.value = load_constant(frame, rvalue.constant(), destination, code_location);
+            return destination;
         } else {
             std::shared_ptr<Declaration> variable = rvalue.declaration();
             const LOC current_location = frame.locate(variable);
 
             if (current_location & allowed_locations)
-                return;
+                return current_location;
 
             LOC destination = frame.available_location(allowed_locations);
             if (destination == LOC::NONE)
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "No allowed and available location for this operand", rvalue.location());
 
             move_variable(frame, variable, destination, code_location);
+            return destination;
         }
     }
 
     // Find an available output location, or clear one
-    LOC CodeGenerator::clear_output(StackFrame&, const LValue&, Flags<LOC>, CodeLocation code_location) {
+    LOC CodeGenerator::clear_output(StackFrame&, const OperandLocation&, LValue&, Flags<LOC>, CodeLocation code_location) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Instructions with outputs are not implemented", code_location);
     }
+
 
     std::string CodeGenerator::operand_ref(StackFrame& frame, const LValue& lvalue, CodeLocation code_location) const {
         if (!lvalue.is_dereference())
