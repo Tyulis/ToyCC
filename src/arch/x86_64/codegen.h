@@ -24,5 +24,25 @@ namespace toycc::arch::x86_64 {
             void generate_statement(StackFrame& frame, std::shared_ptr<Statement> statement);
             void generate_marker(StackFrame& frame, std::shared_ptr<Statement> marker);
             void generate_return(StackFrame& frame, std::shared_ptr<Statement> statement);
+
+            // -------- Operand management -> arch/x86_64/operands.cpp
+            void move_operands(StackFrame& frame, std::shared_ptr<Statement> statement);
+            void move_operand(StackFrame& frame, const LValue& lvalue, Flags<LOC> allowed_locations, CodeLocation code_location);
+            void move_operand(StackFrame& frame, const RValue& rvalue, Flags<LOC> allowed_locations, CodeLocation code_location);
+            LOC clear_output(StackFrame& frame, const LValue& lvalue, Flags<LOC> allowed_locations, CodeLocation code_location);
+
+            std::string operand_ref(StackFrame& frame, const LValue& lvalue, CodeLocation code_location) const;
+            std::string operand_ref(StackFrame& frame, const RValue& rvalue, CodeLocation code_location) const;
+            std::string variable_ref(StackFrame& frame, std::shared_ptr<Declaration> declaration, CodeLocation code_location) const;
+            std::string variable_ref(StackFrame& frame, std::shared_ptr<Declaration> declaration, LOC location, CodeLocation code_location) const;
+            std::optional<std::string> register_ref(LOC location, size_t size) const;
+
+            // -------- Data movement -> arch/x86_64/movement.cpp
+            void load_constant(StackFrame& frame, const Constant& constant, LOC destination, CodeLocation code_location);
+            void move_variable(StackFrame& frame, std::shared_ptr<Declaration> variable, LOC destination, CodeLocation code_location);
+
+            // -------- Symbol management -> arch/x86_64/symbols.cpp
+            size_t unique_id = 0;
+            std::string anonymous_identifier();
     };
 }

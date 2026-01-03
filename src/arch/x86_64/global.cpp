@@ -1,5 +1,3 @@
-#include <algorithm>
-
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/allocation.h"

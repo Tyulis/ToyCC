@@ -49,6 +49,22 @@ for test_source in $(find ${TESTSUITE_DIR} -iname '*.c') ; do
                 rm ${test_compiled}
             fi
             ;;
+
+        --compile)
+            CMD="$CC -o ${test_compiled} ${test_source}"
+            echo "" >> ${TEST_LOG}
+            echo ${CMD} >> ${TEST_LOG}
+            if ! ${CMD} >> ${TEST_LOG} 2>&1 || ! [ -f ${test_compiled} ] ; then
+                echo "TEST CASE $(basename ${test_source}) : KO (compilation error)" | tee -a ${TEST_SUMMARY}
+                NOF_TESTS_KO=$(($NOF_TESTS_KO + 1))
+            elif ! ${test_compiled} >> ${TEST_LOG} 2>&1 ; then
+                echo "TEST CASE $(basename ${test_source}) : KO (incorrect behaviour)" | tee -a ${TEST_SUMMARY}
+                NOF_TESTS_KO=$(($NOF_TESTS_KO + 1))
+            else
+                echo "TEST CASE $(basename ${test_source}) : OK" | tee -a ${TEST_SUMMARY}
+                NOF_TESTS_OK=$(($NOF_TESTS_OK + 1))
+            fi
+            ;;
     esac
 done
 

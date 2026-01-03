@@ -70,6 +70,31 @@ namespace toycc::ir {
     }
 
     // -------- Constant
+    bool Constant::is_integer() const {
+        return std::holds_alternative<IntegerConstant>(value);
+    }
+
+    bool Constant::is_floating_point() const {
+        return std::holds_alternative<FloatingPointConstant>(value);
+    }
+
+    bool Constant::is_string() const {
+        return std::holds_alternative<std::string>(value);
+    }
+
+    IntegerConstant Constant::integer() const {
+        return std::get<IntegerConstant>(value);
+    }
+
+    FloatingPointConstant Constant::floating_point() const {
+        return std::get<FloatingPointConstant>(value);
+    }
+
+    std::string Constant::string() const {
+        return std::get<std::string>(value);
+    }
+
+
     Constant Constant::as(std::shared_ptr<Type> new_type) const {
         std::shared_ptr<Type> new_unqualified = new_type->dequalify();
         switch (new_unqualified->category) {
@@ -84,28 +109,28 @@ namespace toycc::ir {
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid type for a constant : `{}`", new_type->text()), location);
 
             case TypeCategory::POINTER:
-                if (std::holds_alternative<std::string>(value))
+                if (is_string())
                     return {.value = value, .location = location, .type = new_type};
                 [[fallthrough]];
 
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
             case TypeCategory::ENUM:
-                if (std::holds_alternative<IntegerConstant>(value))
+                if (is_integer())
                     return {.value = value, .location = location, .type = new_type};
-                else if (std::holds_alternative<FloatingPointConstant>(value))
-                    return {.value = IntegerConstant(std::get<FloatingPointConstant>(value)), .location = location, .type = new_type};
+                else if (is_floating_point())
+                    return {.value = IntegerConstant(floating_point()), .location = location, .type = new_type};
                 else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert non-arithmetic constants to integers", location);
 
             case TypeCategory::FLOAT:
-                if (std::holds_alternative<IntegerConstant>(value))
-                    return {.value = FloatingPointConstant(std::get<IntegerConstant>(value)), .location = location, .type = new_type};
-                else if (std::holds_alternative<FloatingPointConstant>(value))
+                if (is_integer())
+                    return {.value = FloatingPointConstant(integer()), .location = location, .type = new_type};
+                else if (is_floating_point())
                     return {.value = value, .location = location, .type = new_type};
                 else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert non-arithmetic constants to integers", location);
 
             case TypeCategory::ARRAY:
-                if (std::holds_alternative<std::string>(value))
+                if (is_string())
                     return {.value = value, .location = location, .type = new_type};
                 else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert non-string literals to array types", location);
         }
@@ -113,23 +138,23 @@ namespace toycc::ir {
     }
 
     bool Constant::operator== (const Constant& rhs) const {
-        if (std::holds_alternative<IntegerConstant>(value) && std::holds_alternative<IntegerConstant>(rhs.value))
-            return std::get<IntegerConstant>(value) == std::get<IntegerConstant>(rhs.value);
-        else if (std::holds_alternative<FloatingPointConstant>(value) && std::holds_alternative<FloatingPointConstant>(rhs.value))
-            return std::get<FloatingPointConstant>(value) == std::get<FloatingPointConstant>(rhs.value);
-        else if (std::holds_alternative<std::string>(value) && std::holds_alternative<std::string>(rhs.value))
-            return std::get<std::string>(value) == std::get<std::string>(rhs.value);
+        if (is_integer() && rhs.is_integer())
+            return integer() == rhs.integer();
+        else if (is_floating_point() && rhs.is_floating_point())
+            return floating_point() == rhs.floating_point();
+        else if (is_string() && rhs.is_string())
+            return string() == rhs.string();
         else return false;
     }
 
     std::string Constant::ir_code() const {
         std::stringstream code;
-        if (std::holds_alternative<IntegerConstant>(value))
-            code << std::get<IntegerConstant>(value);
-        else if (std::holds_alternative<FloatingPointConstant>(value))
-            code << std::get<FloatingPointConstant>(value);
-        else if (std::holds_alternative<std::string>(value))
-            code << "\"" << std::get<IntegerConstant>(value) << "\"";
+        if (is_integer())
+            code << integer();
+        else if (is_floating_point())
+            code << floating_point();
+        else if (is_string())
+            code << "\"" << string() << "\"";
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown constant category", location);
 
         return code.str();

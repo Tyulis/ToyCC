@@ -1,10 +1,9 @@
 #include "arch/x86_64/codegen.h"
-#include "arch/x86_64/execmodel.h"
 #include "diagnostic.h"
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_statement(StackFrame& frame, std::shared_ptr<Statement> statement) {
-        const StatementIO spec = STATEMENT_IO.at(statement->tag);
+        move_operands(frame, statement);
 
         switch (statement->tag) {
             case StatementTag::MARKER:  generate_marker(frame, statement);  break;
@@ -22,10 +21,8 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_return(StackFrame& frame, std::shared_ptr<Statement> statement) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Return generation is not implemented");
-        /*const auto [begin, end] = current_scope()->markers.equal_range(marker);
-         *   for (auto label_it = begin; label_it != end; label_it++)
-         *       write_label(label_it->second->name);*/
+    void CodeGenerator::generate_return(StackFrame& frame, std::shared_ptr<Statement>) {
+        // The return value is put into %rax by `move_operands`
+        frame.insert_return();
     }
 }

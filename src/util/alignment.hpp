@@ -39,8 +39,8 @@ namespace toycc {
 
     constexpr inline size_t size_bits_to_bytes(size_t size_bits) {
         const size_t remainder = size_bits & 7;
-        if (remainder == 0)  return size_bits;
-        else                 return size_bits + (8 - remainder);
+        if (remainder == 0)  return  size_bits >> 3;
+        else                 return (size_bits >> 3) + 1;
     }
 
     constexpr inline size_t alignment_bits_to_bytes(size_t alignment_bits) {

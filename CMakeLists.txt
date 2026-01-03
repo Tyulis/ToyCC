@@ -62,8 +62,11 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/execmodel.cpp
 	src/arch/x86_64/exports.cpp
 	src/arch/x86_64/global.cpp
+	src/arch/x86_64/movement.cpp
+	src/arch/x86_64/operands.cpp
 	src/arch/x86_64/output.cpp
 	src/arch/x86_64/statements.cpp
+	src/arch/x86_64/symbols.cpp
 
 	src/ir/declaration.cpp
 	src/ir/flow.cpp

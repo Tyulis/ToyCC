@@ -5,6 +5,42 @@
 
 namespace toycc {
     template <typename T> requires(std::is_scoped_enum<T>::value)
+    class FlagsetIterator {
+        public:
+            constexpr FlagsetIterator(std::underlying_type_t<T> flags) : flags(flags) {}
+
+            constexpr T operator*() const {
+                return static_cast<T>(first());
+            }
+
+            constexpr FlagsetIterator operator++() const {
+                FlagsetIterator copy = *this;
+                copy++;
+                return copy;
+            }
+
+            constexpr FlagsetIterator& operator++(int) {
+                flags ^= first();
+                return *this;
+            }
+
+            constexpr bool operator== (const FlagsetIterator& other) {
+                return flags == other.flags;
+            }
+
+            constexpr bool operator!= (const FlagsetIterator& other) {
+                return flags != other.flags;
+            }
+
+        private:
+            std::underlying_type_t<T> flags;
+
+            constexpr std::underlying_type_t<T> first() const {
+                return flags & ~(flags - 1);
+            }
+    };
+
+    template <typename T> requires(std::is_scoped_enum<T>::value)
     class Flags {
         private:
             T value = static_cast<T>(0);
@@ -59,6 +95,19 @@ namespace toycc {
                 return (*this & rhs);
             }
 
+            constexpr T first() const {
+                const std::underlying_type_t<T> intval = std::to_underlying(value);
+                return static_cast<T> (intval & ~(intval - 1));
+            }
+
+            constexpr FlagsetIterator<T> begin() const {
+                return {std::to_underlying(value)};
+            }
+
+            constexpr FlagsetIterator<T> end() const {
+                return {0};
+            }
+
             constexpr operator bool() const {
                 return std::to_underlying(value) != 0;
             }
@@ -67,5 +116,30 @@ namespace toycc {
     template <typename T> requires(std::is_scoped_enum<T>::value)
     constexpr Flags<T> operator| (T lhs, T rhs) {
         return Flags<T> {lhs} | rhs;
+    }
+
+    template <typename T> requires(std::is_scoped_enum<T>::value)
+    constexpr Flags<T> operator| (T lhs, Flags<T> rhs) {
+        return rhs | lhs;
+    }
+
+    template <typename T> requires(std::is_scoped_enum<T>::value)
+    constexpr Flags<T> operator^ (T lhs, T rhs) {
+        return Flags<T> {lhs} ^ rhs;
+    }
+
+    template <typename T> requires(std::is_scoped_enum<T>::value)
+    constexpr Flags<T> operator^ (T lhs, Flags<T> rhs) {
+        return rhs ^ lhs;
+    }
+
+    template <typename T> requires(std::is_scoped_enum<T>::value)
+    constexpr Flags<T> operator& (T lhs, T rhs) {
+        return Flags<T> {lhs} & rhs;
+    }
+
+    template <typename T> requires(std::is_scoped_enum<T>::value)
+    constexpr Flags<T> operator& (T lhs, Flags<T> rhs) {
+        return rhs & lhs;
     }
 }

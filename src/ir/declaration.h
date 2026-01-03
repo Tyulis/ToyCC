@@ -72,6 +72,14 @@ namespace toycc::ir {
         CodeLocation location;
         std::shared_ptr<Type> type;
 
+        bool is_integer() const;
+        bool is_floating_point() const;
+        bool is_string() const;
+
+        IntegerConstant integer() const;
+        FloatingPointConstant floating_point() const;
+        std::string string() const;
+
         Constant as(std::shared_ptr<Type> new_type) const;
         bool operator== (const Constant& rhs) const;
 
