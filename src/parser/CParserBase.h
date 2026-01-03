@@ -2,7 +2,7 @@
 
 #include "Parser.h"
 #include "TokenStream.h"
-#include "parserbase/SymbolTable.h"
+#include "parser/SymbolTable.h"
 
 // Parser base class translated from https://github.com/kaby76/grammars-v4/commit/26a6b40d2af7b7689d6fcfff2080310455a725e4
 

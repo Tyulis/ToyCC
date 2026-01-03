@@ -6,8 +6,8 @@
 #include "BaseErrorListener.h"
 
 #include "source_map.h"
-#include "parser/CLexer.h"
-#include "parser/CParser.h"
+#include "gen/parser/CLexer.h"
+#include "gen/parser/CParser.h"
 #include "ir/scope.h"
 
 namespace toycc {

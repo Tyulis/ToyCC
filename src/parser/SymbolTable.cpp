@@ -1,5 +1,5 @@
 #include "diagnostic.h"
-#include "parserbase/SymbolTable.h"
+#include "parser/SymbolTable.h"
 
 namespace toycc {
     SymbolTable::SymbolTable() {

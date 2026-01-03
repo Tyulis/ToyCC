@@ -1,7 +1,7 @@
 import sys
 
 NEARBY_INCLUDE = '#include "antlr4-runtime.h"'
-PARSERBASE_INCLUDE = '#include "parserbase/CParserBase.h"'
+PARSERBASE_INCLUDE = '#include "parser/CParserBase.h"'
 
 with open(sys.argv[1], "r") as generated_header:
     code = generated_header.read();

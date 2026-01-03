@@ -1,10 +1,10 @@
 #include <algorithm>
 
 #include "CommonTokenStream.h"
-#include "parser/CLexer.h"
-#include "parserbase/SymbolTable.h"
-#include "parserbase/CParserBase.h"
-#include "parser/CParser.h"
+#include "parser/SymbolTable.h"
+#include "parser/CParserBase.h"
+#include "gen/parser/CLexer.h"
+#include "gen/parser/CParser.h"
 
 namespace toycc {
     CParserBase::CParserBase(antlr4::TokenStream* input) : antlr4::Parser(input) {}

@@ -10,7 +10,7 @@
 #include "ir/scopeframe.h"
 #include "ir/statement.h"
 #include "ir/type.h"
-#include "parser/CParser.h"
+#include "gen/parser/CParser.h"
 #include "source_map.h"
 
 namespace toycc::ir {

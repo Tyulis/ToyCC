@@ -2,8 +2,8 @@
 
 #include <sstream>
 
-#include "parser/CParser.h"
-#include "parser/CParserBaseListener.h"
+#include "gen/parser/CParser.h"
+#include "gen/parser/CParserBaseListener.h"
 
 namespace toycc {
     class XMLOutput : public CParserBaseListener {
