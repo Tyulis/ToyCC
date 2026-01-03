@@ -1,11 +1,11 @@
 #include "code_location.h"
 #include "diagnostic.h"
 #include "ir/type_expressions.h"
-#include "ir/generator.h"
+#include "semantic/analyzer.h"
 
-namespace toycc::ir {
+namespace toycc::semantic {
     // Decode a declaration and push it to the current scope
-    void Generator::decode_declaration(CParser::DeclarationContext* context) {
+    void SemanticAnalyzer::decode_declaration(CParser::DeclarationContext* context) {
         if (context->staticAssertDeclaration())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Static assertions are not implemented", locate(context));
         if (context->attributeDeclaration())
@@ -14,7 +14,7 @@ namespace toycc::ir {
         decode_declaration(context->declarationSpecifiers(), context->initDeclaratorList());
     }
 
-    void Generator::decode_declaration(CParser::DeclarationSpecifiersContext* specifiers, CParser::InitDeclaratorListContext* init_declarators) {
+    void SemanticAnalyzer::decode_declaration(CParser::DeclarationSpecifiersContext* specifiers, CParser::InitDeclaratorListContext* init_declarators) {
         Declaration base_declaration;
         base_declaration.location = locate(specifiers);
         decode_declaration_specifiers(base_declaration, specifiers);
@@ -48,17 +48,17 @@ namespace toycc::ir {
 
                     const CodeLocation initializer_location = locate(declarator->initializer());
                     std::shared_ptr<ExpressionResult> initializer = decode_initializer(declarator->initializer());
-                    emit_copy(declaration, initializer->load(initializer_location), initializer_location, true);
+                    emit_copy(declaration, initializer->operand(), initializer_location, true);
                 }
             }
         }
     }
 
-    void Generator::decode_for_declaration(CParser::ForDeclarationContext* context) {
+    void SemanticAnalyzer::decode_for_declaration(CParser::ForDeclarationContext* context) {
         decode_declaration(context->declarationSpecifiers(), context->initDeclaratorList());
     }
 
-    void Generator::decode_declaration_specifiers(Declaration& declaration, CParser::DeclarationSpecifiersContext* specifiers) {
+    void SemanticAnalyzer::decode_declaration_specifiers(Declaration& declaration, CParser::DeclarationSpecifiersContext* specifiers) {
         std::vector<CParser::TypeSpecifierContext*> type_specifiers;
         Flags<TypeQualifier> qualifiers;
         std::optional<size_t> custom_alignment_bits;
@@ -88,7 +88,7 @@ namespace toycc::ir {
             declaration.type = AlignedType::make(anonymous_type(), declaration.location, declaration.type, custom_alignment_bits.value());
     }
 
-    std::shared_ptr<Type> Generator::decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context) {
+    std::shared_ptr<Type> SemanticAnalyzer::decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context) {
         const CodeLocation location = locate(context);
 
         if (context->gnuAttributes())
@@ -119,7 +119,7 @@ namespace toycc::ir {
         return type;
     }
 
-    Flags<StorageClass> Generator::decode_storage_class(CParser::StorageClassSpecifierContext* context) {
+    Flags<StorageClass> SemanticAnalyzer::decode_storage_class(CParser::StorageClassSpecifierContext* context) {
         if      (context->Typedef())      return StorageClass::TYPEDEF;
         else if (context->Extern())       return StorageClass::EXTERN;
         else if (context->Static())       return StorageClass::STATIC;
@@ -129,14 +129,14 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown storage class `{}`", context->getText()), locate(context));
     }
 
-    Flags<TypeQualifier> Generator::decode_type_qualifier_list(CParser::TypeQualifierListContext* context) {
+    Flags<TypeQualifier> SemanticAnalyzer::decode_type_qualifier_list(CParser::TypeQualifierListContext* context) {
         Flags<TypeQualifier> qualifiers;
         for (CParser::TypeQualifierContext* qualifier : context->typeQualifier())
             qualifiers |= decode_type_qualifier(qualifier);
         return qualifiers;
     }
 
-    Flags<TypeQualifier> Generator::decode_type_qualifier(CParser::TypeQualifierContext* context) {
+    Flags<TypeQualifier> SemanticAnalyzer::decode_type_qualifier(CParser::TypeQualifierContext* context) {
         if      (context->Const())     return TypeQualifier::CONST;
         else if (context->Restrict())  return TypeQualifier::RESTRICT;
         else if (context->Volatile())  return TypeQualifier::VOLATILE;
@@ -144,7 +144,7 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown type qualifier `{}`", context->getText()), locate(context));
     }
 
-    Flags<FunctionSpecifier> Generator::decode_function_specifier(CParser::FunctionSpecifierContext* context) {
+    Flags<FunctionSpecifier> SemanticAnalyzer::decode_function_specifier(CParser::FunctionSpecifierContext* context) {
         if      (context->Inline() || context->KW__inline__()) return FunctionSpecifier::INLINE;
         else if (context->Noreturn())                          return FunctionSpecifier::NORETURN;
         else if (context->KW__stdcall())                       return FunctionSpecifier::STDCALL;
@@ -153,11 +153,11 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown function specifier `{}`", context->getText()), locate(context));
     }
 
-    size_t Generator::resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context) {
+    size_t SemanticAnalyzer::resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Alignment specifiers are not implemented", locate(context));
     }
 
-    std::shared_ptr<Type> Generator::resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> type_specifiers, bool is_typedef) {
+    std::shared_ptr<Type> SemanticAnalyzer::resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> type_specifiers, bool is_typedef) {
         const CodeLocation location = locate(type_specifiers[0]);
 
         TypeIdentifier identifier = decode_type_specifiers(type_specifiers);
@@ -181,7 +181,7 @@ namespace toycc::ir {
 
     // Decode a type specifier, push eventual anonymous struct/enum/union declarations to the current scope and return the type identifier
     // Don't check whether non-primitive named types exists
-    TypeIdentifier Generator::decode_type_specifiers(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
+    TypeIdentifier SemanticAnalyzer::decode_type_specifiers(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
         if (type_specifiers.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Empty type specifier list");
 
@@ -301,7 +301,7 @@ namespace toycc::ir {
 
     // Decode a struct or union specifier, push struct/enum/union definitions to the current scope and return the type identifier
     // Don't check whether named struct / unions exists
-    TypeIdentifier Generator::decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context) {
+    TypeIdentifier SemanticAnalyzer::decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context) {
         const CodeLocation location = locate(context);
 
         if (context->attributeSpecifierSequence())
@@ -339,7 +339,7 @@ namespace toycc::ir {
     }
 
 
-    std::vector<Member> Generator::decode_member_declaration(CParser::MemberDeclarationContext* context) {
+    std::vector<Member> SemanticAnalyzer::decode_member_declaration(CParser::MemberDeclarationContext* context) {
         const CodeLocation location = locate(context);
 
         if (context->attributeSpecifierSequence())
@@ -356,7 +356,7 @@ namespace toycc::ir {
             return decode_member_declarator_list(context->memberDeclaratorList(), type);
     }
 
-    std::vector<Member> Generator::decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, std::shared_ptr<Type> base_type) {
+    std::vector<Member> SemanticAnalyzer::decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, std::shared_ptr<Type> base_type) {
         if (!context->gnuAttributes().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not supported", locate(context));
 
@@ -367,7 +367,7 @@ namespace toycc::ir {
         return members;
     }
 
-    Member Generator::decode_struct_declarator(CParser::StructDeclaratorContext* context, std::shared_ptr<Type> base_type) {
+    Member SemanticAnalyzer::decode_struct_declarator(CParser::StructDeclaratorContext* context, std::shared_ptr<Type> base_type) {
         const CodeLocation location = locate(context);
         if (context->gnuAttributes())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "GNU attributes are not implemented", location);
@@ -384,7 +384,7 @@ namespace toycc::ir {
     }
 
     // Decode a member or variable declarator, updates its type with the qualifiers found in the declarator, and may update its name if one is provided
-    void Generator::decode_declarator(Member& member, CParser::DeclaratorContext* context) {
+    void SemanticAnalyzer::decode_declarator(Member& member, CParser::DeclaratorContext* context) {
         if (context->gnuAttribute())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not implemented", locate(context));
         if (!context->gccDeclaratorExtension().empty())
@@ -402,7 +402,7 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()));
     }
 
-    void Generator::decode_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
+    void SemanticAnalyzer::decode_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
         const CodeLocation location = locate(context);
 
         if (context->attributeSpecifierSequence())
@@ -425,7 +425,7 @@ namespace toycc::ir {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()), location);
     }
 
-    void Generator::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
+    void SemanticAnalyzer::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
         if (context->attributeSpecifierSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
 
@@ -438,14 +438,14 @@ namespace toycc::ir {
         member.type = function_type;
     }
 
-    std::vector<Member> Generator::decode_parameter_type_list(CParser::ParameterTypeListContext* context) {
+    std::vector<Member> SemanticAnalyzer::decode_parameter_type_list(CParser::ParameterTypeListContext* context) {
         if (context->Ellipsis())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Variadic functions are not implemented", locate(context));
 
         return decode_parameter_list(context->parameterList());
     }
 
-    std::vector<Member> Generator::decode_parameter_list(CParser::ParameterListContext* context) {
+    std::vector<Member> SemanticAnalyzer::decode_parameter_list(CParser::ParameterListContext* context) {
         std::vector<Member> parameters;
         for (CParser::ParameterDeclarationContext* parameter : context->parameterDeclaration())
             parameters.push_back(decode_parameter_declaration(parameter));
@@ -453,7 +453,7 @@ namespace toycc::ir {
         return parameters;
     }
 
-    Member Generator::decode_parameter_declaration(CParser::ParameterDeclarationContext* context) {
+    Member SemanticAnalyzer::decode_parameter_declaration(CParser::ParameterDeclarationContext* context) {
         Declaration parameter;
         decode_declaration_specifiers(parameter, context->declarationSpecifiers());
 
@@ -474,7 +474,7 @@ namespace toycc::ir {
         return static_cast<Member>(parameter);
     }
 
-    std::shared_ptr<Type> Generator::decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> type) {
+    std::shared_ptr<Type> SemanticAnalyzer::decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> type) {
         for (CParser::PointerLevelContext* level : context->pointerLevel()) {
             if (level->Caret())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Carets in pointer specification are not supported", locate(level));

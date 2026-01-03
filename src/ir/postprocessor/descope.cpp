@@ -14,7 +14,7 @@ namespace toycc::ir {
                 descope(statement->block);
 
                 // Prefix and move static declarations into the global scope
-                std::string scope_prefix = make_scope_prefix(statement->output->base.declaration()->name);  // Scope prefix to rename local variables but keep them identifiable
+                std::string scope_prefix = make_scope_prefix(statement->output->declaration()->name);  // Scope prefix to rename local variables but keep them identifiable
 
                 std::vector<std::shared_ptr<Declaration>> function_locals(statement->block->locals_list().begin(), statement->block->locals_list().end());
                 for (std::shared_ptr<Declaration> declaration : function_locals) {

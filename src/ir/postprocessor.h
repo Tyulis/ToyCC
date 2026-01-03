@@ -19,14 +19,16 @@ namespace toycc::ir {
 
             // -------- Convert all types to raw storage types -> ir/postprocessor/detype.cpp
             void detype(std::shared_ptr<Scope> scope);
+            void detype_operand(Operand& operand);
 
             // -------- Flatten all functions -> ir/postprocessor/descope.cpp
             void descope(std::shared_ptr<Scope> scope);
 
             // -------- Flatten multi-level and dynamic indexing -> ir/postprocessor/dereference.cpp
             void dereference(std::shared_ptr<Scope> scope);
-            LValue dereference_lvalue(const LValue& original, std::shared_ptr<Scope> scope);
-            std::tuple<RValue, RValue> resolve_index(const RValue& pointer, const RValue& index, std::shared_ptr<Scope> scope, CodeLocation location);
+            Operand dereference_operand(const Operand& original, std::shared_ptr<Scope> scope);
+            Operand resolve_first_index(const Operand& original, std::shared_ptr<Scope> scope);
+            Operand dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope);
 
             // -------- Control flow analysis -> ir/postprocessor/flow_analysis.cpp
             TranslationUnit analyse_flow(std::shared_ptr<Scope> global_scope);

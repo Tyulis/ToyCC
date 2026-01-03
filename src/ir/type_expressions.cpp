@@ -64,10 +64,10 @@ namespace toycc::ir {
     }
 
     // -------- ArrayType
-    ArrayType::ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length)
+    ArrayType::ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length)
         : Type(TypeCategory::ARRAY, name, location), element_type(element_type), length(length) {}
 
-    std::shared_ptr<ArrayType> ArrayType::make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length) {
+    std::shared_ptr<ArrayType> ArrayType::make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length) {
         if (element_type->category == TypeCategory::VOID)
             throw Diagnostic(DiagnosticLevel::ERROR, "Can't make arrays of void", location);
         return std::make_shared<ArrayType> (ArrayType {name, location, element_type, length});

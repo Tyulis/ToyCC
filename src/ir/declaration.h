@@ -2,7 +2,6 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 #include <variant>
 
 // For some reason ANTLR silently undefines the standard EOF macro, which boost/multiprecision needs
@@ -86,34 +85,32 @@ namespace toycc::ir {
         std::string ir_code() const;
     };
 
-    struct RValue {
+    // Statement operand : any value or dereference. Basically any lvalue or rvalue
+    // Lvalues and rvalues are a semantic analysis concept, once a statement is semantically correct drop that information to uniformize everything
+    struct Operand {
         std::variant<std::shared_ptr<Declaration>, Constant> value;
+        CodeLocation location;
+        std::vector<Operand> indices;
 
-        RValue(std::shared_ptr<Declaration> declaration);
-        RValue(Constant value);
+        Operand(const Constant& constant, std::vector<Operand> indices = {});
+        Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices = {});
+        Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices = {});
+        Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices = {});
+        Operand(std::variant<std::shared_ptr<Declaration>, Constant> value, CodeLocation location, std::vector<Operand> indices = {});
 
         bool is_constant() const;
-        bool operator== (const RValue& rhs) const;
+        bool is_dereference() const;
+        bool has_constant_base() const;
 
-        CodeLocation location() const;
+        std::shared_ptr<Type> base_type() const;
         std::shared_ptr<Type> type() const;
+
         Constant constant() const;
         Constant& constant();
         std::shared_ptr<Declaration> declaration() const;
 
-        std::string ir_code() const;
-    };
+        bool operator== (const Operand& operand) const;
 
-    struct LValue {
-        RValue base;
-        CodeLocation location;
-        std::vector<RValue> indices;
-
-        LValue(std::shared_ptr<Declaration> declaration);
-        LValue(RValue base, CodeLocation location, std::vector<RValue> indices = {});
-
-        bool is_dereference() const;
-        std::shared_ptr<Type> type() const;
         std::string ir_code() const;
     };
 }

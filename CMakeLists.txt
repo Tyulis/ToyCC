@@ -79,17 +79,18 @@ add_executable(${PROJECT_NAME}
 	src/ir/type.cpp
 	src/ir/type_expressions.cpp
 
-	src/ir/generator/conversions.cpp
-	src/ir/generator/declarations.cpp
-	src/ir/generator/exports.cpp
-	src/ir/generator/expressionresult.cpp
-	src/ir/generator/expressions.cpp
-	src/ir/generator/external.cpp
-	src/ir/generator/literals.cpp
-	src/ir/generator/state.cpp
-	src/ir/generator/statements.cpp
-	src/ir/generator/symbols.cpp
-	src/ir/generator/temporarygenerator.cpp
+	src/semantic/conversions.cpp
+	src/semantic/declarations.cpp
+	src/semantic/exports.cpp
+	src/semantic/expressionresult.cpp
+	src/semantic/expressions.cpp
+	src/semantic/external.cpp
+	src/semantic/literals.cpp
+	src/semantic/state.cpp
+	src/semantic/statements.cpp
+	src/semantic/symbols.cpp
+	src/semantic/temporarygenerator.cpp
+	src/semantic/values.cpp
 
 	src/ir/postprocessor/dereference.cpp
 	src/ir/postprocessor/descope.cpp

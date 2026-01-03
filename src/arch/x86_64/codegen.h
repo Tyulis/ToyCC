@@ -26,12 +26,10 @@ namespace toycc::arch::x86_64 {
 
             // -------- Operand management -> arch/x86_64/operands.cpp
             OperandLocation move_operands(StackFrame& frame, std::shared_ptr<Statement> statement);
-            LOC move_operand(StackFrame& frame, LValue& lvalue, Flags<LOC> allowed_locations, CodeLocation code_location);
-            LOC move_operand(StackFrame& frame, RValue& rvalue, Flags<LOC> allowed_locations, CodeLocation code_location);
-            LOC clear_output(StackFrame& frame, const OperandLocation& operands, LValue& lvalue, Flags<LOC> allowed_locations, CodeLocation code_location);
+            LOC move_operand(StackFrame& frame, Operand& operand, Flags<LOC> allowed_locations, CodeLocation code_location);
+            LOC clear_output(StackFrame& frame, const OperandLocation& operands, Operand& operand, Flags<LOC> allowed_locations, CodeLocation code_location);
 
-            std::string operand_ref(StackFrame& frame, const LValue& lvalue, CodeLocation code_location) const;
-            std::string operand_ref(StackFrame& frame, const RValue& rvalue, CodeLocation code_location) const;
+            std::string operand_ref(StackFrame& frame, const Operand& operand, CodeLocation code_location) const;
             std::string variable_ref(StackFrame& frame, std::shared_ptr<Declaration> declaration, CodeLocation code_location) const;
             std::string variable_ref(StackFrame& frame, std::shared_ptr<Declaration> declaration, LOC location, CodeLocation code_location) const;
             std::optional<std::string> register_ref(LOC location, size_t size) const;

@@ -10,7 +10,7 @@ namespace toycc::ir {
 
         for (std::shared_ptr<Statement> statement : global_scope->statements) {
             if (statement->tag == StatementTag::FUNCTION) {
-                std::shared_ptr<Declaration> function = statement->output->base.declaration();
+                std::shared_ptr<Declaration> function = statement->output->declaration();
                 unit.procedures.emplace(function->name, statement);
             }
         }

@@ -14,66 +14,79 @@ namespace toycc::ir {
                 dereference(statement->block);
             } else {
                 if (statement->output.has_value())
-                    statement->output = dereference_lvalue(*statement->output, scope);
+                    statement->output = dereference_operand(*statement->output, scope);
 
-                if (statement->lvalue_input.has_value())
-                    statement->lvalue_input = dereference_lvalue(*statement->lvalue_input, scope);
+                for (auto it = statement->inputs.begin(); it != statement->inputs.end(); it++)
+                    *it = dereference_operand(*it, scope);
             }
 
             scope->statements.push_back(statement);
         }
     }
 
-    LValue PostProcessor::dereference_lvalue(const LValue& original, std::shared_ptr<Scope> scope) {
+    Operand PostProcessor::dereference_operand(const Operand& original, std::shared_ptr<Scope> scope) {
         if (original.indices.empty())
             return original;
 
-        LValue result = original;
+        Operand result = original;
 
         do {
-            std::shared_ptr<Type> pointer_type = result.base.type()->dequalify();
-            if (pointer_type->category == TypeCategory::POINTER) {
-                const auto [pointer, index] = resolve_index(result.base, result.indices[0], scope, original.location);
-                result.base = pointer;
-                result.indices[0] = index;
-            } else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't dereference object of type `{}`", pointer_type->text()), original.location);
+            std::shared_ptr<Type> pointer_type = result.base_type()->dequalify();
+            if (pointer_type->category == TypeCategory::POINTER)
+                result = resolve_first_index(result, scope);
+            else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't dereference object of type `{}`", pointer_type->text()), original.location);
 
-            if (result.indices.size() > 1) {
-                std::shared_ptr<Type> referenced_type = pointer_type->dereference(original.location);
-                std::shared_ptr<Declaration> pointee = declare_temporary(scope, referenced_type, original.location);
-                scope->add_statement(Statement::make_load(original.location, LValue {result.base, original.location, {result.indices[0]}}, pointee));
-                result = LValue {pointee, original.location, {result.indices.begin() + 1, result.indices.end()}};
-            } else break;
+            if (result.indices.size() > 1)
+                result = dereference_first_index(result, scope);
         } while (result.indices.size() > 1);
 
         return result;
     }
 
-    std::tuple<RValue, RValue> PostProcessor::resolve_index(const RValue& pointer, const RValue& index, std::shared_ptr<Scope> scope, CodeLocation location) {
-        std::shared_ptr<Type> pointer_type = pointer.type()->dequalify();
-        std::shared_ptr<Type> referenced_type = pointer_type->dereference(location);
+    Operand PostProcessor::resolve_first_index(const Operand& original, std::shared_ptr<Scope> scope) {
+        std::shared_ptr<Type> pointer_type = original.base_type()->dequalify();
+        std::shared_ptr<Type> referenced_type = pointer_type->dereference(original.location);
+        Operand index = dereference_operand(original.indices[0], scope);
+
+        // Fully dereference the index : after that, the index is either a constant or a variable
+        if (index.is_dereference())
+            index = dereference_first_index(index, scope);
 
         // Resolve variable indices to static constants
+        Operand result = original;
         if (index.is_constant()) {
             const Constant& constant_index = index.constant();
             if (!constant_index.is_integer())
-                throw Diagnostic(DiagnosticLevel::ERROR, "Array indices must be integers", location);
+                throw Diagnostic(DiagnosticLevel::ERROR, "Array indices must be integers", original.location);
 
-            IntegerConstant offset = constant_index.integer() * referenced_type->size(location);
-            return {pointer, Constant {offset, constant_index.location, constant_index.type}};
+            IntegerConstant offset = constant_index.integer() * referenced_type->size(original.location);
+            result.indices[0] = Constant {offset, constant_index.location, constant_index.type};
         } else {
             // Emit a multiplication to get from the index to an offset
             std::shared_ptr<Declaration> variable_index = index.declaration();
-            Constant value_size(IntegerConstant(referenced_type->size(location)), location, variable_index->type);
+            Constant value_size(IntegerConstant(referenced_type->size(original.location)), original.location, variable_index->type);
             std::shared_ptr<Declaration> offset = declare_temporary(scope, variable_index->type, variable_index->location);
-            scope->add_statement(Statement::make_binary_operation(location, StatementTag::MUL, variable_index, value_size, offset));
+            scope->add_statement(Statement::make_binary_operation(original.location, StatementTag::MUL, variable_index, value_size, offset));
 
             // Then apply that variable offset to the pointer
-            std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, pointer_type, location);
-            scope->add_statement(Statement::make_binary_operation(location, StatementTag::ADD, pointer, offset, offset_pointer));
+            const Operand pointer = Operand {original.value, original.location, {original.indices[0]}};
+            std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, pointer_type, original.location);
+            scope->add_statement(Statement::make_binary_operation(original.location, StatementTag::ADD, pointer, offset, offset_pointer));
 
             // Now the lvalue is *(offset_pointer+0)
-            return {offset_pointer, Constant {IntegerConstant(0), location, offset_type}};
+            std::vector<Operand> indices = {Constant {IntegerConstant(0), original.location, offset_type}};
+            std::copy(original.indices.begin() + 1, original.indices.end(), std::back_inserter(indices));
+            return {offset_pointer, original.location, indices};
         }
+
+        return result;
+    }
+
+    Operand PostProcessor::dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope) {
+        std::shared_ptr<Type> referenced_type = operand.base_type()->dereference(operand.location);
+        std::shared_ptr<Declaration> pointee = declare_temporary(scope, referenced_type, operand.location);
+        const Operand pointer = Operand {operand.value, operand.location, {operand.indices[0]}};
+        scope->add_statement(Statement::make_load(operand.location, pointer, pointee));
+        return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}};
     }
 }

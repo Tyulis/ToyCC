@@ -1,9 +1,9 @@
 #include "diagnostic.h"
-#include "ir/generator.h"
+#include "semantic/analyzer.h"
 #include "util/strings.h"
 
-namespace toycc::ir {
-    RValue Generator::decode_constant(antlr4::tree::TerminalNode* terminal) {
+namespace toycc::semantic {
+    RValue SemanticAnalyzer::decode_constant(antlr4::tree::TerminalNode* terminal) {
         const std::string text = terminal->getText();
         if (text.starts_with("'") || text.starts_with("L'") || text.starts_with("u'") || text.starts_with("U'"))
             return decode_character_constant(terminal);
@@ -13,7 +13,7 @@ namespace toycc::ir {
             return decode_integer_constant(terminal);
     }
 
-    RValue Generator::decode_character_constant(antlr4::tree::TerminalNode* terminal) {
+    RValue SemanticAnalyzer::decode_character_constant(antlr4::tree::TerminalNode* terminal) {
         const CodeLocation location = locate(terminal);
         std::string text = terminal->getText();
 
@@ -45,11 +45,11 @@ namespace toycc::ir {
         return Constant {IntegerConstant(text[0]), location, literal_character_type};
     }
 
-    RValue Generator::decode_floating_constant(antlr4::tree::TerminalNode* terminal) {
+    RValue SemanticAnalyzer::decode_floating_constant(antlr4::tree::TerminalNode* terminal) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Floating constants are not implemented", locate(terminal));
     }
 
-    RValue Generator::decode_integer_constant(antlr4::tree::TerminalNode* terminal) {
+    RValue SemanticAnalyzer::decode_integer_constant(antlr4::tree::TerminalNode* terminal) {
         const CodeLocation location = locate(terminal);
         std::string text = terminal->getText();
 
@@ -89,7 +89,7 @@ namespace toycc::ir {
         return Constant {IntegerConstant(value), location, type};
     }
 
-    RValue Generator::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {
+    RValue SemanticAnalyzer::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "String literals are not implemented", locate(terminals[0]));
     }
 }

@@ -1,9 +1,9 @@
 #include "diagnostic.h"
-#include "ir/generator.h"
+#include "semantic/analyzer.h"
 #include "arch/datamodel.h"
 
-namespace toycc::ir {
-    void Generator::init_global_scope() {
+namespace toycc::semantic {
+    void SemanticAnalyzer::init_global_scope() {
         // Initialize the global scope
         scope_stack.push_back(std::make_shared<Scope>(ScopeType::GLOBAL, nullptr));
         current_scope()->function = nullptr;
@@ -34,20 +34,20 @@ namespace toycc::ir {
         add_builtin_type("__builtin_va_list");
     }
 
-    std::shared_ptr<Type> Generator::add_builtin_type(std::string name) {
+    std::shared_ptr<Type> SemanticAnalyzer::add_builtin_type(std::string name) {
         return current_scope()->add_type(std::make_shared<Type>(TypeCategory::BUILTIN, name, BUILTIN_LOCATION));
     }
 
-    std::shared_ptr<Type> Generator::add_integer_type(std::string name, bool is_signed, size_t size, size_t alignment) {
+    std::shared_ptr<Type> SemanticAnalyzer::add_integer_type(std::string name, bool is_signed, size_t size, size_t alignment) {
         return current_scope()->add_type(std::make_shared<IntegerType>(name, BUILTIN_LOCATION, size * 8, alignment * 8, is_signed));
     }
 
-    std::shared_ptr<Type> Generator::add_floating_point_type(std::string name, size_t size, size_t alignment) {
+    std::shared_ptr<Type> SemanticAnalyzer::add_floating_point_type(std::string name, size_t size, size_t alignment) {
         return current_scope()->add_type(std::make_shared<FloatingPointType>(name, BUILTIN_LOCATION, size * 8, alignment * 8));
     }
 
 
-    std::shared_ptr<Scope> Generator::create_function_scope(std::shared_ptr<Declaration> declaration) {
+    std::shared_ptr<Scope> SemanticAnalyzer::create_function_scope(std::shared_ptr<Declaration> declaration) {
         std::shared_ptr<Scope> scope = std::make_shared<Scope>(ScopeType::FUNCTION, declaration);
         if (declaration->type->category != TypeCategory::FUNCTION)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to create the function scope for a non-function type");
@@ -61,7 +61,7 @@ namespace toycc::ir {
         return scope;
     }
 
-    std::shared_ptr<Declaration> Generator::declare(Declaration declaration) {
+    std::shared_ptr<Declaration> SemanticAnalyzer::declare(Declaration declaration) {
         std::optional<CodeLocation> existing_location = locate_name(declaration.name);
         if (existing_location.has_value())
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name {} was already declared", declaration.name), declaration.location)
@@ -74,12 +74,12 @@ namespace toycc::ir {
     }
 
 
-    std::shared_ptr<Declaration> Generator::declare_temporary(std::shared_ptr<Type> type, CodeLocation location) {
+    std::shared_ptr<Declaration> SemanticAnalyzer::declare_temporary(std::shared_ptr<Type> type, CodeLocation location) {
         Declaration declaration(anonymous_identifier(), type, location, StorageClass::AUTO | StorageClass::TEMPORARY);
         return declare(declaration);
     }
 
-    std::optional<CodeLocation> Generator::locate_name(std::string name, bool current_scope_only) {
+    std::optional<CodeLocation> SemanticAnalyzer::locate_name(std::string name, bool current_scope_only) {
         const TypeIdentifier identifier = {.tag = TypeTag::DIRECT, .name = name};
         // Structs, unions and enums aren't single names, they have `struct` / `union` / `enum` in front
 
@@ -105,7 +105,7 @@ namespace toycc::ir {
         return {};
     }
 
-    std::shared_ptr<Declaration> Generator::resolve_without_error(std::string name) {
+    std::shared_ptr<Declaration> SemanticAnalyzer::resolve_without_error(std::string name) {
         for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
             std::shared_ptr<Scope> scope = *it;
             std::shared_ptr<Declaration> local = scope->find_local(name);
@@ -116,7 +116,7 @@ namespace toycc::ir {
         return nullptr;
     }
 
-    std::shared_ptr<Declaration> Generator::resolve(std::string name, CodeLocation location) {
+    std::shared_ptr<Declaration> SemanticAnalyzer::resolve(std::string name, CodeLocation location) {
         std::shared_ptr<Declaration> declaration = resolve_without_error(name);
 
         if (declaration.get() == nullptr)
@@ -124,7 +124,7 @@ namespace toycc::ir {
         return declaration;
     }
 
-    std::shared_ptr<Type> Generator::resolve_type_without_error(TypeIdentifier identifier) {
+    std::shared_ptr<Type> SemanticAnalyzer::resolve_type_without_error(TypeIdentifier identifier) {
         for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); it++) {
             std::shared_ptr<Scope> scope = *it;
             if (identifier.tag == TypeTag::TYPEDEF) {
@@ -141,7 +141,7 @@ namespace toycc::ir {
         return nullptr;
     }
 
-    std::shared_ptr<Type> Generator::resolve_type(TypeIdentifier identifier, CodeLocation location) {
+    std::shared_ptr<Type> SemanticAnalyzer::resolve_type(TypeIdentifier identifier, CodeLocation location) {
         std::shared_ptr<Type> type = resolve_type_without_error(identifier);
         if (type.get() == nullptr)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` was not declared", identifier.text()), location);

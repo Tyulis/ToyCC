@@ -1,12 +1,12 @@
 #include "diagnostic.h"
 #include "ir/declaration.h"
 #include "ir/type_expressions.h"
-#include "ir/generator.h"
 #include "ir/statement.h"
 #include "ir/type.h"
+#include "semantic/analyzer.h"
 
-namespace toycc::ir {
-    Generator::ConversionValidity Generator::get_conversion_validity(std::shared_ptr<Type> destination, std::shared_ptr<Type> source) {
+namespace toycc::semantic {
+    SemanticAnalyzer::ConversionValidity SemanticAnalyzer::get_conversion_validity(std::shared_ptr<Type> destination, std::shared_ptr<Type> source) {
         // Those shouldn't be converted at all
         if (destination->category == TypeCategory::VOID || source->category == TypeCategory::VOID)
             return ConversionValidity::INVALID;
@@ -96,7 +96,7 @@ namespace toycc::ir {
     }
 
     // Return a declaration compatible with the `target` type specification. If necessary, emit an implicit cast and declare a new temporary with that target type
-    RValue Generator::emit_implicit_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location) {
+    Operand SemanticAnalyzer::emit_implicit_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location) {
         const ConversionValidity validity = get_conversion_validity(destination_type, source.type());
         switch (validity) {
             case ConversionValidity::INVALID:
@@ -110,7 +110,7 @@ namespace toycc::ir {
     }
 
     // Main entry point. Internals won't recheck the validity of the conversion
-    RValue Generator::emit_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location) {
+    Operand SemanticAnalyzer::emit_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location) {
         const ConversionValidity validity = get_conversion_validity(destination_type, source.type());
         if (validity == ConversionValidity::INVALID)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert from `{}` to `{}`", source.type()->text(), destination_type->text()));
@@ -118,8 +118,8 @@ namespace toycc::ir {
         return emit_conversion(destination_type, source.type(), source, location, make_temporary_generator(destination_type, location));
     }
 
-    RValue Generator::emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, RValue source,
-                                      CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    Operand SemanticAnalyzer::emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, Operand source,
+                                      CodeLocation location, SemanticAnalyzer::TemporaryGenerator destination_generator)
     {
         // Qualifiers were already checked, they are irrelevant in conversions -> remove them
         if (destination_type->category == TypeCategory::QUALIFIED)
@@ -138,7 +138,7 @@ namespace toycc::ir {
             if (source_type->category == TypeCategory::ALIGNED)
                 source_unqualified = std::static_pointer_cast<AlignedType>(source_type)->underlying_type;
 
-            RValue destination = emit_conversion(destination_unqualified, source_unqualified, source, location, destination_generator);
+            Operand destination = emit_conversion(destination_unqualified, source_unqualified, source, location, destination_generator);
 
             // No copy was emitted, but one is required to realign the source object
             if (!source.is_constant() && destination == source && destination_type->alignment(location) > source_type->alignment(location)) {
@@ -163,8 +163,8 @@ namespace toycc::ir {
         }
     }
 
-    RValue Generator::emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> source_type, RValue source,
-                                              CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    Operand SemanticAnalyzer::emit_conversion_to_bool(std::shared_ptr<BooleanType> destination_type, std::shared_ptr<Type> source_type, Operand source,
+                                              CodeLocation location, SemanticAnalyzer::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::BOOL:
@@ -182,8 +182,8 @@ namespace toycc::ir {
         }
     }
 
-    RValue Generator::emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> source_type, RValue source,
-                                                 CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    Operand SemanticAnalyzer::emit_conversion_to_integer(std::shared_ptr<IntegerType> destination_type, std::shared_ptr<Type> source_type, Operand source,
+                                                 CodeLocation location, SemanticAnalyzer::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::BOOL:
@@ -213,8 +213,8 @@ namespace toycc::ir {
         }
     }
 
-    RValue Generator::emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> source_type, RValue source,
-                                               CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    Operand SemanticAnalyzer::emit_conversion_to_float(std::shared_ptr<FloatingPointType> destination_type, std::shared_ptr<Type> source_type, Operand source,
+                                               CodeLocation location, SemanticAnalyzer::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::BOOL:
@@ -237,8 +237,8 @@ namespace toycc::ir {
         }
     }
 
-    RValue Generator::emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, RValue source,
-                                                 CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    Operand SemanticAnalyzer::emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source_type, Operand source,
+                                                 CodeLocation location, SemanticAnalyzer::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
             case TypeCategory::ARRAY:  // Those are just pointers, nothing to do
@@ -255,8 +255,8 @@ namespace toycc::ir {
         }
     }
 
-    RValue Generator::emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> source_type, RValue source,
-                                              CodeLocation location, Generator::TemporaryGenerator destination_generator)
+    Operand SemanticAnalyzer::emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> source_type, Operand source,
+                                              CodeLocation location, SemanticAnalyzer::TemporaryGenerator destination_generator)
     {
         if (destination_type->underlying_type->category != TypeCategory::INTEGER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid enum underlying type", location);
@@ -264,7 +264,7 @@ namespace toycc::ir {
     }
 
 
-    RValue Generator::emit_copy_conversion(std::shared_ptr<Type> destination_type, RValue source, CodeLocation location, TemporaryGenerator destination_generator, StatementTag op) {
+    Operand SemanticAnalyzer::emit_copy_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location, TemporaryGenerator destination_generator, StatementTag op) {
         if (source.is_constant()) {
             // Don't emit copies for constant expressions, just give another type expression to the constant
             return source.constant().as(destination_type);
@@ -275,7 +275,7 @@ namespace toycc::ir {
         }
     }
 
-    std::array<RValue, 2> Generator::emit_arithmetic_conversion(RValue left, RValue right, CodeLocation location) {
+    std::array<Operand, 2> SemanticAnalyzer::emit_arithmetic_conversion(Operand left, Operand right, CodeLocation location) {
         try {
             left = emit_implicit_conversion(right.type(), left, location);
         } catch (const Diagnostic& left_conversion_diagnostic) {
@@ -283,7 +283,7 @@ namespace toycc::ir {
                 right = emit_implicit_conversion(left.type(), right, location);
             } catch (const Diagnostic& right_conversion_diagnostic) {
                 throw Diagnostic(DiagnosticLevel::ERROR, "Can't perform any standard arithmetic conversions to make the operands compatible", location)
-                .add_note(left_conversion_diagnostic).add_note(right_conversion_diagnostic);
+                      .add_note(left_conversion_diagnostic).add_note(right_conversion_diagnostic);
             }
         }
 
@@ -291,7 +291,7 @@ namespace toycc::ir {
     }
 
     // Copy source to destination, adding an implicit cast if necessary
-    void Generator::emit_copy(LValue destination, RValue source, CodeLocation location, bool initialize) {
+    void SemanticAnalyzer::emit_copy(Operand destination, Operand source, CodeLocation location, bool initialize) {
         if (!initialize && destination.type()->is_const())
             throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to assign a value to a constant after initialization", location);
 
@@ -299,7 +299,7 @@ namespace toycc::ir {
         emit(Statement::make_unary_operation(location, StatementTag::COPY, source, destination));
     }
 
-    RValue Generator::make_constant_zero(TypeCategory category, CodeLocation location) {
+    RValue SemanticAnalyzer::make_constant_zero(TypeCategory category, CodeLocation location) {
         switch (category) {
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:

@@ -34,9 +34,9 @@ namespace toycc::ir {
     struct ArrayType : public Type {
         public:
             std::shared_ptr<Type> element_type;
-            RValue length;
+            Operand length;
 
-            static std::shared_ptr<ArrayType> make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length);
+            static std::shared_ptr<ArrayType> make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length);
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
@@ -50,7 +50,7 @@ namespace toycc::ir {
             virtual std::string ir_code() const override;
 
         protected:
-            ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, RValue length);
+            ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length);
     };
 
     struct CompoundType : public Type {

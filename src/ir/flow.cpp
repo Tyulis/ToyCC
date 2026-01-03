@@ -34,33 +34,24 @@ namespace toycc::ir {
             outputs = available_decls;
         }
 
-        std::vector<RValue> rvalues = statement->inputs;
-
         // FIXME : If there's a dereference, don't make any assumption on where that value comes from and make this depend on everything else
-        if (statement->lvalue_input.has_value()) {
-            if (statement->lvalue_input->is_dereference()) {
-                inputs = available_decls;
-                rvalues.push_back(statement->lvalue_input->base);
-                rvalues.append_range(statement->lvalue_input->indices);
-            } else {
-                inputs.insert(statement->lvalue_input->base.declaration());
-            }
-        }
-
         if (statement->output.has_value()) {
-            // FIXME : Same for outputs
             if (statement->output->is_dereference()) {
-                outputs = available_decls;
-                rvalues.push_back(statement->output->base);
-                rvalues.append_range(statement->output->indices);
-            } else {
-                outputs.insert(statement->output->base.declaration());
+                outputs.insert_range(available_decls);
+
+                if (!statement->output->has_constant_base())
+                    inputs.insert(statement->output->declaration());
+            } else if (!statement->output->is_constant()) {
+                outputs.insert(statement->output->declaration());
             }
         }
 
-        for (const RValue& rvalue : rvalues)
-            if (!rvalue.is_constant())
-                inputs.insert(rvalue.declaration());
+        for (const Operand& input : statement->inputs) {
+            if (input.is_dereference())
+                inputs.insert_range(available_decls);
+            if (!input.has_constant_base())
+                inputs.insert(input.declaration());
+        }
 
         // Find where they come from and add edges
         for (std::shared_ptr<Declaration> input : inputs) {
@@ -167,7 +158,7 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to initialize a procedure with a statement that's not a function", function->location);
 
         std::shared_ptr<Scope> scope = function->block;
-        declaration = function->output->base.declaration();
+        declaration = function->output->declaration();
         entry_block = blocks.emplace_node(LocalBlockType::ENTRY);
         exit_block  = blocks.emplace_node(LocalBlockType::EXIT);
 
@@ -177,6 +168,7 @@ namespace toycc::ir {
             locals.insert(declaration);
         }
 
+        find_globals(scope);
         build_flow_graph(scope);
     }
 
@@ -219,26 +211,21 @@ namespace toycc::ir {
     }
 
     void Procedure::find_globals(std::shared_ptr<Scope> scope) {
-        for (std::shared_ptr<Statement> statement : scope->statements)
+        for (std::shared_ptr<Statement> statement : scope->statements) {
+            // Internal consistency check : at this point, array indices must be constants, this saves us a lot of checks during flow analysis
+            for (const Operand& operand : statement->operands())
+                for (const Operand& index : operand.indices)
+                    if (!index.is_constant())
+                        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Upon flow analysis, array indices must be constants", statement->location);
+
             find_globals(statement);
+        }
     }
 
     void Procedure::find_globals(std::shared_ptr<Statement> statement) {
-        std::vector<LValue> lvalues;
-        if (statement->lvalue_input.has_value())
-            lvalues.push_back(*statement->lvalue_input);
-        if (statement->output.has_value())
-            lvalues.push_back(*statement->output);
-
-        std::vector<RValue> rvalues;
-        for (LValue lvalue : lvalues) {
-            rvalues.push_back(lvalue.base);
-            rvalues.append_range(lvalue.indices);
-        }
-
-        for (RValue rvalue : rvalues)
-            if (!rvalue.is_constant() && !locals.contains(rvalue.declaration()))
-                globals.insert(rvalue.declaration());
+        for (const Operand& operand : statement->operands())
+            if (!operand.has_constant_base() && !locals.contains(operand.declaration()))
+                globals.insert(operand.declaration());
     }
 
     void Procedure::build_flow_graph(std::shared_ptr<Scope> scope) {
@@ -270,6 +257,9 @@ namespace toycc::ir {
                 // If the previous block may fall through (didn't end in an inconditional jump / return), connect it to the new block
                 if (previous_block.get() != nullptr)
                     blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
+
+                // NOTE : After splitting into local blocks, markers are not relevant anymore since there's at most one label at the beginning of each block
+                //        Don't reinsert them
                 previous_block = current_block;
                 continue;
             } else if (current_block.get() == nullptr && previous_block.get() == nullptr) {
@@ -319,12 +309,12 @@ namespace toycc::ir {
             } else throw Diagnostic(DiagnosticLevel::ERROR, "Some control flow paths reach the end of the function without returning a value", location);
         };
 
-            // Now, ensure that the control frow is correct (all control paths go from the entry block, through inner blocks, to the exit block)
-            // First, ensure that all flow control paths are reachable from the entry block, prune those that don't
-            // We need to do it first to avoid unreachable blocks from counting as non-returning paths in the next step
-            // Unreachable blocks arise naturally from some constructs like if-statements at the end of a function, and they disturb the next steps
-            for (std::shared_ptr<LocalBlock> unreachable : blocks.unreachable_from(entry_block))
-                blocks.pop_node(unreachable);
+        // Now, ensure that the control frow is correct (all control paths go from the entry block, through inner blocks, to the exit block)
+        // First, ensure that all flow control paths are reachable from the entry block, prune those that don't
+        // We need to do it first to avoid unreachable blocks from counting as non-returning paths in the next step
+        // Unreachable blocks arise naturally from some constructs like if-statements at the end of a function, and they disturb the next steps
+        for (std::shared_ptr<LocalBlock> unreachable : blocks.unreachable_from(entry_block))
+            blocks.pop_node(unreachable);
 
         // The last block didn't finish with an unconditional jump / exit -> there should be a return here
         // Treat the last block specially because if it ends with a conditional jump,
@@ -338,6 +328,11 @@ namespace toycc::ir {
         // Next, ensure that all flow control paths lead to the exit block (i.e finish with a `return` statement), to ensure that the control flow is valid
         for (std::shared_ptr<LocalBlock> dead_end : blocks.cannot_reach(exit_block))
             insert_implicit_exit(dead_end);
+
+        // Since we deleted markers, clear markers from the labels
+        for (std::shared_ptr<LocalBlock> block : blocks.nodes())
+            if (block->label.get() != nullptr)
+                block->label->marker = nullptr;
     }
 
     // -------- TranslationUnit

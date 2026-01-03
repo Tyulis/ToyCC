@@ -1,18 +1,18 @@
 #include "diagnostic.h"
-#include "ir/generator.h"
+#include "semantic/analyzer.h"
 
-namespace toycc::ir {
-    void Generator::decode_compilation_unit(CParser::CompilationUnitContext* context) {
+namespace toycc::semantic {
+    void SemanticAnalyzer::decode_compilation_unit(CParser::CompilationUnitContext* context) {
         if (context->translationUnit())
             decode_translation_unit(context->translationUnit());
     }
 
-    void Generator::decode_translation_unit(CParser::TranslationUnitContext* context) {
+    void SemanticAnalyzer::decode_translation_unit(CParser::TranslationUnitContext* context) {
         for (CParser::ExternalDeclarationContext* declaration : context->externalDeclaration())
             decode_external_declaration(declaration);
     }
 
-    void Generator::decode_external_declaration(CParser::ExternalDeclarationContext* context) {
+    void SemanticAnalyzer::decode_external_declaration(CParser::ExternalDeclarationContext* context) {
         if (context->KW__extension__())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "__extension__ declarations are not supported", locate(context));
 
@@ -26,7 +26,7 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown external declaration `{}`", context->getText()), locate(context));
     }
 
-    void Generator::decode_function_definition(CParser::FunctionDefinitionContext* context) {
+    void SemanticAnalyzer::decode_function_definition(CParser::FunctionDefinitionContext* context) {
         if (context->declarationList())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Parameter declarations outside of the prototype are not supported", locate(context));
 

@@ -11,10 +11,8 @@ namespace toycc::arch::x86_64 {
         const OperandSpec& spec = it->second;
         OperandLocation operands;
 
-        if (statement->lvalue_input.has_value())
-            operands.lvalue_input = move_operand(frame, *statement->lvalue_input, spec.lvalue_input, statement->location);
-        for (const auto& [index, rvalue] : std::ranges::enumerate_view(statement->inputs))
-            operands.inputs.push_back(move_operand(frame, rvalue, spec.inputs[index], statement->location));
+        for (const auto& [index, input] : std::ranges::enumerate_view(statement->inputs))
+            operands.inputs.push_back(move_operand(frame, input, spec.inputs[index], statement->location));
 
         if (statement->output.has_value())
             clear_output(frame, operands, *statement->output, spec.output, statement->location);
@@ -22,26 +20,24 @@ namespace toycc::arch::x86_64 {
         return operands;
     }
 
-    LOC CodeGenerator::move_operand(StackFrame&, LValue&, Flags<LOC>, CodeLocation) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Lvalue inputs are not implemented");
-        return LOC::NONE;
-    }
-
-    LOC CodeGenerator::move_operand(StackFrame& frame, RValue& rvalue, Flags<LOC> allowed_locations, CodeLocation code_location) {
-        if (rvalue.is_constant()) {
+    LOC CodeGenerator::move_operand(StackFrame& frame, Operand& operand, Flags<LOC> allowed_locations, CodeLocation code_location) {
+        if (operand.is_constant()) {
             if (allowed_locations & LOC::CONSTANT)
                 return LOC::CONSTANT;
 
             LOC destination = frame.available_location(allowed_locations);
             if (destination == LOC::NONE)
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "No allowed and available location for this operand", rvalue.location());
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "No allowed and available location for this operand", code_location);
             if (destination & MEMORY)
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Temporary constant loading to memory is not supported", code_location);
 
-            rvalue.value = load_constant(frame, rvalue.constant(), destination, code_location);
+            operand.value = load_constant(frame, operand.constant(), destination, code_location);
             return destination;
         } else {
-            std::shared_ptr<Declaration> variable = rvalue.declaration();
+            if (operand.is_dereference())
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Dereference operands are not implemented", code_location);
+
+            std::shared_ptr<Declaration> variable = operand.declaration();
             const LOC current_location = frame.locate(variable);
 
             if (current_location & allowed_locations)
@@ -49,7 +45,7 @@ namespace toycc::arch::x86_64 {
 
             LOC destination = frame.available_location(allowed_locations);
             if (destination == LOC::NONE)
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "No allowed and available location for this operand", rvalue.location());
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "No allowed and available location for this operand", code_location);
 
             move_variable(frame, variable, destination, code_location);
             return destination;
@@ -57,36 +53,36 @@ namespace toycc::arch::x86_64 {
     }
 
     // Find an available output location, or clear one
-    LOC CodeGenerator::clear_output(StackFrame&, const OperandLocation&, LValue&, Flags<LOC>, CodeLocation code_location) {
+    LOC CodeGenerator::clear_output(StackFrame&, const OperandLocation&, Operand&, Flags<LOC>, CodeLocation code_location) {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Instructions with outputs are not implemented", code_location);
     }
 
 
-    std::string CodeGenerator::operand_ref(StackFrame& frame, const LValue& lvalue, CodeLocation code_location) const {
-        if (!lvalue.is_dereference())
-            return operand_ref(frame, lvalue.base, code_location);
-
-        // At this point all lvalues are either an identifier, or a pointer with a constant offset
+    std::string CodeGenerator::operand_ref(StackFrame& frame, const Operand& operand, CodeLocation code_location) const {
         std::stringstream code;
-        const Constant offset = lvalue.indices[0].constant();
-        if (!offset.is_integer())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Pointer offsets must be integer constants", code_location);
-        code << offset.integer() << "(" << operand_ref(frame, lvalue.base, code_location) << ")";
-        return code.str();
-    }
 
-    std::string CodeGenerator::operand_ref(StackFrame& frame, const RValue& rvalue, CodeLocation code_location) const {
-        if (rvalue.is_constant()) {
-            std::stringstream repr;
-            const Constant& constant = rvalue.constant();
+        if (operand.is_dereference()) {
+            // At this point all dereferences are with constant offsets
+            const Constant offset = operand.indices[0].constant();
+            if (!offset.is_integer())
+                throw Diagnostic(DiagnosticLevel::ERROR, "Pointer offsets must be integer constants", code_location);
+            code << offset.integer() << "(";
+        }
+
+        if (operand.has_constant_base()) {
+            const Constant& constant = operand.constant();
             if (constant.is_integer()) {
-                repr << "$" << constant.integer();
-                return repr.str();
+                code << "$" << constant.integer();
             } else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer constants are not implemented", code_location);
         } else {
-            std::shared_ptr<Declaration> declaration = rvalue.declaration();
-            return variable_ref(frame, rvalue.declaration(), code_location);
+            std::shared_ptr<Declaration> declaration = operand.declaration();
+            code << variable_ref(frame, operand.declaration(), code_location);
         }
+
+        if (operand.is_dereference())
+            code << ")";
+
+        return code.str();
     }
 
     std::string CodeGenerator::variable_ref(StackFrame& frame, std::shared_ptr<Declaration> declaration, CodeLocation code_location) const {

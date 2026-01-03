@@ -5,6 +5,7 @@
 #include "util/strings.h"
 
 namespace toycc::ir {
+    // -------- Statement
     static std::string tag_repr(StatementTag tag) {
         switch (tag) {
             case StatementTag::MARKER:          return "MARKER";
@@ -45,12 +46,16 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown statement tag");
     }
 
+    std::vector<Operand> Statement::operands() const {
+        std::vector<Operand> operands = inputs;
+        if (output.has_value())
+            operands.push_back(output.value());
+        return operands;
+    }
+
     std::string Statement::ir_code() const {
         std::stringstream code;
         code << tag_repr(tag);
-        if (lvalue_input.has_value())
-            code << " (" << lvalue_input->ir_code() << ")";
-
         if (!inputs.empty()) {
             code << " (";
             for (size_t index = 0; index < inputs.size(); index++) {
@@ -74,52 +79,52 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Statement> Statement::make_marker(CodeLocation location) {
-        return std::make_shared<Statement> (Statement {.tag = StatementTag::MARKER, .location = location, .lvalue_input = {}, .inputs = {}, .output = {}, .label = {}, .block = {}});
+        return std::make_shared<Statement> (Statement {.tag = StatementTag::MARKER, .location = location, .inputs = {}, .output = {}, .label = {}, .block = {}});
     }
 
     std::shared_ptr<Statement> Statement::make_block(CodeLocation location, std::shared_ptr<Scope> block) {
-        return std::make_shared<Statement> (Statement {.tag = StatementTag::BLOCK, .location = location, .lvalue_input = {}, .inputs = {}, .output = {}, .label = {}, .block = block});
+        return std::make_shared<Statement> (Statement {.tag = StatementTag::BLOCK, .location = location, .inputs = {}, .output = {}, .label = {}, .block = block});
     }
 
     std::shared_ptr<Statement> Statement::make_function(CodeLocation location, std::shared_ptr<Declaration> function, std::shared_ptr<Scope> block) {
-        return std::make_shared<Statement> (Statement {.tag = StatementTag::FUNCTION, .location = location, .lvalue_input = {}, .inputs = {}, .output = function, .label = {}, .block = block});
+        return std::make_shared<Statement> (Statement {.tag = StatementTag::FUNCTION, .location = location, .inputs = {}, .output = function, .label = {}, .block = block});
     }
 
-    std::shared_ptr<Statement> Statement::make_addressof(CodeLocation location, LValue object, LValue output) {
-        return std::make_shared<Statement>(Statement {.tag = StatementTag::ADDRESSOF, .location = location, .lvalue_input = object, .inputs = {}, .output = output, .label = {}, .block = {}});
+    std::shared_ptr<Statement> Statement::make_addressof(CodeLocation location, Operand object, Operand output) {
+        return std::make_shared<Statement>(Statement {.tag = StatementTag::ADDRESSOF, .location = location, .inputs = {object}, .output = output, .label = {}, .block = {}});
     }
 
-    std::shared_ptr<Statement> Statement::make_unary_operation(CodeLocation location, StatementTag tag, RValue input, LValue output) {
-        return std::make_shared<Statement> (Statement {.tag = tag, .location = location, .lvalue_input = {}, .inputs = {input}, .output = output, .label = {}, .block = {}});
+    std::shared_ptr<Statement> Statement::make_unary_operation(CodeLocation location, StatementTag tag, Operand input, Operand output) {
+        return std::make_shared<Statement> (Statement {.tag = tag, .location = location, .inputs = {input}, .output = output, .label = {}, .block = {}});
     }
 
-    std::shared_ptr<Statement> Statement::make_binary_operation(CodeLocation location, StatementTag tag, RValue left, RValue right, LValue output) {
-        return std::make_shared<Statement> (Statement {.tag = tag, .location = location, .lvalue_input = {}, .inputs = {left, right}, .output = output, .label = {}, .block = {}});
+    std::shared_ptr<Statement> Statement::make_binary_operation(CodeLocation location, StatementTag tag, Operand left, Operand right, Operand output) {
+        return std::make_shared<Statement> (Statement {.tag = tag, .location = location, .inputs = {left, right}, .output = output, .label = {}, .block = {}});
     }
 
-    std::shared_ptr<Statement> Statement::make_load(CodeLocation location, LValue input, LValue destination) {
-        return std::make_shared<Statement> (Statement {.tag = StatementTag::LOAD, .location = location, .lvalue_input = input, .inputs = {}, .output = destination, .label = {}, .block = {}});
+    std::shared_ptr<Statement> Statement::make_load(CodeLocation location, Operand input, Operand destination) {
+        return std::make_shared<Statement> (Statement {.tag = StatementTag::LOAD, .location = location, .inputs = {input}, .output = destination, .label = {}, .block = {}});
     }
 
-    std::shared_ptr<Statement> Statement::make_call(CodeLocation location, RValue function, std::vector<RValue> arguments, LValue return_value) {
-        std::vector<RValue> inputs = {function};
+    std::shared_ptr<Statement> Statement::make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, Operand return_value) {
+        std::vector<Operand> inputs = {function};
         inputs.append_range(arguments);
-        return std::make_shared<Statement> (Statement {.tag = StatementTag::CALL, .location = location, .lvalue_input = {}, .inputs = inputs, .output = return_value, .label = {}, .block = {}});
+        return std::make_shared<Statement> (Statement {.tag = StatementTag::CALL, .location = location, .inputs = inputs, .output = return_value, .label = {}, .block = {}});
     }
 
     std::shared_ptr<Statement> Statement::make_jump(CodeLocation location, std::string label) {
-        return std::make_shared<Statement> (Statement {.tag = StatementTag::JUMP, .location = location, .lvalue_input = {}, .inputs = {}, .output = {}, .label = label, .block = {}});
+        return std::make_shared<Statement> (Statement {.tag = StatementTag::JUMP, .location = location, .inputs = {}, .output = {}, .label = label, .block = {}});
     }
 
-    std::shared_ptr<Statement> Statement::make_conditional_jump(CodeLocation location, RValue predicate, std::string label, bool jump_if_is) {
+    std::shared_ptr<Statement> Statement::make_conditional_jump(CodeLocation location, Operand predicate, std::string label, bool jump_if_is) {
         StatementTag tag = (jump_if_is == true ? StatementTag::JUMP_IF_TRUE : StatementTag::JUMP_IF_FALSE);
-        return std::make_shared<Statement> (Statement {.tag = tag, .location = location, .lvalue_input = {}, .inputs = {predicate}, .output = {}, .label = label, .block = {}});
+        return std::make_shared<Statement> (Statement {.tag = tag, .location = location, .inputs = {predicate}, .output = {}, .label = label, .block = {}});
     }
 
-    std::shared_ptr<Statement> Statement::make_return(CodeLocation location, std::optional<RValue> return_value) {
-        std::vector<RValue> inputs;
+    std::shared_ptr<Statement> Statement::make_return(CodeLocation location, std::optional<Operand> return_value) {
+        std::vector<Operand> inputs;
         if (return_value.has_value())
             inputs.push_back(return_value.value());
-        return std::make_shared<Statement> (Statement {.tag = StatementTag::RETURN, .location = location, .lvalue_input = {}, .inputs = inputs, .output = {}, .label = {}, .block = {}});
+        return std::make_shared<Statement> (Statement {.tag = StatementTag::RETURN, .location = location, .inputs = inputs, .output = {}, .label = {}, .block = {}});
     }
 }

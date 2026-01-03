@@ -1,6 +1,5 @@
 #include <set>
 #include <sstream>
-#include <variant>
 
 #include "diagnostic.h"
 #include "ir/declaration.h"
@@ -69,6 +68,7 @@ namespace toycc::ir {
         return std::format("#decl {}{}{}", storage_classes_repr(storage), function_specifiers_repr(function_spec), Member::ir_code());
     }
 
+
     // -------- Constant
     bool Constant::is_integer() const {
         return std::holds_alternative<IntegerConstant>(value);
@@ -111,7 +111,7 @@ namespace toycc::ir {
             case TypeCategory::POINTER:
                 if (is_string())
                     return {.value = value, .location = location, .type = new_type};
-                [[fallthrough]];
+            [[fallthrough]];
 
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
@@ -160,40 +160,56 @@ namespace toycc::ir {
         return code.str();
     }
 
-    // -------- RValue
-    RValue::RValue(std::shared_ptr<Declaration> declaration) : value(declaration) {}
-    RValue::RValue(Constant value) : value(value) {}
+    // -------- Operand
+    Operand::Operand(const Constant& constant, std::vector<Operand> indices) : value(constant), location(constant.location), indices(indices) {}
+    Operand::Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices) : value(constant), location(location), indices(indices) {}
+    Operand::Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices) : value(declaration), location(declaration->location), indices(indices) {}
+    Operand::Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices) : value(declaration), location(location), indices(indices) {}
+    Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant> value, CodeLocation location, std::vector<Operand> indices) : value(value), location(location), indices(indices) {}
 
-    bool RValue::is_constant() const {
-        return !std::holds_alternative<std::shared_ptr<Declaration>>(value);
+    bool Operand::is_constant() const {
+        return has_constant_base() && !is_dereference();
     }
 
-    CodeLocation RValue::location() const {
-        if (is_constant())  return std::get<Constant>(value).location;
-        else                return std::get<std::shared_ptr<Declaration>>(value)->location;
+    bool Operand::is_dereference() const {
+        return !indices.empty();
     }
 
-    std::shared_ptr<Type> RValue::type() const {
+    bool Operand::has_constant_base() const {
+        return std::holds_alternative<Constant>(value);
+    }
+
+    std::shared_ptr<Type> Operand::base_type() const {
         if (is_constant())  return std::get<Constant>(value).type;
         else                return std::get<std::shared_ptr<Declaration>>(value)->type;
     }
 
-    Constant RValue::constant() const {
-        if (is_constant())  return std::get<Constant>(value);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location());
+    std::shared_ptr<Type> Operand::type() const {
+        std::shared_ptr<Type> type = base_type();
+        for (auto it = indices.begin(); it != indices.end(); it++)
+            type = type->dereference(location);
+        return type;
     }
 
-    Constant& RValue::constant() {
+    Constant Operand::constant() const {
         if (is_constant())  return std::get<Constant>(value);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location());
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location);
     }
 
-    std::shared_ptr<Declaration> RValue::declaration() const {
+    Constant& Operand::constant() {
+        if (is_constant())  return std::get<Constant>(value);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location);
+    }
+
+    std::shared_ptr<Declaration> Operand::declaration() const {
         if (!is_constant())  return std::get<std::shared_ptr<Declaration>>(value);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant rvalue", location());
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant rvalue", location);
     }
 
-    bool RValue::operator== (const RValue& rhs) const {
+    bool Operand::operator== (const Operand& rhs) const {
+        if (indices != rhs.indices)
+            return false;
+
         if (is_constant() && rhs.is_constant())
             return std::get<Constant>(value) == std::get<Constant>(rhs.value);
         else if (!is_constant() && !rhs.is_constant())
@@ -201,34 +217,13 @@ namespace toycc::ir {
         else return false;
     }
 
-    std::string RValue::ir_code() const {
-        if (is_constant())  return std::get<Constant>(value).ir_code();
-        else                return std::get<std::shared_ptr<Declaration>>(value)->name;
-    }
-
-    // -------- LValue
-    LValue::LValue(std::shared_ptr<Declaration> declaration) : base(declaration), location(declaration->location) {}
-    LValue::LValue(RValue base, CodeLocation location, std::vector<RValue> indices) : base(base), location(location), indices(indices) {
-        if (base.is_constant() && indices.empty())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "A constant can't be an lvalue without some form of dereferencing", location);
-    }
-
-    bool LValue::is_dereference() const {
-        return !indices.empty();
-    }
-
-    std::string LValue::ir_code() const {
+    std::string Operand::ir_code() const {
         std::stringstream code;
-        code << base.ir_code();
-        for (RValue index : indices)
+        if (is_constant())  code << constant().ir_code();
+        else                code << declaration()->name;
+
+        for (const Operand& index : indices)
             code << "[" << index.ir_code() << "]";
         return code.str();
-    }
-
-    std::shared_ptr<Type> LValue::type() const {
-        std::shared_ptr<Type> type = base.type();
-        for (RValue index : indices)
-            type = type->dereference(location);
-        return type;
     }
 }

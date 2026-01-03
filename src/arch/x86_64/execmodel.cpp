@@ -4,7 +4,6 @@ namespace toycc::arch::x86_64 {
     using toycc::ir::StatementTag;
 
     const std::unordered_map<ir::StatementTag, OperandSpec> OPERAND_SPECS = {
-        {StatementTag::MARKER, {.lvalue_input = {}, .inputs = {},            .output = {}}},
         {StatementTag::RETURN, {.lvalue_input = {}, .inputs = {ACCUMULATOR}, .output = {}}},
     };
 
