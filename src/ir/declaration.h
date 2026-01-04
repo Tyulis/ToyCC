@@ -88,7 +88,8 @@ namespace toycc::ir {
     // Statement operand : any value or dereference. Basically any lvalue or rvalue
     // Lvalues and rvalues are a semantic analysis concept, once a statement is semantically correct drop that information to uniformize everything
     struct Operand {
-        std::variant<std::shared_ptr<Declaration>, Constant> value;
+        //           variable                      constant  label
+        std::variant<std::shared_ptr<Declaration>, Constant, std::string> value;
         CodeLocation location;
         std::vector<Operand> indices;
 
@@ -96,15 +97,21 @@ namespace toycc::ir {
         Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices = {});
         Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices = {});
         Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices = {});
-        Operand(std::variant<std::shared_ptr<Declaration>, Constant> value, CodeLocation location, std::vector<Operand> indices = {});
+        Operand(std::string label, CodeLocation location, std::vector<Operand> indices = {});
+        Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices = {});
 
+        bool is_label() const;
         bool is_constant() const;
+        bool is_variable() const;
         bool is_dereference() const;
+        bool has_label_base() const;
         bool has_constant_base() const;
+        bool has_variable_base() const;
 
         std::shared_ptr<Type> base_type() const;
         std::shared_ptr<Type> type() const;
 
+        std::string label() const;
         Constant constant() const;
         Constant& constant();
         std::shared_ptr<Declaration> declaration() const;

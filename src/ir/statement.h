@@ -27,7 +27,6 @@ namespace toycc::ir {
         CodeLocation location;
         std::vector<Operand> inputs;
         std::optional<Operand> output;
-        std::optional<std::string> label;
         std::shared_ptr<Scope> block;
 
         std::vector<Operand> operands() const;

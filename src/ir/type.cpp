@@ -11,6 +11,7 @@ namespace toycc::ir {
         switch (category) {
             case TypeCategory::VOID:      return TypeTag::DIRECT;
             case TypeCategory::BUILTIN:   return TypeTag::DIRECT;
+            case TypeCategory::LABEL:     return TypeTag::DIRECT;
             case TypeCategory::BOOL:      return TypeTag::DIRECT;
             case TypeCategory::INTEGER:   return TypeTag::DIRECT;
             case TypeCategory::FLOAT:     return TypeTag::DIRECT;
@@ -38,10 +39,11 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type tag");
     }
 
-    std::string category_repr(TypeCategory category) {
+    static std::string category_repr(TypeCategory category) {
         switch (category) {
             case TypeCategory::VOID:      return "VOID";
             case TypeCategory::BUILTIN:   return "BUILTIN";
+            case TypeCategory::LABEL:     return "LABEL";
             case TypeCategory::BOOL:      return "BOOL";
             case TypeCategory::INTEGER:   return "INTEGER";
             case TypeCategory::FLOAT:     return "FLOAT";

@@ -1,5 +1,6 @@
 #include <set>
 #include <sstream>
+#include <variant>
 
 #include "diagnostic.h"
 #include "ir/declaration.h"
@@ -100,6 +101,7 @@ namespace toycc::ir {
         switch (new_unqualified->category) {
             case TypeCategory::VOID:
             case TypeCategory::BUILTIN:
+            case TypeCategory::LABEL:
             case TypeCategory::STRUCT:
             case TypeCategory::UNION:
             case TypeCategory::FUNCTION:
@@ -165,23 +167,42 @@ namespace toycc::ir {
     Operand::Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices) : value(constant), location(location), indices(indices) {}
     Operand::Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices) : value(declaration), location(declaration->location), indices(indices) {}
     Operand::Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices) : value(declaration), location(location), indices(indices) {}
-    Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant> value, CodeLocation location, std::vector<Operand> indices) : value(value), location(location), indices(indices) {}
+    Operand::Operand(std::string label, CodeLocation location, std::vector<Operand> indices) : value(label), location(location), indices(indices) {}
+    Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices)
+        : value(value), location(location), indices(indices) {}
+
+    bool Operand::is_label() const {
+        return has_label_base() && !is_dereference();
+    }
 
     bool Operand::is_constant() const {
         return has_constant_base() && !is_dereference();
+    }
+
+    bool Operand::is_variable() const {
+        return has_variable_base() && !is_dereference();
     }
 
     bool Operand::is_dereference() const {
         return !indices.empty();
     }
 
+    bool Operand::has_label_base() const {
+        return std::holds_alternative<std::string>(value);
+    }
+
     bool Operand::has_constant_base() const {
         return std::holds_alternative<Constant>(value);
     }
 
+    bool Operand::has_variable_base() const {
+        return std::holds_alternative<std::shared_ptr<Declaration>>(value);
+    }
+
     std::shared_ptr<Type> Operand::base_type() const {
-        if (is_constant())  return std::get<Constant>(value).type;
-        else                return std::get<std::shared_ptr<Declaration>>(value)->type;
+        if      (has_constant_base())  return std::get<Constant>(value).type;
+        else if (has_variable_base())  return std::get<std::shared_ptr<Declaration>>(value)->type;
+        else                           return std::make_shared<Type>(TypeCategory::LABEL, ".Tlabel", location);
     }
 
     std::shared_ptr<Type> Operand::type() const {
@@ -191,36 +212,44 @@ namespace toycc::ir {
         return type;
     }
 
+    std::string Operand::label() const {
+        if (has_label_base())  return std::get<std::string>(value);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the label alternative of a non-label operand", location);
+    }
+
     Constant Operand::constant() const {
-        if (is_constant())  return std::get<Constant>(value);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location);
+        if (has_constant_base())  return std::get<Constant>(value);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant operand", location);
     }
 
     Constant& Operand::constant() {
-        if (is_constant())  return std::get<Constant>(value);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant rvalue", location);
+        if (has_constant_base())  return std::get<Constant>(value);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant operand", location);
     }
 
     std::shared_ptr<Declaration> Operand::declaration() const {
-        if (!is_constant())  return std::get<std::shared_ptr<Declaration>>(value);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant rvalue", location);
+        if (has_variable_base())  return std::get<std::shared_ptr<Declaration>>(value);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant operand", location);
     }
 
     bool Operand::operator== (const Operand& rhs) const {
         if (indices != rhs.indices)
             return false;
 
-        if (is_constant() && rhs.is_constant())
-            return std::get<Constant>(value) == std::get<Constant>(rhs.value);
-        else if (!is_constant() && !rhs.is_constant())
-            return std::get<std::shared_ptr<Declaration>>(value).get() == std::get<std::shared_ptr<Declaration>>(rhs.value).get();
+        if (has_constant_base() && rhs.has_constant_base())
+            return constant() == rhs.constant();
+        else if (has_variable_base() && rhs.has_variable_base())
+            return declaration() == rhs.declaration();
+        else if (has_label_base() && rhs.has_label_base())
+            return label() == rhs.label();
         else return false;
     }
 
     std::string Operand::ir_code() const {
         std::stringstream code;
-        if (is_constant())  code << constant().ir_code();
-        else                code << declaration()->name;
+        if      (has_constant_base())  code << constant().ir_code();
+        else if (has_variable_base())  code << declaration()->name;
+        else                           code << label();
 
         for (const Operand& index : indices)
             code << "[" << index.ir_code() << "]";

@@ -39,9 +39,9 @@ namespace toycc::ir {
             if (statement->output->is_dereference()) {
                 outputs.insert_range(available_decls);
 
-                if (!statement->output->has_constant_base())
+                if (statement->output->has_variable_base())
                     inputs.insert(statement->output->declaration());
-            } else if (!statement->output->is_constant()) {
+            } else if (statement->output->is_variable()) {
                 outputs.insert(statement->output->declaration());
             }
         }
@@ -49,7 +49,7 @@ namespace toycc::ir {
         for (const Operand& input : statement->inputs) {
             if (input.is_dereference())
                 inputs.insert_range(available_decls);
-            if (!input.has_constant_base())
+            if (input.has_variable_base())
                 inputs.insert(input.declaration());
         }
 
@@ -224,7 +224,7 @@ namespace toycc::ir {
 
     void Procedure::find_globals(std::shared_ptr<Statement> statement) {
         for (const Operand& operand : statement->operands())
-            if (!operand.has_constant_base() && !locals.contains(operand.declaration()))
+            if (operand.has_variable_base() && !locals.contains(operand.declaration()))
                 globals.insert(operand.declaration());
     }
 
@@ -277,7 +277,7 @@ namespace toycc::ir {
 
             if (statement->tag == StatementTag::JUMP || statement->tag == StatementTag::JUMP_IF_TRUE || statement->tag == StatementTag::JUMP_IF_FALSE) {
                 // Jump -> exit this block, connect it to the target block
-                std::shared_ptr<Label> target = scope->find_label(*statement->label);
+                std::shared_ptr<Label> target = scope->find_label(statement->inputs[0].label());
                 blocks.add_edge(current_block, labeled_blocks[target], FlowType::JUMP);
 
                 // Set the previous block to connect the next block : conditional jump -> allow connections, unconditional jump -> don't

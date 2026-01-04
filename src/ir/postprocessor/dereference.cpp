@@ -61,7 +61,7 @@ namespace toycc::ir {
 
             IntegerConstant offset = constant_index.integer() * referenced_type->size(original.location);
             result.indices[0] = Constant {offset, constant_index.location, constant_index.type};
-        } else {
+        } else if (index.is_variable()) {
             // Emit a multiplication to get from the index to an offset
             std::shared_ptr<Declaration> variable_index = index.declaration();
             Constant value_size(IntegerConstant(referenced_type->size(original.location)), original.location, variable_index->type);
@@ -77,7 +77,7 @@ namespace toycc::ir {
             std::vector<Operand> indices = {Constant {IntegerConstant(0), original.location, offset_type}};
             std::copy(original.indices.begin() + 1, original.indices.end(), std::back_inserter(indices));
             return {offset_pointer, original.location, indices};
-        }
+        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Labels are not supported as array indices", original.location);
 
         return result;
     }

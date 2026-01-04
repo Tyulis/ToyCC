@@ -415,6 +415,7 @@ namespace toycc::ir {
         switch (underlying_type->category) {
             case TypeCategory::VOID:     throw Diagnostic(DiagnosticLevel::ERROR, "Can't align a void type", location);
             case TypeCategory::BUILTIN:  throw Diagnostic(DiagnosticLevel::ERROR, "Built-in types' memory layout are unspecified and can't be manually aligned", location);
+            case TypeCategory::LABEL:    throw Diagnostic(DiagnosticLevel::ERROR, "Can't realign a label", location);
 
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
@@ -503,6 +504,8 @@ namespace toycc::ir {
         switch (underlying_type->category) {
             case TypeCategory::BUILTIN:  // Not sure about that case, block for now
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Qualifying built-in types is not implemented", location);
+            case TypeCategory::LABEL:
+                throw Diagnostic(DiagnosticLevel::ERROR, "Can't qualify a label", location);
             case TypeCategory::ARRAY:  // Is that even possible ?
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Qualifying array types is not implemented", location);
             case TypeCategory::FUNCTION:

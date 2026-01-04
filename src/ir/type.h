@@ -11,7 +11,7 @@ namespace toycc::ir {
     };
 
     enum class TypeCategory {
-        VOID, BUILTIN, BOOL, INTEGER, FLOAT, POINTER, ARRAY, STRUCT, UNION, ENUM, FUNCTION, BITFIELD, QUALIFIED, ALIGNED,
+        VOID, BUILTIN, LABEL, BOOL, INTEGER, FLOAT, POINTER, ARRAY, STRUCT, UNION, ENUM, FUNCTION, BITFIELD, QUALIFIED, ALIGNED,
     };
 
     struct TypeIdentifier {
@@ -90,8 +90,6 @@ namespace toycc::ir {
         virtual std::shared_ptr<Type> dequalify() const override;
         virtual std::shared_ptr<Type> storage_type() const override;
     };
-
-    std::string category_repr(TypeCategory category);
 }
 
 template<> struct std::hash<toycc::ir::TypeIdentifier> {

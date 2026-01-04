@@ -33,7 +33,7 @@ namespace toycc::arch::x86_64 {
 
             operand.value = load_constant(frame, operand.constant(), destination, code_location);
             return destination;
-        } else {
+        } else if (operand.is_variable()) {
             if (operand.is_dereference())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Dereference operands are not implemented", code_location);
 
@@ -49,7 +49,7 @@ namespace toycc::arch::x86_64 {
 
             move_variable(frame, variable, destination, code_location);
             return destination;
-        }
+        } else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Label operands are not implemented", code_location);
     }
 
     // Find an available output location, or clear one
