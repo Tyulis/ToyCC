@@ -42,3 +42,7 @@ gen/
 compile_commands.json
 .kateproject.*
 *.kate-swp
+
+# Python stuff
+*.pyc
+__pycache__/

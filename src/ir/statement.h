@@ -7,7 +7,7 @@ namespace toycc::ir {
     enum class StatementTag {
         MARKER,  // No-op statement used to mark label positions without needing to update all positions when labels are moved around
         BLOCK, FUNCTION,
-        LOAD, CALL_FUNCTION, CALL_PROCEDURE,
+        CALL_FUNCTION, CALL_PROCEDURE,
         JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, RETURN, RETURN_VAL,
 
         // Unary operators

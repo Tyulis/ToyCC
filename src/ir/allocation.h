@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <cstddef>
+#include <unordered_set>
 #include <unordered_map>
 
 #include <boost/multi_index_container.hpp>
@@ -24,8 +25,8 @@ namespace toycc::ir {
 
     template <typename Location>
     using AllocationTable = multi_index_container<Allocation<Location>,
-        indexed_by<hashed_unique<tag<location_tag>,    member<Allocation<Location>, Location,                     &Allocation<Location>::location>>,
-                   hashed_unique<tag<declaration_tag>, member<Allocation<Location>, std::shared_ptr<Declaration>, &Allocation<Location>::declaration>>>>;
+        indexed_by<hashed_unique    <tag<location_tag>,    member<Allocation<Location>, Location,                     &Allocation<Location>::location>>,
+                   hashed_non_unique<tag<declaration_tag>, member<Allocation<Location>, std::shared_ptr<Declaration>, &Allocation<Location>::declaration>>>>;
 
     template <typename Location>
     struct StackFrame {
@@ -46,14 +47,14 @@ namespace toycc::ir {
         // Value allocation management
         AllocationTable<Location> allocations;
 
-        std::optional<Location> try_locate(std::shared_ptr<Declaration> declaration) const {
+        std::unordered_set<Location> locate(std::shared_ptr<Declaration> declaration) const {
             const auto& declaration_index = allocations.template get<declaration_tag>();
-            auto it = declaration_index.find(declaration);
-            if (it == declaration_index.end())  return {};
-            else                                return it->location;
+            const auto& [begin, end] = declaration_index.equal_range(declaration);
+            std::unordered_set<Location> locations(begin, end);
+            return locations;
         }
 
-        std::shared_ptr<Declaration> try_content(Location location) const {
+        std::shared_ptr<Declaration> content(Location location) const {
             const auto& location_index = allocations.template get<location_tag>();
             auto it = location_index.find(location);
             if (it == location_index.end())  return nullptr;
@@ -62,9 +63,8 @@ namespace toycc::ir {
 
         void move(std::shared_ptr<Declaration> declaration, Location new_location) {
             auto& declaration_index = allocations.template get<declaration_tag>();
-            auto it = declaration_index.find(declaration);
-            if (it == declaration_index.end())  declaration_index.insert (    Allocation<Location> {declaration, new_location});
-            else                                declaration_index.replace(it, Allocation<Location> {declaration, new_location});
+            declaration_index.erase(declaration);
+            declaration_index.insert(Allocation<Location> {declaration, new_location});
         }
     };
 }

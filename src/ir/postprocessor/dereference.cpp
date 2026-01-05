@@ -85,8 +85,8 @@ namespace toycc::ir {
     Operand PostProcessor::dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope) {
         std::shared_ptr<Type> referenced_type = operand.base_type()->dereference(operand.location);
         std::shared_ptr<Declaration> pointee = declare_temporary(scope, referenced_type, operand.location);
-        const Operand pointer = Operand {operand.value, operand.location, {operand.indices[0]}};
-        scope->add_statement(Statement::make_load(operand.location, pointer, pointee));
+        const Operand reference = Operand {operand.value, operand.location, {operand.indices[0]}};
+        scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::COPY, reference, pointee));
         return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}};
     }
 }

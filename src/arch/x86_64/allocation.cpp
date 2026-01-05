@@ -15,32 +15,26 @@ namespace toycc::arch::x86_64 {
                 declaration_index.insert(Allocation {parameter, INTEGER_REGISTER_ARGUMENTS[integer_parameter_index++]});
             else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer function parameters are not implemented", parameter->location);
         }
-
-        for (std::shared_ptr<ir::Declaration> declaration : procedure.locals())
-            if (!declaration_index.contains(declaration))
-                declaration_index.insert(Allocation {declaration, LOC::NONE});
     }
 
-    LOC StackFrame::locate(std::shared_ptr<ir::Declaration> declaration) const {
-        return try_locate(declaration).value_or(LOC::NONE);
+    std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
+        if (operand.is_dereference())
+            return {Location::memory};
+        else if (operand.is_constant())
+            return {Location::constant};
+        else if (operand.is_label())
+            return {Location::constant};
+        else if (operand.is_variable())
+            return locate(operand.declaration());
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
     }
 
-    std::shared_ptr<ir::Declaration> StackFrame::content(LOC location) const {
-        return try_content(location);
-    }
-
-    LOC StackFrame::available_location(Flags<LOC> allowed_locations) const {
-        allowed_locations.clear(LOC::CONSTANT);
-        allowed_locations.clear(LOC::NONE);
-
-        for (const Allocation& allocation : allocations)
-            if (!(allocation.location & REGISTERS))
-                allowed_locations.clear(allocation.location);
-
-        const Flags<LOC> allowed_registers = allowed_locations & REGISTERS;
-        if (allowed_registers)
-            return allowed_registers.first();
-        else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "No register available");
+    // Called by the code generator whenever the output of an instruction is going to overwrite a variable
+    void StackFrame::save(Location location) {
+        std::shared_ptr<ir::Declaration> variable = content(location);
+        if (location == Location::stack)
+        std::unordered_set<Location> locations = locate(variable);
+        if
     }
 
     void StackFrame::insert_return() {

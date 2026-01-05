@@ -1,26 +1,27 @@
 #pragma once
 
-#include <memory>
 #include <string>
 
 #include "ir/flow.h"
 #include "ir/allocation.h"
 #include "arch/x86_64/output.h"
-#include "arch/x86_64/execmodel.h"
+#include "gen/execmodel/x86_64/location.h"
 
 namespace toycc::arch::x86_64 {
-    using Allocation = ir::Allocation<LOC>;
+    using toycc::execmodel::x86_64::Location;
+
+    using Allocation = ir::Allocation<Location>;
 
     // Stack frame object that automatically generates its frame push and pop code
-    struct StackFrame : ir::StackFrame<LOC> {
+    struct StackFrame : ir::StackFrame<Location> {
         StackFrame(const ir::Procedure& procedure);
 
-        LOC available_location(Flags<LOC> allowed_locations) const;
-        LOC locate(std::shared_ptr<ir::Declaration> declaration) const;
-        std::shared_ptr<ir::Declaration> content(LOC location) const;
+        std::unordered_set<Location> locate(const ir::Operand& operand) const;
 
         void insert_return();
         std::string str() const;
+
+        void save(Location location);
 
         const ir::Procedure& procedure;
         CodeOutput output;

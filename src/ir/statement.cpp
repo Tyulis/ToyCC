@@ -11,7 +11,6 @@ namespace toycc::ir {
             case StatementTag::MARKER:          return "MARKER";
             case StatementTag::BLOCK:           return "BLOCK";
             case StatementTag::FUNCTION:        return "FUNCTION";
-            case StatementTag::LOAD:            return "LOAD";
             case StatementTag::CALL_FUNCTION:   return "CALL_FUNCTION";
             case StatementTag::CALL_PROCEDURE:  return "CALL_PROCEDURE";
             case StatementTag::JUMP:            return "JUMP";
