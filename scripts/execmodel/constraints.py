@@ -15,6 +15,7 @@ class ConstraintType (enum.IntEnum):
     VALUE_EQ = 7
     VALUE_LE = 8
     VALUE_GE = 9
+    STORAGE = 10
 
 CONSTRAINT_TYPE_NAME = {
     ConstraintType.CONSTANT:    "constant",
@@ -27,6 +28,7 @@ CONSTRAINT_TYPE_NAME = {
     ConstraintType.VALUE_EQ:    "value",
     ConstraintType.VALUE_LE:    "value_le",
     ConstraintType.VALUE_GE:    "value_ge",
+    ConstraintType.STORAGE:     "storage",
 }
 
 class Constraint:
@@ -60,11 +62,15 @@ def parse_constraint_union(expressions: list[str], previous_types: dict[str, Ope
     disjunction = {parse_constraint_expression(expression, previous_types) for expression in expressions}
     return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
 
-def parse_constraint_category(category: str, previous_types: dict[str, OperandType]) -> Constraint:
-    return Constraint(ConstraintType.CATEGORY, category)
+def parse_constraint_category(categories: str|list[str], previous_types: dict[str, OperandType]) -> Constraint:
+    if isinstance(categories, str):
+        return Constraint(ConstraintType.CATEGORY, categories)
+    return Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.CATEGORY, category) for category in categories))
 
-def parse_constraint_type(type: str, previous_types: dict[str, OperandType]) -> Constraint:
-    return Constraint(ConstraintType.TYPE, type)
+def parse_constraint_type(types: str|list[str], previous_types: dict[str, OperandType]) -> Constraint:
+    if isinstance(types, str):
+        return Constraint(ConstraintType.TYPE, types)
+    return Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.TYPES, type) for type in types))
 
 def parse_constraint_value(value, previous_types: dict[str, OperandType]) -> Constraint:
     conjunction = {Constraint(ConstraintType.CATEGORY, "constant"), Constraint(ConstraintType.VALUE_EQ, value)}
@@ -95,13 +101,22 @@ def parse_constraint_value_bits(bits: int, previous_types: dict[str, OperandType
 
 def parse_constraint_anyof(type_names: list[str], previous_types: dict[str, OperandType]) -> Constraint:
     if isinstance(type_names, str):
-        type_names = [type_names]
+        if type_names not in previous_types:
+            raise TranslationModelError(f"`anyof` can only reference operand types defined earlier : `{name}` was not defined previously")
+        return previous_types[type_names]
 
     disjunction = set()
     for name in type_names:
         if name not in previous_types:
             raise TranslationModelError(f"`anyof` can only reference operand types defined earlier : `{name}` was not defined previously")
         disjunction.add(previous_types[name])
+    return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
+
+def parse_constraint_storage(storages: str|list[str], previous_types: dict[str, OperandType]) -> Constraint:
+    if isinstance(storages, str):
+        return Constraint(ConstraintType.STORAGE, storages)
+
+    disjunction = {Constraint(ConstraintType.STORAGE, storage) for storage in storages}
     return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
 
 def parse_constraint_expression(expression, previous_types: dict[str, OperandType]) -> Constraint:
@@ -117,7 +132,8 @@ def parse_constraint_expression(expression, previous_types: dict[str, OperandTyp
                          "location"  : parse_constraint_location,
                          "size"      : parse_constraint_size,
                          "value_bits": parse_constraint_value_bits,
-                         "anyof"     : parse_constraint_anyof
+                         "anyof"     : parse_constraint_anyof,
+                         "storage"   : parse_constraint_storage,
         }[operator](value, previous_types)
         conjunction.add(subexpression)
 
@@ -147,7 +163,7 @@ def simplify_pairwise_and(left: Constraint, right: Constraint) -> Constraint|Non
                 return CONSTANT_FALSE
         case (ConstraintType.CONJUNCTION, _) | (ConstraintType.DISJUNCTION, _):
             raise TranslationModelError("Constraints must be in disjunctive normal form before simplifying them")
-        case (ConstraintType.CATEGORY, ConstraintType.CATEGORY) | (ConstraintType.TYPE, ConstraintType.TYPE) | (ConstraintType.LOCATION, ConstraintType.LOCATION) | (ConstraintType.SIZE, ConstraintType.SIZE) | (ConstraintType.VALUE_EQ, ConstraintType.VALUE_EQ):
+        case (ConstraintType.CATEGORY, ConstraintType.CATEGORY) | (ConstraintType.TYPE, ConstraintType.TYPE) | (ConstraintType.LOCATION, ConstraintType.LOCATION) | (ConstraintType.SIZE, ConstraintType.SIZE) | (ConstraintType.VALUE_EQ, ConstraintType.VALUE_EQ) | (ConstraintType.STORAGE, ConstraintType.STORAGE):
             if left.parameter == right.parameter:
                 return left
             else:
@@ -189,7 +205,7 @@ def simplify_pairwise_or(left: Constraint, right: Constraint) -> Constraint|None
                 return CONSTANT_TRUE
         case (ConstraintType.CONJUNCTION, _) | (ConstraintType.DISJUNCTION, _):
             raise TranslationModelError("Constraints must be in disjunctive normal form before simplifying them")
-        case (ConstraintType.CATEGORY, ConstraintType.CATEGORY) | (ConstraintType.TYPE, ConstraintType.TYPE) | (ConstraintType.LOCATION, ConstraintType.LOCATION) | (ConstraintType.SIZE, ConstraintType.SIZE) | (ConstraintType.VALUE_EQ, ConstraintType.VALUE_EQ):
+        case (ConstraintType.CATEGORY, ConstraintType.CATEGORY) | (ConstraintType.TYPE, ConstraintType.TYPE) | (ConstraintType.LOCATION, ConstraintType.LOCATION) | (ConstraintType.SIZE, ConstraintType.SIZE) | (ConstraintType.VALUE_EQ, ConstraintType.VALUE_EQ) | (ConstraintType.STORAGE, ConstraintType.STORAGE):
             if left.parameter == right.parameter:
                 return left
             else:
@@ -313,3 +329,12 @@ def load_constraint_expression(description, previous_types: dict[str, OperandTyp
 
     simplified_conjunctions = {simplify_conjunction(conjunction) for conjunction in dnf.parameter}
     return simplify_disjunction(Constraint(ConstraintType.DISJUNCTION, frozenset(simplified_conjunctions)))
+
+# Check if a simplified expression is a literal false
+def is_false(constraint: Constraint) -> bool:
+    if constraint.type == ConstraintType.CONJUNCTION:
+        return CONSTRAINT_FALSE in constraint.parameter
+    elif constraint.type == ConstraintType.DISJUNCTION:
+        return all([is_false(sub) for sub in constraint.parameter])
+    else:
+        return constraint == CONSTRAINT_FALSE
