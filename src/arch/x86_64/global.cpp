@@ -61,23 +61,27 @@ namespace toycc::arch::x86_64 {
 
     // FIXME : Trivial implementation for now
     void CodeGenerator::generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block) {
-        if (block->label.get() != nullptr && block->label->name != frame.procedure.declaration->name)
+        if (block->label.has_value() && block->label->name != frame.procedure.declaration->name)
             frame.output.label(block->label->name);
 
         // FIXME : For now use any topological sort, this should optimize for minimal graph cutwidth
-        std::vector<std::shared_ptr<Statement>> ordered_statements = block->statements.topological_sort();
-        for (std::shared_ptr<Statement> statement : ordered_statements)
-            generate_statement(frame, statement);
+        std::vector<std::shared_ptr<DependencyNode>> ordered_nodes = block->dependencies.topological_sort();
+        for (std::shared_ptr<DependencyNode> node : ordered_nodes)
+            if (node->is_statement())
+                generate_statement(frame, node->statement());
 
         // FIXME : At least for now, move all output variables to memory at the end of the block
-        for (std::shared_ptr<Declaration> output : block->output_variables) {
+        for (std::shared_ptr<DependencyNode> output : block->dependencies.sinks()) {
+            if (!output->is_value())
+                continue;
+
             FlowGraph::NodeSet next_blocks = frame.procedure.blocks.next_nodes(block);
             const bool only_returns = (next_blocks.size() == 1) && (*next_blocks.begin() == frame.procedure.exit_block);
 
-            if (frame.procedure.globals.contains(output))
-                move_variable(frame, output, LOC::STATIC, ordered_statements.back()->location);
+            if (frame.procedure.globals.contains(output->declaration()))
+                move_variable(frame, output->declaration(), LOC::STATIC, ordered_nodes.back()->location());
             else if (only_returns)  // It's only useful to store local variables when that block doesn't unconditionally exit
-                move_variable(frame, output, LOC::STACK, ordered_statements.back()->location);
+                move_variable(frame, output->declaration(), LOC::STACK, ordered_nodes.back()->location());
         }
     }
 }

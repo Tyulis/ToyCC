@@ -4,15 +4,15 @@ namespace toycc::ir {
     // Reduce all types to their raw storage type
     void PostProcessor::detype(std::shared_ptr<Scope> scope) {
         // Step 1 : Detype statements
-        for (std::shared_ptr<Statement> statement : scope->statements) {
+        for (Statement& statement : scope->statements) {
             // Recursively detype subblocks
-            if (statement->block.get() != nullptr)
-                detype(statement->block);
+            if (statement.block.get() != nullptr)
+                detype(statement.block);
 
             // Detype all constants
-            if (statement->output.has_value())
-                detype_operand(statement->output.value());
-            for (Operand& input : statement->inputs)
+            if (statement.output.has_value())
+                detype_operand(statement.output.value());
+            for (Operand& input : statement.inputs)
                 detype_operand(input);
         }
 

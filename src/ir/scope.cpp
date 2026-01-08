@@ -17,13 +17,12 @@ namespace toycc::ir {
         for (std::shared_ptr<Declaration> item : locals)
             code << item->ir_code() << ";\n";
 
-        for (std::shared_ptr<Statement> statement : statements) {
-            const auto [begin, end] = labels.get<marker_index_tag>().equal_range(statement);
-            for (auto label_it = begin; label_it != end; label_it++)
-                code << (*label_it)->name << ": ";
+        for (const Statement& statement : statements) {
+            for (const auto& [name, label] : labels)
+                code << name << ": ";
 
-            if (statement->tag != StatementTag::MARKER)
-                code << statement->ir_code() << ";\n";
+            if (statement.tag != StatementTag::MARKER)
+                code << statement.ir_code() << ";\n";
         }
         return rtrim(code.str());
     }
@@ -48,18 +47,18 @@ namespace toycc::ir {
         else                         return *element;
     }
 
-    std::shared_ptr<Label> Scope::find_label(std::string name) {
-        auto& index = labels.get<name_index_tag>();
-        auto element = index.find(name);
-        if (element == index.end())  return nullptr;
-        else                         return *element;
+    std::optional<Label> Scope::find_label(std::string name) {
+        auto element = labels.find(name);
+        if (element == labels.end()) return {};
+        else                         return element->second;
     }
 
-    std::shared_ptr<Label> Scope::find_label(std::shared_ptr<Statement> marker) {
-        auto& index = labels.get<marker_index_tag>();
-        auto element = index.find(marker);
-        if (element == index.end())  return nullptr;
-        else                         return *element;
+    std::optional<Label> Scope::find_label(const Statement& marker) {
+        if (marker.tag != StatementTag::MARKER || !marker.output.has_value() || !marker.output->is_label())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid marker", marker.location);
+
+        const std::string& name = marker.output.value().label();
+        return find_label(name);
     }
 
     std::shared_ptr<Type> Scope::add_type(std::shared_ptr<Type> type) {
@@ -87,45 +86,37 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name `{}` is already defined in this scope", declaration->name), declaration->location)
                   .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_decl->location);
 
-        auto& labels_index = labels.get<name_index_tag>();
-        auto existing_label = labels_index.find(declaration->name);
-        if (existing_label != labels_index.end())
+        auto existing_label = labels.find(declaration->name);
+        if (existing_label != labels.end())
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name `{}` is already used for a label", declaration->name), declaration->location)
-                  .add_note(DiagnosticLevel::NOTE, "Already defined here", (*existing_label)->location);
+                  .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_label->second.location);
 
         locals.push_back(declaration);
         return declaration;
     }
 
-    std::shared_ptr<Statement> Scope::add_statement(std::shared_ptr<Statement> statement) {
+    Statement& Scope::add_statement(const Statement& statement) {
         statements.push_back(statement);
-        return statement;
+        return statements.back();
     }
 
-    std::shared_ptr<Label> Scope::add_label(std::shared_ptr<Label> label) {
-        auto& labels_index = labels.get<name_index_tag>();
-        auto existing_label = labels_index.find(label->name);
-        if (existing_label != labels_index.end())
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label `{}` already exists in this scope", label->name), label->location)
-                  .add_note(DiagnosticLevel::NOTE, "Already defined here", (*existing_label)->location);
+    Label& Scope::add_label(const Label& label) {
+        auto existing_label = labels.find(label.name);
+        if (existing_label != labels.end())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label `{}` already exists in this scope", label.name), label.location)
+                  .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_label->second.location);
 
-        std::shared_ptr<Declaration> existing_decl = find_local(label->name);
+        std::shared_ptr<Declaration> existing_decl = find_local(label.name);
         if (existing_decl.get() != nullptr)
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label name `{}` is already used for a declaration in this scope", label->name), label->location)
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Label name `{}` is already used for a declaration in this scope", label.name), label.location)
                   .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_decl->location);
 
-        labels.insert(label);
-        return label;
+        return labels[label.name] = label;
     }
 
-    std::shared_ptr<Label> Scope::add_label(LabelType type, std::string name, std::shared_ptr<Statement> marker, CodeLocation location) {
-        std::shared_ptr<Label> label = std::make_shared<Label>(type, name, marker, location);
-        return add_label(label);
-    }
-
-    std::shared_ptr<Label> Scope::add_label(LabelType type, std::string name, CodeLocation location) {
-        std::shared_ptr<Statement> marker = add_statement(Statement::make_marker(location));
-        return add_label(type, name, marker, location);
+    Label& Scope::add_label(LabelType type, std::string name, CodeLocation location) {
+        add_statement(Statement::make_marker(location, name));
+        return add_label(Label {type, name, location});
     }
 
     std::shared_ptr<Declaration> Scope::pop_local(std::string name) {

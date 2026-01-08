@@ -3,19 +3,19 @@
 #include "diagnostic.h"
 
 namespace toycc::arch::x86_64 {
-    OperandLocation CodeGenerator::move_operands(StackFrame& frame, std::shared_ptr<Statement> statement) {
-        auto it = OPERAND_SPECS.find(statement->tag);
+    OperandLocation CodeGenerator::move_operands(StackFrame& frame, Statement& statement) {
+        auto it = OPERAND_SPECS.find(statement.tag);
         if (it == OPERAND_SPECS.end())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Statement `{}` has no operand spec", statement->ir_code()), statement->location);
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Statement `{}` has no operand spec", statement.ir_code()), statement.location);
 
         const OperandSpec& spec = it->second;
         OperandLocation operands;
 
-        for (const auto& [index, input] : std::ranges::enumerate_view(statement->inputs))
-            operands.inputs.push_back(move_operand(frame, input, spec.inputs[index], statement->location));
+        for (size_t index = 0; index < statement.inputs.size(); index++)
+            operands.inputs.push_back(move_operand(frame, statement.inputs[index], spec.inputs[index], statement.location));
 
-        if (statement->output.has_value())
-            clear_output(frame, operands, *statement->output, spec.output, statement->location);
+        if (statement.output.has_value())
+            clear_output(frame, operands, *statement.output, spec.output, statement.location);
 
         return operands;
     }

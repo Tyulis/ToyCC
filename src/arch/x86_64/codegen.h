@@ -21,11 +21,11 @@ namespace toycc::arch::x86_64 {
             void generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block);
 
             // -------- Statements -> arch/x86_64/statements.cpp
-            void generate_statement(StackFrame& frame, std::shared_ptr<Statement> statement);
-            void generate_return(StackFrame& frame, std::shared_ptr<Statement> statement);
+            void generate_statement(StackFrame& frame, Statement& statement);
+            void generate_return(StackFrame& frame, const Statement& statement);
 
             // -------- Operand management -> arch/x86_64/operands.cpp
-            OperandLocation move_operands(StackFrame& frame, std::shared_ptr<Statement> statement);
+            OperandLocation move_operands(StackFrame& frame, Statement& statement);
             LOC move_operand(StackFrame& frame, Operand& operand, Flags<LOC> allowed_locations, CodeLocation code_location);
             LOC clear_output(StackFrame& frame, const OperandLocation& operands, Operand& operand, Flags<LOC> allowed_locations, CodeLocation code_location);
 

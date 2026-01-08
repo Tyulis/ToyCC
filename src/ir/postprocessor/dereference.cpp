@@ -6,17 +6,17 @@
 namespace toycc::ir {
     // Process pointer dereferences and array indices to flatten multi-dimensional and dynamic indexing, and resolve all array indices to static offsets
     void PostProcessor::dereference(std::shared_ptr<Scope> scope) {
-        const std::vector<std::shared_ptr<Statement>> original_statements = scope->statements;
+        std::vector<Statement> original_statements = scope->statements;
         scope->statements.clear();
 
-        for (std::shared_ptr<Statement> statement : original_statements) {
-            if (statement->block.get() != nullptr) {
-                dereference(statement->block);
+        for (Statement& statement : original_statements) {
+            if (statement.block.get() != nullptr) {
+                dereference(statement.block);
             } else {
-                if (statement->output.has_value())
-                    statement->output = dereference_operand(*statement->output, scope);
+                if (statement.output.has_value())
+                    statement.output = dereference_operand(*statement.output, scope);
 
-                for (auto it = statement->inputs.begin(); it != statement->inputs.end(); it++)
+                for (auto it = statement.inputs.begin(); it != statement.inputs.end(); it++)
                     *it = dereference_operand(*it, scope);
             }
 

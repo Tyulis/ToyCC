@@ -1,11 +1,110 @@
 #include <sstream>
+#include <variant>
 
 #include "diagnostic.h"
 #include "ir/flow.h"
+#include "ir/declaration.h"
 #include "ir/type_expressions.h"
-#include "util/strings.h"
 
 namespace toycc::ir {
+    // -------- DependencyNode
+    bool DependencyNode::is_statement() const {
+        return std::holds_alternative<Statement>(node);
+    }
+
+    bool DependencyNode::is_value() const {
+        return std::holds_alternative<std::shared_ptr<Declaration>>(node);
+    }
+
+    CodeLocation DependencyNode::location() const {
+        if      (is_statement())  return statement().location;
+        else if (is_value())      return declaration()->location;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
+    }
+
+    Statement& DependencyNode::statement() {
+        return std::get<Statement>(node);
+    }
+
+    const Statement& DependencyNode::statement() const {
+        return std::get<Statement>(node);
+    }
+
+    std::shared_ptr<Declaration> DependencyNode::declaration() const {
+        return std::get<std::shared_ptr<Declaration>>(node);
+    }
+
+    bool DependencyNode::operator== (const DependencyNode& rhs) const {
+        if (is_value() && rhs.is_value())
+            return declaration() == rhs.declaration();
+        return false;
+    }
+
+    bool DependencyNode::operator== (std::shared_ptr<Declaration> variable) const {
+        return is_value() && declaration() == variable;
+    }
+
+
+    // -------- LocalBlock
+    LocalBlock::LocalBlock(LocalBlockType type, std::optional<Label> label) : type(type), label(label) {}
+
+    void LocalBlock::add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls) {
+        if (statement.block.get() != nullptr)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Statements in local blocks can't have subblocks", statement.location);
+
+        std::shared_ptr<DependencyNode> statement_node = dependencies.emplace_node(statement);
+
+        // Find all inputs and outputs of that statement
+        std::unordered_set<std::shared_ptr<Declaration>> inputs;
+        std::unordered_set<std::shared_ptr<Declaration>> outputs;
+
+        // FIXME : Function calls may have arbitrary side effects, for now make them full barriers
+        if (statement.tag == StatementTag::CALL) {
+            inputs = available_decls;
+            outputs = available_decls;
+        }
+
+        // FIXME : If there's a dereference, don't make any assumption on where that value comes from and make this depend on everything else
+        if (statement.output.has_value()) {
+            if (statement.output->is_dereference()) {
+                outputs.insert_range(available_decls);
+
+                if (statement.output->has_variable_base())
+                    inputs.insert(statement.output->declaration());
+            } else if (statement.output->is_variable()) {
+                outputs.insert(statement.output->declaration());
+            }
+        }
+
+        for (const Operand& input : statement.inputs) {
+            if (input.is_dereference())
+                inputs.insert_range(available_decls);
+            if (input.has_variable_base())
+                inputs.insert(input.declaration());
+        }
+
+        // Add edges from input variables, adding unknown ones as source nodes
+        for (std::shared_ptr<Declaration> input : inputs) {
+            auto found = last_modification.find(input);
+            std::shared_ptr<DependencyNode> input_node = nullptr;
+            if (found == last_modification.end()) {
+                input_node = dependencies.emplace_node(input);
+                last_modification[input] = input_node;
+            } else {
+                input_node = found->second;
+            }
+
+            dependencies.add_edge(input_node, statement_node);
+        }
+
+        // Add edges to output variables
+        for (std::shared_ptr<Declaration> output : outputs) {
+            std::shared_ptr<DependencyNode> output_node = dependencies.emplace_node(output);
+            dependencies.add_edge(statement_node, output_node);
+            last_modification[output] = output_node;
+        }
+    }
+
     static std::string local_block_type_repr(LocalBlockType type) {
         switch (type) {
             case LocalBlockType::ENTRY:  return "ENTRY";
@@ -15,150 +114,47 @@ namespace toycc::ir {
         }
     }
 
-    // -------- LocalBlock
-    LocalBlock::LocalBlock(LocalBlockType type, std::shared_ptr<Label> label) : type(type), label(label) {}
+    // Write the graph in dot format to `dot`, return the name of any node in the cluster
+    std::string LocalBlock::dot_subgraph(std::stringstream& dot, std::string cluster_name) const {
+        dot << "subgraph " << cluster_name << " {\n";
+        if (type != LocalBlockType::INNER) {
+            const std::string type_repr = local_block_type_repr(type);
+            dot << "label = \"" << type_repr << "\";\n";
 
-    void LocalBlock::add_statement(std::shared_ptr<Statement> statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls) {
-        if (statement->block.get() != nullptr)
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Statements in local blocks can't have subblocks", statement->location);
-
-        statements.add_node(statement);
-
-        // Find all inputs and outputs of that statement
-        std::unordered_set<std::shared_ptr<Declaration>> inputs;
-        std::unordered_set<std::shared_ptr<Declaration>> outputs;
-
-        // FIXME : Function calls may have arbitrary side effects, for now make them full barriers
-        if (statement->tag == StatementTag::CALL) {
-            inputs = available_decls;
-            outputs = available_decls;
+            std::string node = std::format("{}_{}", cluster_name, type_repr);
+            dot << node << "[shape=point style=invis width=0 height=0 margin=0 periphery=0];\n";
+            dot << "};\n";
+            return node;
         }
 
-        // FIXME : If there's a dereference, don't make any assumption on where that value comes from and make this depend on everything else
-        if (statement->output.has_value()) {
-            if (statement->output->is_dereference()) {
-                outputs.insert_range(available_decls);
+        if (label.has_value())
+            dot << "label = \"" << label->name << "\";\n";
 
-                if (statement->output->has_variable_base())
-                    inputs.insert(statement->output->declaration());
-            } else if (statement->output->is_variable()) {
-                outputs.insert(statement->output->declaration());
-            }
+        size_t node_index = 0;
+        std::unordered_map<std::shared_ptr<DependencyNode>, std::string> node_names;
+        for (std::shared_ptr<DependencyNode> node : dependencies.nodes()) {
+            const std::string node_name = node_names[node] = std::format("{}_{}", cluster_name, node_index++);
+            if (node->is_statement())
+                dot << node_name << " [label=\"" << node->statement().ir_code() << "\" shape=box];\n";
+            else if (node->is_value())
+                dot << node_name << " [label=\"" << node->declaration()->name << "\" shape=ellipse];\n";
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
         }
 
-        for (const Operand& input : statement->inputs) {
-            if (input.is_dereference())
-                inputs.insert_range(available_decls);
-            if (input.has_variable_base())
-                inputs.insert(input.declaration());
-        }
+        for (const DependencyGraph::Edge& edge : dependencies.edges())
+            dot << node_names[edge.entry] << " -> " << node_names[edge.exit] << ";\n";
 
-        // Find where they come from and add edges
-        for (std::shared_ptr<Declaration> input : inputs) {
-            auto found = last_modification.find(input);
-
-            if (found == last_modification.end()) {
-                // Not produced by this block -> link to the entry marker
-                input_variables.insert(input);
-            } else {
-                std::shared_ptr<Statement> origin = found->second;
-                DependencyGraph::Edge edge = statements.find_edge(origin, statement).value_or({origin, statement, {}});
-                edge.attr.insert(input);
-                statements.add_edge(edge);
-            }
-        }
-
-        for (std::shared_ptr<Declaration> output : outputs) {
-            last_modification[output] = statement;
-            output_variables.insert(output);
-        }
-    }
-
-    std::string LocalBlock::ir_code() const {
-        std::stringstream code;
-        code << local_block_type_repr(type) << " ";
-        if (label.get() != nullptr)
-            code << label->name << " ";
-
-        code << "[";
-        for (const auto [index, declaration] : std::ranges::enumerate_view(input_variables)) {
-            code << declaration->name;
-            if (static_cast<size_t>(index) != input_variables.size() - 1)
-                code << ", ";
-        }
-        code << "] >>> ";
-
-        if (std::ranges::any_of(statements.nodes(), [](std::shared_ptr<Statement> statement) {return statement->tag != StatementTag::MARKER;})) {
-            std::vector<std::shared_ptr<Statement>> order = statements.topological_sort();
-            std::unordered_map<std::shared_ptr<Statement>, size_t> statement_indices;
-            for (size_t index = 0; index < order.size(); index++)
-                statement_indices[order[index]] = index;
-
-            struct StatementLine {
-                std::string inputs;
-                std::string code;
-                std::string outputs;
-            };
-
-            std::vector<StatementLine> lines;
-            for (size_t index = 0; index < order.size(); index++) {
-                const std::shared_ptr<Statement> statement = order[index];
-                DependencyGraph::EdgeSet prerequisites = statements.in_edges(statement);
-                DependencyGraph::EdgeSet dependents = statements.out_edges(statement);
-
-                std::stringstream inputs, outputs;
-                for (const auto [index, edge] : std::ranges::enumerate_view(prerequisites)) {
-                    inputs << statement_indices[edge.entry];
-                    if (static_cast<size_t>(index) != prerequisites.size() - 1)
-                        inputs << ", ";
-                }
-
-                for (const auto [index, edge] : std::ranges::enumerate_view(dependents)) {
-                    outputs << statement_indices[edge.exit];
-                    if (static_cast<size_t>(index) != dependents.size() - 1)
-                        outputs << ", ";
-                }
-
-                lines.emplace_back(inputs.str(), statement->ir_code(), outputs.str());
-            }
-
-            size_t max_inputs_length = 0, max_code_length = 0;
-            for (const StatementLine& line : lines) {
-                max_inputs_length = std::max(line.inputs.size(), max_inputs_length);
-                max_code_length   = std::max(line.code.size(),   max_code_length);
-            }
-
-            code << "{\n";
-            for (const auto [index, line] : std::ranges::enumerate_view(lines)) {
-                code << "    " << index << " : [" << line.inputs << "] ";
-                for (size_t position = line.inputs.size(); position < max_inputs_length; position++)
-                    code << " ";
-                code << ">>> " << line.code;
-                for (size_t position = line.code.size(); position < max_code_length; position++)
-                    code << " ";
-                code << " >>> [" << line.outputs << "];\n";
-            }
-
-            code << "} >>> ";
-        }
-
-        code << "[";
-        for (const auto [index, declaration] : std::ranges::enumerate_view(output_variables)) {
-            code << declaration->name;
-            if (static_cast<size_t>(index) != output_variables.size() - 1)
-                code << ", ";
-        }
-        code << "]";
-        return code.str();
+        dot << "}\n";
+        return node_names.begin()->second;
     }
 
     // -------- Procedure
-    Procedure::Procedure(std::shared_ptr<Statement> function) : location(function->location) {
-        if (function->tag != StatementTag::FUNCTION)
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to initialize a procedure with a statement that's not a function", function->location);
+    Procedure::Procedure(const Statement& function) : location(function.location) {
+        if (function.tag != StatementTag::FUNCTION)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to initialize a procedure with a statement that's not a function", function.location);
 
-        std::shared_ptr<Scope> scope = function->block;
-        declaration = function->output->declaration();
+        std::shared_ptr<Scope> scope = function.block;
+        declaration = function.output->declaration();
         entry_block = blocks.emplace_node(LocalBlockType::ENTRY);
         exit_block  = blocks.emplace_node(LocalBlockType::EXIT);
 
@@ -172,58 +168,48 @@ namespace toycc::ir {
         build_flow_graph(scope);
     }
 
-    std::string Procedure::ir_code() const {
-        std::stringstream code;
-        code << "PROCEDURE " << declaration->name << " {\n";
+    // Write the graph in dot format to `dot`, return the name of any node in the cluster
+    std::string Procedure::dot_subgraph(std::stringstream& dot) const {
+        const std::string procedure_cluster = std::format("cluster_{}", declaration->name);
+        dot << "subgraph " << procedure_cluster << " {\n";
+        dot << "label = \"" << declaration->name << "\";\n";
 
-        std::vector<std::shared_ptr<LocalBlock>> block_order;
-        std::unordered_map<std::shared_ptr<LocalBlock>, size_t> block_indices;
-        auto push_block = [&](std::shared_ptr<LocalBlock> block) {
-            if (!block_indices.contains(block)) {
-                block_indices[block] = block_order.size();
-                block_order.push_back(block);
-            }
-        };
-
-        blocks.breadth_first_search(push_block);
-
-        for (size_t index = 0; index < block_order.size(); index++) {
-            std::shared_ptr<LocalBlock> block = block_order[index];
-            code << "    " << index << " : " << indent(block->ir_code(), false, "    ");
-            FlowGraph::EdgeSet out_edges = blocks.out_edges(block);
-
-            if (out_edges.size() > 0) {
-                code << " -> {";
-                size_t exit_index = 0;
-                for (FlowGraph::Edge edge : out_edges) {
-                    code << block_indices[edge.exit];
-                    if (exit_index != out_edges.size() - 1)
-                        code << ", ";
-                    exit_index += 1;
-                }
-                code << "}";
-            }
-            code << ";\n";
+        size_t block_index = 0;
+        std::unordered_map<std::shared_ptr<LocalBlock>, std::string> cluster_names;
+        std::unordered_map<std::shared_ptr<LocalBlock>, std::string> block_nodes;
+        for (std::shared_ptr<LocalBlock> block : blocks.nodes()) {
+            const std::string cluster_name = std::format("{}_{}", procedure_cluster, block_index++);
+            cluster_names[block] = cluster_name;
+            block_nodes[block] = block->dot_subgraph(dot, cluster_name);
         }
 
-        code << "}";
-        return code.str();
+        for (const FlowGraph::Edge& edge : blocks.edges()) {
+            const std::string entry_cluster = cluster_names.at(edge.entry);
+            const std::string exit_cluster = cluster_names.at(edge.exit);
+            const std::string entry_node = block_nodes.at(edge.entry);
+            const std::string exit_node = block_nodes.at(edge.exit);
+
+            dot << entry_node << " -> " << exit_node << " [ltail=\"" << entry_cluster << "\" lhead=\"" << exit_cluster << "\"];\n";
+        }
+
+        dot << "}\n";
+        return block_nodes.begin()->second;
     }
 
     void Procedure::find_globals(std::shared_ptr<Scope> scope) {
-        for (std::shared_ptr<Statement> statement : scope->statements) {
+        for (const Statement& statement : scope->statements) {
             // Internal consistency check : at this point, array indices must be constants, this saves us a lot of checks during flow analysis
-            for (const Operand& operand : statement->operands())
+            for (const Operand& operand : statement.operands())
                 for (const Operand& index : operand.indices)
                     if (!index.is_constant())
-                        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Upon flow analysis, array indices must be constants", statement->location);
+                        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Upon flow analysis, array indices must be constants", statement.location);
 
             find_globals(statement);
         }
     }
 
-    void Procedure::find_globals(std::shared_ptr<Statement> statement) {
-        for (const Operand& operand : statement->operands())
+    void Procedure::find_globals(const Statement& statement) {
+        for (const Operand& operand : statement.operands())
             if (operand.has_variable_base() && !locals.contains(operand.declaration()))
                 globals.insert(operand.declaration());
     }
@@ -233,14 +219,14 @@ namespace toycc::ir {
         used_decls.insert_range(globals);
 
         // Initialize the labeled blocks to have jump destinations
-        std::unordered_map<std::shared_ptr<Label>, std::shared_ptr<LocalBlock>> labeled_blocks;
-        for (std::shared_ptr<Label> label : scope->labels) {
+        std::unordered_map<std::string, std::shared_ptr<LocalBlock>> labeled_blocks;
+        for (const auto& [name, label] : scope->labels) {
             std::shared_ptr<LocalBlock> block = blocks.emplace_node(LocalBlockType::INNER, label);
-            labeled_blocks[label] = block;
+            labeled_blocks[name] = block;
         }
 
         // Now we can build the flow graph in one pass
-        if (scope->statements.empty() || scope->statements[0]->tag != StatementTag::MARKER)
+        if (scope->statements.empty() || scope->statements[0].tag != StatementTag::MARKER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "A function body should start with a label marker", location);
 
         // Truth table of those :  current              : Within an ongoing block
@@ -248,11 +234,13 @@ namespace toycc::ir {
         //                        !current && !previous : Right after an unconditional jump
         std::shared_ptr<LocalBlock> previous_block = entry_block;
         std::shared_ptr<LocalBlock> current_block = nullptr;
-        for (std::shared_ptr<Statement> statement : scope->statements) {
+        for (const Statement& statement : scope->statements) {
             // Label = jump destination -> start a new block. FIXME : may benefit from a step to clear orphan labels
-            if (statement->tag == StatementTag::MARKER) {
-                std::shared_ptr<Label> label = scope->find_label(statement);
-                current_block = labeled_blocks[label];  // The block already exists and has its type and label already set
+            if (statement.tag == StatementTag::MARKER) {
+                const std::optional<Label> label = scope->find_label(statement);
+                if (!label.has_value())
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Found marker for unknown label {}", statement.output->label()), statement.location);
+                current_block = labeled_blocks[label->name];  // The block already exists and has its type and label already set
 
                 // If the previous block may fall through (didn't end in an inconditional jump / return), connect it to the new block
                 if (previous_block.get() != nullptr)
@@ -275,21 +263,23 @@ namespace toycc::ir {
 
             current_block->add_statement(statement, used_decls);
 
-            if (statement->tag == StatementTag::JUMP || statement->tag == StatementTag::JUMP_IF_TRUE || statement->tag == StatementTag::JUMP_IF_FALSE) {
+            if (statement.tag == StatementTag::JUMP || statement.tag == StatementTag::JUMP_IF_TRUE || statement.tag == StatementTag::JUMP_IF_FALSE) {
                 // Jump -> exit this block, connect it to the target block
-                std::shared_ptr<Label> target = scope->find_label(statement->inputs[0].label());
-                blocks.add_edge(current_block, labeled_blocks[target], FlowType::JUMP);
+                std::optional<Label> target = scope->find_label(statement.inputs[0].label());
+                if (!target.has_value())
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Found jump to unknown label {}", statement.inputs[0].label()), statement.location);
+                blocks.add_edge(current_block, labeled_blocks[target->name], FlowType::JUMP);
 
                 // Set the previous block to connect the next block : conditional jump -> allow connections, unconditional jump -> don't
-                if (statement->tag == StatementTag::JUMP)  previous_block = nullptr;
-                else                                       previous_block = current_block;
+                if (statement.tag == StatementTag::JUMP)  previous_block = nullptr;
+                else                                      previous_block = current_block;
 
                 current_block = nullptr;
-            } else if (statement->tag == StatementTag::CALL) {
+            } else if (statement.tag == StatementTag::CALL) {
                 // Procedure calls may have arbitrary side effects. At least for now, split after calls
                 previous_block = current_block;
                 current_block = nullptr;
-            } else if (statement->tag == StatementTag::RETURN) {
+            } else if (statement.tag == StatementTag::RETURN) {
                 // Return -> connect to the exit block, don't connect to the next block in the flat code
                 blocks.add_edge(current_block, exit_block, FlowType::JUMP);
                 current_block  = nullptr;
@@ -300,7 +290,7 @@ namespace toycc::ir {
         // All possible control flow paths should eventually reach the exit block
         // For those who don't, if the function has no return value we can implicitely insert a return statement. Otherwise the procedure is ill-formed.
         auto insert_implicit_exit = [&](std::shared_ptr<LocalBlock> block) {
-            const CodeLocation location = scope->statements.back()->location;
+            const CodeLocation location = scope->statements.back().location;
 
             std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType>(declaration->type);
             if (function_type->return_type->category == TypeCategory::VOID) {
@@ -328,23 +318,16 @@ namespace toycc::ir {
         // Next, ensure that all flow control paths lead to the exit block (i.e finish with a `return` statement), to ensure that the control flow is valid
         for (std::shared_ptr<LocalBlock> dead_end : blocks.cannot_reach(exit_block))
             insert_implicit_exit(dead_end);
-
-        // Since we deleted markers, clear markers from the labels
-        for (std::shared_ptr<LocalBlock> block : blocks.nodes())
-            if (block->label.get() != nullptr)
-                block->label->marker = nullptr;
     }
 
     // -------- TranslationUnit
-    std::string TranslationUnit::ir_code() const {
-        std::stringstream code;
-        for (const auto& [name, declaration] : globals)
-            code << declaration->ir_code() << ";\n";
-
-        code << "\n";
+    std::string TranslationUnit::dot_graph() const {
+        std::stringstream dot;
+        dot << "digraph {\n";
+        dot << "compound = true;\n";
         for (const auto& [name, procedure] : procedures)
-            code << procedure.ir_code() << "\n\n";
-
-        return code.str();
+            procedure.dot_subgraph(dot);
+        dot << "}\n";
+        return dot.str();
     }
 }

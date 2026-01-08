@@ -32,16 +32,16 @@ namespace toycc::ir {
         std::vector<Operand> operands() const;
         std::string ir_code() const;
 
-        static std::shared_ptr<Statement> make_marker(CodeLocation location);
-        static std::shared_ptr<Statement> make_block(CodeLocation location, std::shared_ptr<Scope> block);
-        static std::shared_ptr<Statement> make_function(CodeLocation location, std::shared_ptr<Declaration> function, std::shared_ptr<Scope> block);
-        static std::shared_ptr<Statement> make_addressof(CodeLocation location, Operand object, Operand output);
-        static std::shared_ptr<Statement> make_unary_operation(CodeLocation location, StatementTag tag, Operand input, Operand output);
-        static std::shared_ptr<Statement> make_binary_operation(CodeLocation location, StatementTag tag, Operand left, Operand right, Operand output);
-        static std::shared_ptr<Statement> make_load(CodeLocation location, Operand source, Operand destination);
-        static std::shared_ptr<Statement> make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, Operand return_value);
-        static std::shared_ptr<Statement> make_jump(CodeLocation location, std::string label);
-        static std::shared_ptr<Statement> make_conditional_jump(CodeLocation location, Operand predicate, std::string label, bool jump_if_is = true);
-        static std::shared_ptr<Statement> make_return(CodeLocation location, std::optional<Operand> return_value = {});
+        static Statement make_marker(CodeLocation location, std::string label);
+        static Statement make_block(CodeLocation location, std::shared_ptr<Scope> block);
+        static Statement make_function(CodeLocation location, std::shared_ptr<Declaration> function, std::shared_ptr<Scope> block);
+        static Statement make_addressof(CodeLocation location, Operand object, Operand output);
+        static Statement make_unary_operation(CodeLocation location, StatementTag tag, Operand input, Operand output);
+        static Statement make_binary_operation(CodeLocation location, StatementTag tag, Operand left, Operand right, Operand output);
+        static Statement make_load(CodeLocation location, Operand source, Operand destination);
+        static Statement make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, Operand return_value);
+        static Statement make_jump(CodeLocation location, std::string label);
+        static Statement make_conditional_jump(CodeLocation location, Operand predicate, std::string label, bool jump_if_is = true);
+        static Statement make_return(CodeLocation location, std::optional<Operand> return_value = {});
     };
 }

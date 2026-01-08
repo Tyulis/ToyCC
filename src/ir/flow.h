@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <vector>
+#include <variant>
 
 #include "ir/label.h"
 #include "ir/statement.h"
@@ -10,7 +11,22 @@
 #include "util/graph.hpp"
 
 namespace toycc::ir {
-    using DependencyGraph = Graph<Statement, std::unordered_set<std::shared_ptr<Declaration>>>;
+    struct DependencyNode {
+        std::variant<Statement, std::shared_ptr<Declaration>> node;
+
+        bool is_statement() const;
+        bool is_value() const;
+        CodeLocation location() const;
+
+        Statement& statement();
+        const Statement& statement() const;
+        std::shared_ptr<Declaration> declaration() const;
+
+        bool operator== (const DependencyNode& rhs) const;
+        bool operator== (std::shared_ptr<Declaration> rhs) const;
+    };
+
+    using DependencyGraph = Graph<DependencyNode>;
 
     enum class LocalBlockType {
         ENTRY, INNER, EXIT,
@@ -19,18 +35,16 @@ namespace toycc::ir {
     struct LocalBlock {
         public:
             LocalBlockType type;
-            std::shared_ptr<Label> label;
-            DependencyGraph statements;
-            std::unordered_set<std::shared_ptr<Declaration>> input_variables;
-            std::unordered_set<std::shared_ptr<Declaration>> output_variables;
+            std::optional<Label> label;
+            DependencyGraph dependencies;
 
-            LocalBlock(LocalBlockType type, std::shared_ptr<Label> label = nullptr);
+            LocalBlock(LocalBlockType type, std::optional<Label> label = {});
 
-            std::string ir_code() const;
-            void add_statement(std::shared_ptr<Statement> statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls);
+            std::string dot_subgraph(std::stringstream& dot, std::string cluster_name) const;
+            void add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls);
 
         private:
-            std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<Statement>> last_modification;
+            std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<DependencyNode>> last_modification;
     };
 
     enum class FlowType {
@@ -51,13 +65,13 @@ namespace toycc::ir {
             std::unordered_set<std::shared_ptr<Declaration>> globals;
 
             Procedure() = default;
-            Procedure(std::shared_ptr<Statement> function);
+            Procedure(const Statement& function);
 
-            std::string ir_code() const;
+            std::string dot_subgraph(std::stringstream& dot) const;
 
         private:
             void find_globals(std::shared_ptr<Scope> scope);
-            void find_globals(std::shared_ptr<Statement> statement);
+            void find_globals(const Statement& statement);
             void build_flow_graph(std::shared_ptr<Scope> scope);
     };
 
@@ -65,6 +79,6 @@ namespace toycc::ir {
         std::unordered_map<std::string, std::shared_ptr<Declaration>> globals;
         std::unordered_map<std::string, Procedure> procedures;
 
-        std::string ir_code() const;
+        std::string dot_graph() const;
     };
 }

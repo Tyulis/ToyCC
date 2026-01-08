@@ -216,8 +216,8 @@ namespace toycc::semantic {
             std::shared_ptr<Scope> current_scope();
             ScopeFrame in_scope(std::shared_ptr<Scope> scope);
 
-            std::shared_ptr<Statement> emit(std::shared_ptr<Statement> statement);
-            std::shared_ptr<Label> emit_label(LabelType type, std::string name, CodeLocation location);
+            Statement& emit(const Statement& statement);
+            Label& emit_label(LabelType type, std::string name, CodeLocation location);
 
             CodeLocation locate(antlr4::ParserRuleContext* context) const;
             CodeLocation locate(antlr4::tree::TerminalNode* context) const;

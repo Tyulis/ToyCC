@@ -182,6 +182,56 @@ namespace toycc {
                 else                     return *it;
             }
 
+            // Return a graph node that is equal to the requested `query`, or nullptr otherwise
+            inline std::shared_ptr<Node> find_node(const Node& query) const {
+                for (std::shared_ptr<Node> node : _nodes)
+                    if (*node == query)
+                        return node;
+                return nullptr;
+            }
+
+            // Return the node if it is a source node of the graph, or nullptr otherwise
+            inline std::shared_ptr<Node> find_source_node(std::shared_ptr<Node> query) const {
+                const ExitEdgeIndex& exit_index = exit_edge_index();
+                std::shared_ptr<Node> node = find_node(query);
+                if (node.get() == nullptr)
+                    return nullptr;
+
+                if (exit_index.find(node) == exit_index.end())  return node;
+                else                                            return nullptr;
+            }
+
+            // Return the node if it is a source node of the graph, or nullptr otherwise
+            inline std::shared_ptr<Node> find_source_node(const Node& query) const {
+                const ExitEdgeIndex& exit_index = exit_edge_index();
+
+                for (std::shared_ptr<Node> node : _nodes)
+                    if (*node == query && exit_index.find(node) == exit_index.end())
+                        return node;
+                return nullptr;
+            }
+
+            // Return the node if it is a sink node of the graph, or nullptr otherwise
+            inline std::shared_ptr<Node> find_sink_node(std::shared_ptr<Node> query) const {
+                const EntryEdgeIndex& entry_index = entry_edge_index();
+                std::shared_ptr<Node> node = find_node(query);
+                if (node.get() == nullptr)
+                    return nullptr;
+
+                if (entry_index.find(node) == entry_index.end())  return node;
+                else                                              return nullptr;
+            }
+
+            // Return the node if it is a sink node of the graph, or nullptr otherwise
+            inline std::shared_ptr<Node> find_sink_node(const Node& query) const {
+                const EntryEdgeIndex& entry_index = entry_edge_index();
+
+                for (std::shared_ptr<Node> node : _nodes)
+                    if (*node == query && entry_index.find(node) == entry_index.end())
+                        return node;
+                return nullptr;
+            }
+
             // Return the edge with the same entry and exit as `edge`, if it exists
             inline std::optional<Edge> find_edge(const Edge& edge) const {
                 const EdgeIndex& index = edge_index();
@@ -202,7 +252,7 @@ namespace toycc {
 
             // Get the set of all edges in the graph
             inline EdgeSet edges() const {
-                return _edges;
+                return {_edges.begin(), _edges.end()};
             }
 
             // Get the set of nodes without outgoing edges
@@ -227,6 +277,18 @@ namespace toycc {
                         result.insert(node);
 
                 return result;
+            }
+
+            // Check whether the node has any outgoing edge
+            inline bool is_source(std::shared_ptr<Node> node) const {
+                const ExitEdgeIndex& exit_index = exit_edge_index();
+                return contains(node) && exit_index.find(node) == exit_index.end();
+            }
+
+            // Check whether the node has any incoming edge
+            inline bool is_sink(std::shared_ptr<Node> node) const {
+                const EntryEdgeIndex& entry_index = entry_edge_index();
+                return contains(node) && entry_index.find(node) == entry_index.end();
             }
 
             // Get all edges that come into the requested node

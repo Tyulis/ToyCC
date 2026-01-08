@@ -21,11 +21,11 @@ namespace toycc::semantic {
         return {scope_stack, scope};
     }
 
-    std::shared_ptr<Statement> SemanticAnalyzer::emit(std::shared_ptr<Statement> statement) {
+    Statement& SemanticAnalyzer::emit(const Statement& statement) {
         return current_scope()->add_statement(statement);
     }
 
-    std::shared_ptr<Label> SemanticAnalyzer::emit_label(LabelType type, std::string name, CodeLocation location) {
+    Label& SemanticAnalyzer::emit_label(LabelType type, std::string name, CodeLocation location) {
         return current_scope()->add_label(type, name, location);
     }
 

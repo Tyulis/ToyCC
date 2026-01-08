@@ -8,9 +8,9 @@ namespace toycc::ir {
         for (std::shared_ptr<Declaration> declaration : global_scope->locals_list())
             unit.globals[declaration->name] = declaration;
 
-        for (std::shared_ptr<Statement> statement : global_scope->statements) {
-            if (statement->tag == StatementTag::FUNCTION) {
-                std::shared_ptr<Declaration> function = statement->output->declaration();
+        for (const Statement& statement : global_scope->statements) {
+            if (statement.tag == StatementTag::FUNCTION) {
+                std::shared_ptr<Declaration> function = statement.output->declaration();
                 unit.procedures.emplace(function->name, statement);
             }
         }

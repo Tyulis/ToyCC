@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
         toycc::ir::TranslationUnit unit = postprocessor();
 
         if (target_step == SequenceStep::POSTPROCESS) {
-            output_stream.get() << unit.ir_code() << std::endl;
+            output_stream.get() << unit.dot_graph() << std::endl;
             return 0;
         }
 
