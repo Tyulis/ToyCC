@@ -41,7 +41,9 @@ namespace toycc::ir {
             LocalBlock(LocalBlockType type, std::optional<Label> label = {});
 
             std::string dot_subgraph(std::stringstream& dot, std::string cluster_name) const;
+
             void add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls);
+            std::unordered_set<std::shared_ptr<Declaration>> locals() const;
 
         private:
             std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<DependencyNode>> last_modification;
@@ -61,23 +63,24 @@ namespace toycc::ir {
             std::shared_ptr<LocalBlock> entry_block;
             std::shared_ptr<LocalBlock> exit_block;
             std::vector<std::shared_ptr<Declaration>> parameters;
-            std::unordered_set<std::shared_ptr<Declaration>> locals;
-            std::unordered_set<std::shared_ptr<Declaration>> globals;
 
             Procedure() = default;
-            Procedure(const Statement& function);
+            Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
 
             std::string dot_subgraph(std::stringstream& dot) const;
 
+            std::unordered_set<std::shared_ptr<Declaration>> locals() const;
+
         private:
-            void find_globals(std::shared_ptr<Scope> scope);
-            void find_globals(const Statement& statement);
-            void build_flow_graph(std::shared_ptr<Scope> scope);
+            void build_flow_graph(std::shared_ptr<Scope> scope, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
     };
 
     struct TranslationUnit {
-        std::unordered_map<std::string, std::shared_ptr<Declaration>> globals;
+        std::unordered_set<std::shared_ptr<Declaration>> globals;
         std::unordered_map<std::string, Procedure> procedures;
+
+        TranslationUnit() = default;
+        TranslationUnit(std::shared_ptr<Scope> global_scope);
 
         std::string dot_graph() const;
     };

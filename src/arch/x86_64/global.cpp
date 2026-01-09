@@ -4,7 +4,7 @@
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_translation_unit(CodeOutput& output, const TranslationUnit& unit) {
-        for (const auto& [name, declaration] : unit.globals) {
+        for (std::shared_ptr<Declaration> declaration : unit.globals) {
             if (declaration->type->category == TypeCategory::FUNCTION)
                 continue;
 
@@ -12,10 +12,10 @@ namespace toycc::arch::x86_64 {
         }
 
         for (const auto& [name, procedure] : unit.procedures)
-            generate_procedure(output, procedure);
+            generate_procedure(output, procedure, unit.globals);
     }
 
-    void CodeGenerator::generate_procedure(CodeOutput& output, const Procedure& procedure) {
+    void CodeGenerator::generate_procedure(CodeOutput& output, const Procedure& procedure, const std::unordered_set<std::shared_ptr<Declaration>>& globals) {
         // Generate the function symbol
         output.directive(std::format(".globl {}", procedure.declaration->name));
         output.directive(std::format(".type {}, @function", procedure.declaration->name));
@@ -26,7 +26,7 @@ namespace toycc::arch::x86_64 {
         std::shared_ptr<LocalBlock> current_block = procedure.entry_block;
         std::unordered_set<std::shared_ptr<LocalBlock>> visited;
         while (current_block != procedure.exit_block) {
-            generate_local_block(frame, current_block);
+            generate_local_block(frame, current_block, globals);
             visited.insert(current_block);
             FlowGraph::EdgeSet transitions = procedure.blocks.out_edges(current_block);
 
@@ -60,7 +60,7 @@ namespace toycc::arch::x86_64 {
     }
 
     // FIXME : Trivial implementation for now
-    void CodeGenerator::generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block) {
+    void CodeGenerator::generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block, const std::unordered_set<std::shared_ptr<Declaration>>& globals) {
         if (block->label.has_value() && block->label->name != frame.procedure.declaration->name)
             frame.output.label(block->label->name);
 
@@ -78,7 +78,7 @@ namespace toycc::arch::x86_64 {
             FlowGraph::NodeSet next_blocks = frame.procedure.blocks.next_nodes(block);
             const bool only_returns = (next_blocks.size() == 1) && (*next_blocks.begin() == frame.procedure.exit_block);
 
-            if (frame.procedure.globals.contains(output->declaration()))
+            if (globals.contains(output->declaration()))
                 move_variable(frame, output->declaration(), LOC::STATIC, ordered_nodes.back()->location());
             else if (only_returns)  // It's only useful to store local variables when that block doesn't unconditionally exit
                 move_variable(frame, output->declaration(), LOC::STACK, ordered_nodes.back()->location());

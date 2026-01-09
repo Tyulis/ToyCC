@@ -148,24 +148,30 @@ namespace toycc::ir {
         return node_names.begin()->second;
     }
 
+    std::unordered_set<std::shared_ptr<Declaration>> LocalBlock::locals() const {
+        std::unordered_set<std::shared_ptr<Declaration>> declarations;
+        for (std::shared_ptr<DependencyNode> node : dependencies.nodes())
+            if (node->is_value() && !(node->declaration()->storage & StorageClass::GLOBAL))
+                declarations.insert(node->declaration());
+        return declarations;
+    }
+
     // -------- Procedure
-    Procedure::Procedure(const Statement& function) : location(function.location) {
+    Procedure::Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals)
+            : declaration(function.output->declaration()), location(function.location)
+    {
         if (function.tag != StatementTag::FUNCTION)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to initialize a procedure with a statement that's not a function", function.location);
 
         std::shared_ptr<Scope> scope = function.block;
-        declaration = function.output->declaration();
         entry_block = blocks.emplace_node(LocalBlockType::ENTRY);
         exit_block  = blocks.emplace_node(LocalBlockType::EXIT);
 
-        for (std::shared_ptr<Declaration> declaration : scope->locals_list()) {
+        for (std::shared_ptr<Declaration> declaration : scope->locals_list())
             if (declaration->storage & StorageClass::PARAMETER)
                 parameters.push_back(declaration);
-            locals.insert(declaration);
-        }
 
-        find_globals(scope);
-        build_flow_graph(scope);
+        build_flow_graph(scope, globals);
     }
 
     // Write the graph in dot format to `dot`, return the name of any node in the cluster
@@ -196,27 +202,10 @@ namespace toycc::ir {
         return block_nodes.begin()->second;
     }
 
-    void Procedure::find_globals(std::shared_ptr<Scope> scope) {
-        for (const Statement& statement : scope->statements) {
-            // Internal consistency check : at this point, array indices must be constants, this saves us a lot of checks during flow analysis
-            for (const Operand& operand : statement.operands())
-                for (const Operand& index : operand.indices)
-                    if (!index.is_constant())
-                        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Upon flow analysis, array indices must be constants", statement.location);
-
-            find_globals(statement);
-        }
-    }
-
-    void Procedure::find_globals(const Statement& statement) {
-        for (const Operand& operand : statement.operands())
-            if (operand.has_variable_base() && !locals.contains(operand.declaration()))
-                globals.insert(operand.declaration());
-    }
-
-    void Procedure::build_flow_graph(std::shared_ptr<Scope> scope) {
-        std::unordered_set<std::shared_ptr<Declaration>> used_decls = locals;
-        used_decls.insert_range(globals);
+    void Procedure::build_flow_graph(std::shared_ptr<Scope> scope, const std::unordered_set<std::shared_ptr<Declaration>>& globals) {
+        std::unordered_set<std::shared_ptr<Declaration>> available_decls(globals);
+        for (std::shared_ptr<Declaration> local : scope->locals_list())
+            available_decls.insert(local);
 
         // Initialize the labeled blocks to have jump destinations
         std::unordered_map<std::string, std::shared_ptr<LocalBlock>> labeled_blocks;
@@ -261,7 +250,7 @@ namespace toycc::ir {
                 blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
             }
 
-            current_block->add_statement(statement, used_decls);
+            current_block->add_statement(statement, available_decls);
 
             if (statement.tag == StatementTag::JUMP || statement.tag == StatementTag::JUMP_IF_TRUE || statement.tag == StatementTag::JUMP_IF_FALSE) {
                 // Jump -> exit this block, connect it to the target block
@@ -294,7 +283,7 @@ namespace toycc::ir {
 
             std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType>(declaration->type);
             if (function_type->return_type->category == TypeCategory::VOID) {
-                block->add_statement(Statement::make_return(location), used_decls);
+                block->add_statement(Statement::make_return(location), available_decls);
                 blocks.add_edge(block, exit_block, FlowType::JUMP);
             } else throw Diagnostic(DiagnosticLevel::ERROR, "Some control flow paths reach the end of the function without returning a value", location);
         };
@@ -320,7 +309,29 @@ namespace toycc::ir {
             insert_implicit_exit(dead_end);
     }
 
+    std::unordered_set<std::shared_ptr<Declaration>> Procedure::locals() const {
+        std::unordered_set<std::shared_ptr<Declaration>> declarations;
+        for (std::shared_ptr<LocalBlock> block : blocks.nodes())
+            declarations.insert_range(block->locals());
+        return declarations;
+    }
+
     // -------- TranslationUnit
+    TranslationUnit::TranslationUnit(std::shared_ptr<Scope> global_scope) {
+        // After descoping, only procedures and static declarations remain
+        for (std::shared_ptr<Declaration> declaration : global_scope->locals_list()) {
+            declaration->storage = StorageClass::GLOBAL;
+            globals.insert(declaration);
+        }
+
+        for (const Statement& statement : global_scope->statements) {
+            if (statement.tag == StatementTag::FUNCTION) {
+                std::shared_ptr<Declaration> function = statement.output->declaration();
+                procedures[function->name] = Procedure {statement, globals};
+            }
+        }
+    }
+
     std::string TranslationUnit::dot_graph() const {
         std::stringstream dot;
         dot << "digraph {\n";

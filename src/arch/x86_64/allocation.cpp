@@ -16,12 +16,9 @@ namespace toycc::arch::x86_64 {
             else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer function parameters are not implemented", parameter->location);
         }
 
-        for (std::shared_ptr<ir::Declaration> declaration : procedure.locals)
+        for (std::shared_ptr<ir::Declaration> declaration : procedure.locals())
             if (!declaration_index.contains(declaration))
                 declaration_index.insert(Allocation {declaration, LOC::NONE});
-
-        for (std::shared_ptr<ir::Declaration> declaration : procedure.globals)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variables are not implemented", declaration->location);
     }
 
     LOC StackFrame::locate(std::shared_ptr<ir::Declaration> declaration) const {

@@ -29,7 +29,7 @@ namespace toycc::ir {
 
         PARAMETER    = 0x040,  // Function parameter
         TEMPORARY    = 0x080,  // Temporary variable internal to the IR
-        ADDRESSED    = 0x100,  // Something requires the memory address of this variable
+        GLOBAL       = 0x100,
     };
 
     enum class FunctionSpecifier {

@@ -29,7 +29,7 @@ namespace toycc::ir {
         if (storage & StorageClass::TYPEDEF)       repr << "typedef ";
         if (storage & StorageClass::PARAMETER)     repr << "parameter ";
         if (storage & StorageClass::TEMPORARY)     repr << "temporary ";
-        if (storage & StorageClass::ADDRESSED)     repr << "addressed ";
+        if (storage & StorageClass::GLOBAL)        repr << "global ";
         return repr.str();
     }
 

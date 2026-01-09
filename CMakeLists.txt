@@ -96,7 +96,6 @@ add_executable(${PROJECT_NAME}
 	src/ir/postprocessor/descope.cpp
 	src/ir/postprocessor/detype.cpp
 	src/ir/postprocessor/exports.cpp
-	src/ir/postprocessor/flow_analysis.cpp
 	src/ir/postprocessor/state.cpp
 
 	src/parser/CParserBase.cpp

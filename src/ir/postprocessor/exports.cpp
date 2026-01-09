@@ -10,7 +10,7 @@ namespace toycc::ir {
         detype(global_scope);
         descope(global_scope);
 
-        TranslationUnit unit = analyse_flow(global_scope);
+        TranslationUnit unit(global_scope);
 
         return unit;
     }
