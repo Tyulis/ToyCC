@@ -54,7 +54,7 @@ namespace toycc::ir {
             void add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> defined_decls);
             void finish();
             void not_live_on_exit(const std::unordered_set<std::shared_ptr<Declaration>>& intermediate);
-            void resolve_intermediates();
+            void split_intermediate_values();
 
             std::unordered_set<std::shared_ptr<Declaration>> locals() const;
             std::unordered_set<std::shared_ptr<Declaration>> live_on_entry() const;
@@ -64,6 +64,8 @@ namespace toycc::ir {
             std::shared_ptr<size_t> unique_id;
             std::shared_ptr<DependencyNode> exit_statement = nullptr;
             std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<DependencyNode>> last_modification;
+
+            std::shared_ptr<Declaration> declare_intermediate(std::shared_ptr<Type> type, CodeLocation location);
     };
 
     enum class FlowType {

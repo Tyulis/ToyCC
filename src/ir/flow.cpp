@@ -152,8 +152,49 @@ namespace toycc::ir {
         }
     }
 
-    void BasicBlock::resolve_intermediates() {
+    static void replace_declaration(Operand& operand, std::shared_ptr<Declaration> initial, std::shared_ptr<Declaration> replacement) {
+        if (operand.has_variable_base() && operand.declaration() == initial)
+            operand.value = replacement;
+    }
 
+    // Make intermediate values of external variables into internal temporaries
+    void BasicBlock::split_intermediate_values() {
+        for (std::shared_ptr<DependencyNode> node : dependencies.nodes()) {
+            if (!node->is_value())
+                continue;
+
+            std::shared_ptr<Declaration> initial_declaration = node->declaration();
+
+            // Live on entry or exit
+            if (dependencies.is_source(node) || dependencies.is_sink(node))
+                continue;
+
+            Flags<DependencyType> dependency_types;
+            for (DependencyGraph::Edge edge : dependencies.out_edges(node))
+                dependency_types |= edge.attr;
+            if (dependency_types & DependencyType::LIVE_ON_EXIT)
+                continue;
+
+            std::shared_ptr<Declaration> intermediate = declare_intermediate(initial_declaration->type, initial_declaration->location);
+            node->node = intermediate;
+
+            for (std::shared_ptr<DependencyNode> statement_node : dependencies.connected_nodes(node)) {
+                if (!statement_node->is_statement())
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Value node connected to another value node", node->location());
+
+                Statement& statement = statement_node->statement();
+                if (statement.output.has_value())
+                    replace_declaration(statement.output.value(), initial_declaration, intermediate);
+                for (Operand& input : statement.inputs)
+                    replace_declaration(input, initial_declaration, intermediate);
+            }
+        }
+    }
+
+    std::shared_ptr<Declaration> BasicBlock::declare_intermediate(std::shared_ptr<Type> type, CodeLocation location) {
+        const std::string name = std::format(".BBI{}", *unique_id);
+        *unique_id += 1;
+        return std::make_shared<Declaration>(name, type, location, StorageClass::AUTO | StorageClass::TEMPORARY | StorageClass::INTERMEDIATE);
     }
 
     static std::string local_block_type_repr(BasicBlockType type) {
@@ -419,9 +460,10 @@ namespace toycc::ir {
         for (std::shared_ptr<BasicBlock> block : blocks.nodes()) {
             std::unordered_set<std::shared_ptr<Declaration>> not_live_on_exit = block->locals();
             for (std::shared_ptr<BasicBlock> reachable : blocks.reachable_from(block))
-                not_live_on_exit = unordered_set_difference(not_live_on_exit, live_on_entry[reachable]);
+                if (reachable.get() != block.get())
+                    not_live_on_exit = unordered_set_difference(not_live_on_exit, live_on_entry[reachable]);
             block->not_live_on_exit(not_live_on_exit);
-            block->resolve_intermediates();
+            block->split_intermediate_values();
         }
     }
 

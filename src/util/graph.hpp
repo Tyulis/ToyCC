@@ -318,7 +318,7 @@ namespace toycc {
                 NodeSet result;
                 const ExitEdgeIndex& exit_index = exit_edge_index();
                 for (auto [edge, end] = exit_index.equal_range(node); edge != end; edge++)
-                    result.insert(edge->exit);
+                    result.insert(edge->entry);
                 return result;
             }
 
@@ -335,6 +335,21 @@ namespace toycc {
                 const EntryEdgeIndex& entry_index = entry_edge_index();
                 for (auto [edge, end] = entry_index.equal_range(node); edge != end; edge++)
                     result.insert(edge->exit);
+                return result;
+            }
+
+            // Get all nodes directly connected to the given `node`
+            inline NodeSet connected_nodes(std::shared_ptr<Node> node) const {
+                NodeSet result;
+
+                const EntryEdgeIndex& entry_index = entry_edge_index();
+                for (auto [edge, end] = entry_index.equal_range(node); edge != end; edge++)
+                    result.insert(edge->exit);
+
+                const ExitEdgeIndex& exit_index = exit_edge_index();
+                for (auto [edge, end] = exit_index.equal_range(node); edge != end; edge++)
+                    result.insert(edge->entry);
+
                 return result;
             }
 
