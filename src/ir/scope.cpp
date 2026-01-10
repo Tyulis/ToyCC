@@ -18,10 +18,9 @@ namespace toycc::ir {
             code << item->ir_code() << ";\n";
 
         for (const Statement& statement : statements) {
-            for (const auto& [name, label] : labels)
-                code << name << ": ";
-
-            if (statement.tag != StatementTag::MARKER)
+            if (statement.tag == StatementTag::MARKER)
+                code << labels.at(statement.output->label()).name << ":\n";
+            else
                 code << statement.ir_code() << ";\n";
         }
         return rtrim(code.str());

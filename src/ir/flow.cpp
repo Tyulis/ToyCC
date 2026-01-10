@@ -47,7 +47,7 @@ namespace toycc::ir {
 
 
     // -------- BasicBlock
-    BasicBlock::BasicBlock(BasicBlockType type, std::optional<Label> label) : type(type), label(label) {}
+    BasicBlock::BasicBlock(BasicBlockType type, std::shared_ptr<size_t> unique_id, std::optional<Label> label) : type(type), label(label), unique_id(unique_id) {}
 
     void BasicBlock::add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> defined_decls) {
         if (statement.block.get() != nullptr)
@@ -152,6 +152,10 @@ namespace toycc::ir {
         }
     }
 
+    void BasicBlock::resolve_intermediates() {
+
+    }
+
     static std::string local_block_type_repr(BasicBlockType type) {
         switch (type) {
             case BasicBlockType::ENTRY:  return "ENTRY";
@@ -226,15 +230,15 @@ namespace toycc::ir {
 
 
     // -------- Procedure
-    Procedure::Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals)
-            : declaration(function.output->declaration()), location(function.location)
+    Procedure::Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals, std::shared_ptr<size_t> unique_id)
+            : declaration(function.output->declaration()), location(function.location), unique_id(unique_id)
     {
         if (function.tag != StatementTag::FUNCTION)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to initialize a procedure with a statement that's not a function", function.location);
 
         std::shared_ptr<Scope> scope = function.block;
-        entry_block = blocks.emplace_node(BasicBlockType::ENTRY);
-        exit_block  = blocks.emplace_node(BasicBlockType::EXIT);
+        entry_block = blocks.emplace_node(BasicBlockType::ENTRY, unique_id);
+        exit_block  = blocks.emplace_node(BasicBlockType::EXIT,  unique_id);
 
         for (std::shared_ptr<Declaration> declaration : scope->locals_list())
             if (declaration->storage & StorageClass::PARAMETER)
@@ -284,7 +288,7 @@ namespace toycc::ir {
         // Initialize the labeled blocks to have jump destinations
         std::unordered_map<std::string, std::shared_ptr<BasicBlock>> labeled_blocks;
         for (const auto& [name, label] : scope->labels) {
-            std::shared_ptr<BasicBlock> block = blocks.emplace_node(BasicBlockType::INNER, label);
+            std::shared_ptr<BasicBlock> block = blocks.emplace_node(BasicBlockType::INNER, unique_id, label);
             labeled_blocks[name] = block;
         }
 
@@ -320,7 +324,7 @@ namespace toycc::ir {
             } else if (current_block.get() == nullptr) {
                 // We just exited a block with a conditional jump, so there's no label but we can still fall through from the previous block
                 // Create a new block and chain it after the previous block
-                current_block = blocks.emplace_node(BasicBlockType::INNER);
+                current_block = blocks.emplace_node(BasicBlockType::INNER, unique_id);
                 blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
             }
 
@@ -417,11 +421,12 @@ namespace toycc::ir {
             for (std::shared_ptr<BasicBlock> reachable : blocks.reachable_from(block))
                 not_live_on_exit = unordered_set_difference(not_live_on_exit, live_on_entry[reachable]);
             block->not_live_on_exit(not_live_on_exit);
+            block->resolve_intermediates();
         }
     }
 
     // -------- TranslationUnit
-    TranslationUnit::TranslationUnit(std::shared_ptr<Scope> global_scope) {
+    TranslationUnit::TranslationUnit(std::shared_ptr<Scope> global_scope) : unique_id(std::make_shared<size_t>(0)) {
         // After descoping, only procedures and static declarations remain
         for (std::shared_ptr<Declaration> declaration : global_scope->locals_list()) {
             declaration->storage = StorageClass::GLOBAL;
@@ -431,7 +436,7 @@ namespace toycc::ir {
         for (const Statement& statement : global_scope->statements) {
             if (statement.tag == StatementTag::FUNCTION) {
                 std::shared_ptr<Declaration> function = statement.output->declaration();
-                procedures[function->name] = Procedure {statement, globals};
+                procedures[function->name] = Procedure {statement, globals, unique_id};
             }
         }
     }

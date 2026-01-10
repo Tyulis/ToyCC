@@ -48,7 +48,7 @@ namespace toycc::semantic {
         if (op == StatementTag::COPY)
             emit_copy(destination->operand(), source->operand(), location, false);
         else
-            emit_binary_operation(op, destination, source, location);
+            emit_binary_operation(op, destination, source, destination, location);
 
         return destination;
     }
@@ -338,6 +338,16 @@ namespace toycc::semantic {
         } else {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic operations are not implemented", location);
         }
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location) {
+        std::shared_ptr<SemanticAnalyzer::ExpressionResult> result = emit_binary_operation(op, left, right, location);
+
+        if (!destination->is_lvalue())
+            throw Diagnostic(DiagnosticLevel::ERROR, "Operation destination must be an lvalue");
+
+        emit_copy(destination->operand(), result->operand(), location, false);
+        return destination;
     }
 
     bool SemanticAnalyzer::is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right) {

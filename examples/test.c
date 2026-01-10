@@ -1,15 +1,15 @@
-
-int get_result(int argc) {
-    {
-        int a = 1;
-        int b = 2;
-        a += b;
-    }
-    const int x = 4;
-
-    return 'a' + argc * x;
-}
-
 int main(int argc, char** argv) {
-    return get_result(argc);
+    int a = 1 + 2 * (3 - 1);
+    if (argc)
+        return a;
+
+    int b = a + 4 + argc;
+    int c = a - b - argc;
+    a = b + c;
+    a += 2 - c*b;
+    b = a - c;
+    if (c)
+        return a;
+    else
+        return b;
 }

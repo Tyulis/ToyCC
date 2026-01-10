@@ -47,19 +47,21 @@ namespace toycc::ir {
             std::optional<Label> label;
             DependencyGraph dependencies;
 
-            BasicBlock(BasicBlockType type, std::optional<Label> label = {});
+            BasicBlock(BasicBlockType type, std::shared_ptr<size_t> unique_id, std::optional<Label> label = {});
 
             std::string dot_subgraph(std::stringstream& dot, std::string cluster_name) const;
 
             void add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> defined_decls);
             void finish();
             void not_live_on_exit(const std::unordered_set<std::shared_ptr<Declaration>>& intermediate);
+            void resolve_intermediates();
 
             std::unordered_set<std::shared_ptr<Declaration>> locals() const;
             std::unordered_set<std::shared_ptr<Declaration>> live_on_entry() const;
             std::unordered_set<std::shared_ptr<Declaration>> live_on_exit() const;
 
         private:
+            std::shared_ptr<size_t> unique_id;
             std::shared_ptr<DependencyNode> exit_statement = nullptr;
             std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<DependencyNode>> last_modification;
     };
@@ -80,13 +82,15 @@ namespace toycc::ir {
             std::vector<std::shared_ptr<Declaration>> parameters;
 
             Procedure() = default;
-            Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
+            Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals, std::shared_ptr<size_t> unique_id);
 
             std::string dot_subgraph(std::stringstream& dot) const;
 
             std::unordered_set<std::shared_ptr<Declaration>> locals() const;
 
         private:
+            std::shared_ptr<size_t> unique_id;
+
             void build_flow_graph(std::shared_ptr<Scope> scope, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
             void resolve_intermediates();
     };
@@ -94,6 +98,7 @@ namespace toycc::ir {
     struct TranslationUnit {
         std::unordered_set<std::shared_ptr<Declaration>> globals;
         std::unordered_map<std::string, Procedure> procedures;
+        std::shared_ptr<size_t> unique_id = 0;
 
         TranslationUnit() = default;
         TranslationUnit(std::shared_ptr<Scope> global_scope);

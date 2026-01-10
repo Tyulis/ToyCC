@@ -154,6 +154,7 @@ namespace toycc::semantic {
             StatementTag decode_additive_operator(CParser::AdditiveOperatorContext* context);
 
             std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
+            std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
 
