@@ -4,46 +4,12 @@ import itertools
 from opcodes.x86_64 import *
 from execmodel.constraints import *
 
-class OperandSpec:
-    def __init__(self, description: dict[str, str], operand_types: dict[str, Constraint]):
-        if "input" in description:
-            self.input_order = []
-            self.inputs = {}
-            for tag, type_name in description["input"].items():
-                self.input_order.append(tag)
-                if type_name is not None:
-                    self.inputs[tag] = operand_types[type_name]
-        else:
-            self.input_order = None
-            self.inputs = None
 
-        if "output" in description:
-            self.output_order = []
-            self.outputs = {}
-            for tag, type_name in description["output"].items():
-                self.output_order.append(tag)
-                if type_name is not None:
-                    self.outputs[tag] = operand_types[type_name]
-        else:
-            self.output_order = None
-            self.outputs = None
-
-class TargetSpec:
-    def __init__(self, description: dict[str, object]):
-        self.instruction = description["instruction"]
-
-        self.inputs = None
-        self.outputs = None
-
-        if "input" in description:
-            self.inputs = description["input"]
-        if "output" in description:
-            self.outputs = description["output"]
-
-class TransferSpec (OperandSpec):
-    def __init__(self, description: dict[str, object], operand_types: dict[str, Constraint]):
-        super().__init__(description, operand_types)
-        self.target = TargetSpec(description["target"])
+class TransferSpec:
+    def __init__(self, form: InstructionForm, source: Constraint, destination: Constraint):
+        self.form = form
+        self.source = source
+        self.destination = destination
 
 class IRSpec:
     def __init__(self, tag: str, description: dict[str, object]):
@@ -90,7 +56,7 @@ class TranslationModel:
         self.no_output = load_constraint_expression(description["no_output"], self.operand_types)
 
         self.ir = {tag: IRSpec(tag, spec) for tag, spec in description["ir"].items()}
-        self.transfers = [TransferSpec(transfer, self.operand_types) for transfer in description["transfers"]]
+        self.transfers = self.parse_transfers(description["transfers"], instruction_set)
         self.translations = self.parse_translations(description["translations"], instruction_set)
 
     def get_type(self, name: str) -> Constraint:
@@ -98,6 +64,49 @@ class TranslationModel:
             return self.operand_types[name]
         else:
             raise TranslationModelError(f"Operand type `{name}` is undefined")
+
+    def parse_transfers(self, description: list[str], instruction_set: dict[str, Instruction]) -> list[TransferSpec]:
+        transfers = []
+        for instruction in description:
+            transfers.extend(self.parse_transfer_set(instruction_set[instruction]))
+        return transfers
+
+    def parse_transfer_set(self, instruction: Instruction) -> list[TransferSpec]:
+        transfers = []
+        for form in instruction.forms:
+            spec = self.make_transfer_spec(form)
+            if spec is not None:
+                transfers.append(spec)
+        return transfers
+
+    def make_transfer_spec(self, form: InstructionForm) -> TransferSpec|None:
+        source = None
+        destination = None
+        for operand in form.operands:
+            if operand.type not in self.operand_types:
+                raise TranslationModelError(f"Operand {operand} of transfer instruction {form} has unknown type {operand.type}")
+            constraint = self.operand_types[operand.type]
+
+            if operand.is_input and not operand.is_output:
+                if source is None:
+                    source = constraint
+                else:
+                    raise TranslationModelError(f"Transfer instruction form {form} has multiple inputs")
+            elif operand.is_output and not operand.is_input:
+                if destination is None:
+                    destination = constraint
+                else:
+                    raise TranslationModelError(f"Transfer instruction form {form} has multiple outputs")
+            else:
+                raise TranslationModelError(f"Operand {operand} of transfer instruction {form} is not only an input or an output")
+
+        if source is None or destination is None:
+            raise TranslationModelError(f"Transfer instruction form {form} doesn't have exactly one input and one output")
+
+        if is_false(source) or is_false(destination):
+            return None
+        else:
+            return TransferSpec(form, source, destination)
 
     def parse_translations(self, description: list[dict], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:
         translations = []

@@ -97,12 +97,7 @@
     "no_reuse":  {"anyof": "m"},
     "no_output": {"category": ["label", "constant"]},
 
-    "transfers": [
-        {"input": {"src": "r"},        "output": {"dest": "r"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}},
-        {"input": {"src": "constint"}, "output": {"dest": "r"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}},
-        {"input": {"src": "r"},        "output": {"dest": "m"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}},
-        {"input": {"src": "m"},        "output": {"dest": "r"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}}
-    ],
+    "transfers": ["MOV"],
 
     "ir": {
         "MARKER":         {"input": [], "output": true,                 "translate": false},
