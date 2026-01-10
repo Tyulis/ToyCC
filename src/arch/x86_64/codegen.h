@@ -18,7 +18,7 @@ namespace toycc::arch::x86_64 {
             // -------- Global constructs -> arch/x86_64/global.cpp
             void generate_translation_unit(CodeOutput& output, const TranslationUnit& unit);
             void generate_procedure(CodeOutput& output, const Procedure& procedure, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
-            void generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
+            void generate_basic_block(StackFrame& frame, std::shared_ptr<BasicBlock> block, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
 
             // -------- Statements -> arch/x86_64/statements.cpp
             void generate_statement(StackFrame& frame, Statement& statement);

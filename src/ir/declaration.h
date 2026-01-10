@@ -29,8 +29,11 @@ namespace toycc::ir {
 
         PARAMETER    = 0x040,  // Function parameter
         TEMPORARY    = 0x080,  // Temporary variable internal to the IR
-        GLOBAL       = 0x100,
+        INTERMEDIATE = 0x100,  // Temporary variable internal to a basic block
+        GLOBAL       = 0x200,  // Global variable
     };
+
+    constexpr Flags<StorageClass> INTERNAL_STORAGE = StorageClass::TEMPORARY | StorageClass::INTERMEDIATE;
 
     enum class FunctionSpecifier {
         INLINE      = 0x01,

@@ -7,7 +7,7 @@
 namespace toycc::ir {
     void PostProcessor::descope(std::shared_ptr<Scope> scope) {
         for (ssize_t position = 0; position < static_cast<ssize_t>(scope->statements.size()); position++) {
-            const Statement& statement = scope->statements[position];
+            Statement statement = scope->statements[position];
 
             // Keep function scopes
             if (statement.tag == StatementTag::FUNCTION) {

@@ -5,6 +5,7 @@
 #include "ir/flow.h"
 #include "ir/declaration.h"
 #include "ir/type_expressions.h"
+#include "util/graph.hpp"
 
 namespace toycc::ir {
     // -------- DependencyNode
@@ -45,46 +46,52 @@ namespace toycc::ir {
     }
 
 
-    // -------- LocalBlock
-    LocalBlock::LocalBlock(LocalBlockType type, std::optional<Label> label) : type(type), label(label) {}
+    // -------- BasicBlock
+    BasicBlock::BasicBlock(BasicBlockType type, std::optional<Label> label) : type(type), label(label) {}
 
-    void LocalBlock::add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> available_decls) {
+    void BasicBlock::add_statement(const Statement& statement, std::unordered_set<std::shared_ptr<Declaration>> defined_decls) {
         if (statement.block.get() != nullptr)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Statements in local blocks can't have subblocks", statement.location);
 
         std::shared_ptr<DependencyNode> statement_node = dependencies.emplace_node(statement);
+        exit_statement = statement_node;
 
         // Find all inputs and outputs of that statement
-        std::unordered_set<std::shared_ptr<Declaration>> inputs;
-        std::unordered_set<std::shared_ptr<Declaration>> outputs;
+        std::unordered_map<std::shared_ptr<Declaration>, Flags<DependencyType>> inputs;
+        std::unordered_map<std::shared_ptr<Declaration>, Flags<DependencyType>> outputs;
 
         // FIXME : Function calls may have arbitrary side effects, for now make them full barriers
         if (statement.tag == StatementTag::CALL) {
-            inputs = available_decls;
-            outputs = available_decls;
+            for (std::shared_ptr<Declaration> decl : defined_decls) {
+                inputs [decl] |= DependencyType::CALL;
+                outputs[decl] |= DependencyType::CALL;
+            }
         }
 
         // FIXME : If there's a dereference, don't make any assumption on where that value comes from and make this depend on everything else
         if (statement.output.has_value()) {
             if (statement.output->is_dereference()) {
-                outputs.insert_range(available_decls);
+                for (std::shared_ptr<Declaration> decl : defined_decls)
+                    outputs[decl] |= DependencyType::DEREFERENCE;
 
                 if (statement.output->has_variable_base())
-                    inputs.insert(statement.output->declaration());
+                    inputs[statement.output->declaration()] |= DependencyType::INPUT;
             } else if (statement.output->is_variable()) {
-                outputs.insert(statement.output->declaration());
+                outputs[statement.output->declaration()] |= DependencyType::OUTPUT;
             }
         }
 
         for (const Operand& input : statement.inputs) {
             if (input.is_dereference())
-                inputs.insert_range(available_decls);
+                for (std::shared_ptr<Declaration> decl : defined_decls)
+                    inputs[decl] |= DependencyType::DEREFERENCE;
+
             if (input.has_variable_base())
-                inputs.insert(input.declaration());
+                inputs[input.declaration()] |= DependencyType::INPUT;
         }
 
         // Add edges from input variables, adding unknown ones as source nodes
-        for (std::shared_ptr<Declaration> input : inputs) {
+        for (const auto& [input, dependency_type] : inputs) {
             auto found = last_modification.find(input);
             std::shared_ptr<DependencyNode> input_node = nullptr;
             if (found == last_modification.end()) {
@@ -94,30 +101,70 @@ namespace toycc::ir {
                 input_node = found->second;
             }
 
-            dependencies.add_edge(input_node, statement_node);
+            dependencies.add_edge(input_node, statement_node, dependency_type);
         }
 
         // Add edges to output variables
-        for (std::shared_ptr<Declaration> output : outputs) {
+        for (const auto& [output, dependency_type] : outputs) {
             std::shared_ptr<DependencyNode> output_node = dependencies.emplace_node(output);
-            dependencies.add_edge(statement_node, output_node);
+            dependencies.add_edge(statement_node, output_node, dependency_type);
             last_modification[output] = output_node;
         }
     }
 
-    static std::string local_block_type_repr(LocalBlockType type) {
+    void BasicBlock::finish() {
+        // Link all variables live on exit to the exit statement
+        if (exit_statement.get() != nullptr) {
+            for (const auto& [declaration, node] : last_modification) {
+                DependencyGraph::Edge exit_edge = dependencies.find_edge(node, exit_statement).value_or(DependencyGraph::Edge {node, exit_statement, {}});
+                exit_edge.attr |= DependencyType::LIVE_ON_EXIT;
+
+                if (!dependencies.contains(exit_statement, node))
+                    dependencies.add_edge(exit_edge);
+            }
+
+            for (DependencyGraph::Edge edge : dependencies.in_edges(exit_statement)) {
+                edge.attr |= DependencyType::LIVE_ON_EXIT;
+                dependencies.add_edge(edge);
+            }
+        }
+
+        last_modification.clear();
+    }
+
+    void BasicBlock::not_live_on_exit(const std::unordered_set<std::shared_ptr<Declaration>>& not_live) {
+        for (std::shared_ptr<Declaration> variable : not_live) {
+            for (std::shared_ptr<DependencyNode> node : dependencies.find_nodes(variable)) {
+                // Eliminate edges to the exit node that are just there to make the variable live on exit
+                for (DependencyGraph::Edge edge : dependencies.out_edges(node)) {
+                    if (!(edge.attr & DependencyType::LIVE_ON_EXIT))
+                        continue;
+
+                    edge.attr.clear(DependencyType::LIVE_ON_EXIT);
+                    if (!edge.attr)  dependencies.pop_edge(edge);
+                    else             dependencies.add_edge(edge);  // Replace the flags
+                }
+
+                // If that variable was only linked to be live on exit, remove the node
+                if (dependencies.is_sink(node))
+                    dependencies.pop_node(node);
+            }
+        }
+    }
+
+    static std::string local_block_type_repr(BasicBlockType type) {
         switch (type) {
-            case LocalBlockType::ENTRY:  return "ENTRY";
-            case LocalBlockType::INNER:  return "INNER";
-            case LocalBlockType::EXIT:   return "EXIT";
+            case BasicBlockType::ENTRY:  return "ENTRY";
+            case BasicBlockType::INNER:  return "INNER";
+            case BasicBlockType::EXIT:   return "EXIT";
             default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown local block type");
         }
     }
 
     // Write the graph in dot format to `dot`, return the name of any node in the cluster
-    std::string LocalBlock::dot_subgraph(std::stringstream& dot, std::string cluster_name) const {
+    std::string BasicBlock::dot_subgraph(std::stringstream& dot, std::string cluster_name) const {
         dot << "subgraph " << cluster_name << " {\n";
-        if (type != LocalBlockType::INNER) {
+        if (type != BasicBlockType::INNER || dependencies.empty()) {
             const std::string type_repr = local_block_type_repr(type);
             dot << "label = \"" << type_repr << "\";\n";
 
@@ -148,13 +195,35 @@ namespace toycc::ir {
         return node_names.begin()->second;
     }
 
-    std::unordered_set<std::shared_ptr<Declaration>> LocalBlock::locals() const {
+    std::unordered_set<std::shared_ptr<Declaration>> BasicBlock::locals() const {
         std::unordered_set<std::shared_ptr<Declaration>> declarations;
         for (std::shared_ptr<DependencyNode> node : dependencies.nodes())
             if (node->is_value() && !(node->declaration()->storage & StorageClass::GLOBAL))
                 declarations.insert(node->declaration());
         return declarations;
     }
+
+    std::unordered_set<std::shared_ptr<Declaration>> BasicBlock::live_on_entry() const {
+        std::unordered_set<std::shared_ptr<Declaration>> live;
+        for (std::shared_ptr<DependencyNode> source : dependencies.sources())
+            if (source->is_value())
+                live.insert(source->declaration());
+        return live;
+    }
+
+    std::unordered_set<std::shared_ptr<Declaration>> BasicBlock::live_on_exit() const {
+        std::unordered_set<std::shared_ptr<Declaration>> live;
+        for (std::shared_ptr<DependencyNode> sink : dependencies.sinks())
+            if (sink->is_value())
+                live.insert(sink->declaration());
+
+        for (const DependencyGraph::Edge& edge : dependencies.in_edges(exit_statement))
+            if (edge.attr & DependencyType::LIVE_ON_EXIT)
+                live.insert(edge.entry->declaration());
+
+        return live;
+    }
+
 
     // -------- Procedure
     Procedure::Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals)
@@ -164,14 +233,15 @@ namespace toycc::ir {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to initialize a procedure with a statement that's not a function", function.location);
 
         std::shared_ptr<Scope> scope = function.block;
-        entry_block = blocks.emplace_node(LocalBlockType::ENTRY);
-        exit_block  = blocks.emplace_node(LocalBlockType::EXIT);
+        entry_block = blocks.emplace_node(BasicBlockType::ENTRY);
+        exit_block  = blocks.emplace_node(BasicBlockType::EXIT);
 
         for (std::shared_ptr<Declaration> declaration : scope->locals_list())
             if (declaration->storage & StorageClass::PARAMETER)
                 parameters.push_back(declaration);
 
         build_flow_graph(scope, globals);
+        resolve_intermediates();
     }
 
     // Write the graph in dot format to `dot`, return the name of any node in the cluster
@@ -181,9 +251,9 @@ namespace toycc::ir {
         dot << "label = \"" << declaration->name << "\";\n";
 
         size_t block_index = 0;
-        std::unordered_map<std::shared_ptr<LocalBlock>, std::string> cluster_names;
-        std::unordered_map<std::shared_ptr<LocalBlock>, std::string> block_nodes;
-        for (std::shared_ptr<LocalBlock> block : blocks.nodes()) {
+        std::unordered_map<std::shared_ptr<BasicBlock>, std::string> cluster_names;
+        std::unordered_map<std::shared_ptr<BasicBlock>, std::string> block_nodes;
+        for (std::shared_ptr<BasicBlock> block : blocks.nodes()) {
             const std::string cluster_name = std::format("{}_{}", procedure_cluster, block_index++);
             cluster_names[block] = cluster_name;
             block_nodes[block] = block->dot_subgraph(dot, cluster_name);
@@ -203,14 +273,18 @@ namespace toycc::ir {
     }
 
     void Procedure::build_flow_graph(std::shared_ptr<Scope> scope, const std::unordered_set<std::shared_ptr<Declaration>>& globals) {
-        std::unordered_set<std::shared_ptr<Declaration>> available_decls(globals);
+        std::unordered_set<std::shared_ptr<Declaration>> defined_decls;
+        for (std::shared_ptr<Declaration> global : globals)
+            if (global->type->category != TypeCategory::FUNCTION)
+                defined_decls.insert(global);
         for (std::shared_ptr<Declaration> local : scope->locals_list())
-            available_decls.insert(local);
+            if (!(local->storage & INTERNAL_STORAGE) && local->type->category != TypeCategory::FUNCTION)
+                defined_decls.insert(local);
 
         // Initialize the labeled blocks to have jump destinations
-        std::unordered_map<std::string, std::shared_ptr<LocalBlock>> labeled_blocks;
+        std::unordered_map<std::string, std::shared_ptr<BasicBlock>> labeled_blocks;
         for (const auto& [name, label] : scope->labels) {
-            std::shared_ptr<LocalBlock> block = blocks.emplace_node(LocalBlockType::INNER, label);
+            std::shared_ptr<BasicBlock> block = blocks.emplace_node(BasicBlockType::INNER, label);
             labeled_blocks[name] = block;
         }
 
@@ -221,8 +295,8 @@ namespace toycc::ir {
         // Truth table of those :  current              : Within an ongoing block
         //                        !current &&  previous : Right after a conditional jump
         //                        !current && !previous : Right after an unconditional jump
-        std::shared_ptr<LocalBlock> previous_block = entry_block;
-        std::shared_ptr<LocalBlock> current_block = nullptr;
+        std::shared_ptr<BasicBlock> previous_block = entry_block;
+        std::shared_ptr<BasicBlock> current_block = nullptr;
         for (const Statement& statement : scope->statements) {
             // Label = jump destination -> start a new block. FIXME : may benefit from a step to clear orphan labels
             if (statement.tag == StatementTag::MARKER) {
@@ -246,11 +320,11 @@ namespace toycc::ir {
             } else if (current_block.get() == nullptr) {
                 // We just exited a block with a conditional jump, so there's no label but we can still fall through from the previous block
                 // Create a new block and chain it after the previous block
-                current_block = blocks.emplace_node(LocalBlockType::INNER);
+                current_block = blocks.emplace_node(BasicBlockType::INNER);
                 blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
             }
 
-            current_block->add_statement(statement, available_decls);
+            current_block->add_statement(statement, defined_decls);
 
             if (statement.tag == StatementTag::JUMP || statement.tag == StatementTag::JUMP_IF_TRUE || statement.tag == StatementTag::JUMP_IF_FALSE) {
                 // Jump -> exit this block, connect it to the target block
@@ -278,12 +352,12 @@ namespace toycc::ir {
 
         // All possible control flow paths should eventually reach the exit block
         // For those who don't, if the function has no return value we can implicitely insert a return statement. Otherwise the procedure is ill-formed.
-        auto insert_implicit_exit = [&](std::shared_ptr<LocalBlock> block) {
+        auto insert_implicit_exit = [&](std::shared_ptr<BasicBlock> block) {
             const CodeLocation location = scope->statements.back().location;
 
             std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType>(declaration->type);
             if (function_type->return_type->category == TypeCategory::VOID) {
-                block->add_statement(Statement::make_return(location), available_decls);
+                block->add_statement(Statement::make_return(location), defined_decls);
                 blocks.add_edge(block, exit_block, FlowType::JUMP);
             } else throw Diagnostic(DiagnosticLevel::ERROR, "Some control flow paths reach the end of the function without returning a value", location);
         };
@@ -292,28 +366,58 @@ namespace toycc::ir {
         // First, ensure that all flow control paths are reachable from the entry block, prune those that don't
         // We need to do it first to avoid unreachable blocks from counting as non-returning paths in the next step
         // Unreachable blocks arise naturally from some constructs like if-statements at the end of a function, and they disturb the next steps
-        for (std::shared_ptr<LocalBlock> unreachable : blocks.unreachable_from(entry_block))
+        for (std::shared_ptr<BasicBlock> unreachable : blocks.unreachable_from(entry_block))
             blocks.pop_node(unreachable);
 
         // The last block didn't finish with an unconditional jump / exit -> there should be a return here
         // Treat the last block specially because if it ends with a conditional jump,
         // at this point it is connected to its target label but the fall-through option isn't connected to anything
         if (current_block.get() != nullptr || previous_block.get() != nullptr) {
-            std::shared_ptr<LocalBlock> last_block = (current_block.get() == nullptr ? previous_block : current_block);
+            std::shared_ptr<BasicBlock> last_block = (current_block.get() == nullptr ? previous_block : current_block);
             if (blocks.contains(last_block))  // Only if it wasn't pruned by the previous step
                 insert_implicit_exit(last_block);
         }
 
         // Next, ensure that all flow control paths lead to the exit block (i.e finish with a `return` statement), to ensure that the control flow is valid
-        for (std::shared_ptr<LocalBlock> dead_end : blocks.cannot_reach(exit_block))
+        for (std::shared_ptr<BasicBlock> dead_end : blocks.cannot_reach(exit_block))
             insert_implicit_exit(dead_end);
+
+        // Finish building all blocks
+        for (std::shared_ptr<BasicBlock> block : blocks.nodes())
+            block->finish();
     }
 
     std::unordered_set<std::shared_ptr<Declaration>> Procedure::locals() const {
         std::unordered_set<std::shared_ptr<Declaration>> declarations;
-        for (std::shared_ptr<LocalBlock> block : blocks.nodes())
+        for (std::shared_ptr<BasicBlock> block : blocks.nodes())
             declarations.insert_range(block->locals());
         return declarations;
+    }
+
+    // Find which variables are procedure-level or basic block-level temporaries, and really live on exit of blocks
+    void Procedure::resolve_intermediates() {
+        std::unordered_map<std::shared_ptr<BasicBlock>, std::unordered_set<std::shared_ptr<Declaration>>> live_on_entry;
+        std::unordered_map<std::shared_ptr<Declaration>, size_t> nof_uses;
+
+        for (std::shared_ptr<BasicBlock> block : blocks.nodes()) {
+            if (block->type != BasicBlockType::INNER)
+                continue;
+            live_on_entry[block] = block->live_on_entry();
+
+            for (std::shared_ptr<Declaration> variable : block->locals())
+                nof_uses[variable] += 1;
+        }
+
+        for (const auto& [variable, uses] : nof_uses)
+            if (uses == 1)
+                variable->storage |= StorageClass::INTERMEDIATE;
+
+        for (std::shared_ptr<BasicBlock> block : blocks.nodes()) {
+            std::unordered_set<std::shared_ptr<Declaration>> not_live_on_exit = block->locals();
+            for (std::shared_ptr<BasicBlock> reachable : blocks.reachable_from(block))
+                not_live_on_exit = unordered_set_difference(not_live_on_exit, live_on_entry[reachable]);
+            block->not_live_on_exit(not_live_on_exit);
+        }
     }
 
     // -------- TranslationUnit

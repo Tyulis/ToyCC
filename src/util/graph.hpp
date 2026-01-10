@@ -144,13 +144,17 @@ namespace toycc {
             }
 
             // Remove the edge if it exists
-            inline Edge pop_edge(std::shared_ptr<Node> entry, std::shared_ptr<Node> exit) {
-                Edge edge(entry, exit);
+            inline Edge pop_edge(const Edge& edge) {
                 EdgeIndex& index = edge_index();
                 auto it = index.find(edge);
                 if (it != index.end())
                     index.erase(it);
                 return edge;
+            }
+
+            // Remove the edge if it exists
+            inline Edge pop_edge(std::shared_ptr<Node> entry, std::shared_ptr<Node> exit) {
+                return pop_edge(Edge {entry, exit, {}});
             }
 
 
@@ -167,7 +171,7 @@ namespace toycc {
 
             // Check whether the graph contains an edge from the given `entry` node to the `exit` node
             inline bool contains(std::shared_ptr<Node> entry, std::shared_ptr<Node> exit) const {
-                return edge_index().contains(Edge {entry, exit});
+                return edge_index().contains(Edge {entry, exit, {}});
             }
 
             // Check whether the graph contains an edge corresponding to the given edge (regardless of its custom attribute)
@@ -182,12 +186,23 @@ namespace toycc {
                 else                     return *it;
             }
 
-            // Return a graph node that is equal to the requested `query`, or nullptr otherwise
-            inline std::shared_ptr<Node> find_node(const Node& query) const {
+            // Return any graph node that is equal to the requested `query`, or nullptr otherwise
+            template <typename QueryType> requires requires(const Node& node, const QueryType& query) { {node == query} -> std::convertible_to<bool>; }
+            inline std::shared_ptr<Node> find_node(const QueryType& query) const {
                 for (std::shared_ptr<Node> node : _nodes)
                     if (*node == query)
                         return node;
                 return nullptr;
+            }
+
+            // Return all graph nodes that evaluate equal to the requested `query`
+            template <typename QueryType> requires requires(const Node& node, const QueryType& query) { {node == query} -> std::convertible_to<bool>; }
+            inline NodeSet find_nodes(const QueryType& query) const {
+                NodeSet result;
+                for (std::shared_ptr<Node> node : _nodes)
+                    if (*node == query)
+                        result.insert(node);
+                return result;
             }
 
             // Return the node if it is a source node of the graph, or nullptr otherwise

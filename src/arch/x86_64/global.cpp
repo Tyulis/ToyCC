@@ -23,16 +23,16 @@ namespace toycc::arch::x86_64 {
 
         // Then the actual code
         StackFrame frame(procedure);
-        std::shared_ptr<LocalBlock> current_block = procedure.entry_block;
-        std::unordered_set<std::shared_ptr<LocalBlock>> visited;
+        std::shared_ptr<BasicBlock> current_block = procedure.entry_block;
+        std::unordered_set<std::shared_ptr<BasicBlock>> visited;
         while (current_block != procedure.exit_block) {
-            generate_local_block(frame, current_block, globals);
+            generate_basic_block(frame, current_block, globals);
             visited.insert(current_block);
             FlowGraph::EdgeSet transitions = procedure.blocks.out_edges(current_block);
 
             // Always prioritize fallthrough
-            std::shared_ptr<LocalBlock> fallthrough = nullptr;
-            std::shared_ptr<LocalBlock> non_fallthrough = nullptr;
+            std::shared_ptr<BasicBlock> fallthrough = nullptr;
+            std::shared_ptr<BasicBlock> non_fallthrough = nullptr;
             bool goes_to_exit = false;
 
             for (const FlowGraph::Edge& transition : transitions) {
@@ -60,7 +60,7 @@ namespace toycc::arch::x86_64 {
     }
 
     // FIXME : Trivial implementation for now
-    void CodeGenerator::generate_local_block(StackFrame& frame, std::shared_ptr<LocalBlock> block, const std::unordered_set<std::shared_ptr<Declaration>>& globals) {
+    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<BasicBlock> block, const std::unordered_set<std::shared_ptr<Declaration>>& globals) {
         if (block->label.has_value() && block->label->name != frame.procedure.declaration->name)
             frame.output.label(block->label->name);
 
