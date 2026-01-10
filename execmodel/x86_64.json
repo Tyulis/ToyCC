@@ -10,14 +10,15 @@
         "constint"     : {"category": "constant", "type": "INTEGER"},
         "int"          : {"type": "INTEGER"},
         "bool"         : {"type": "BOOLEAN"},
-        "tempbool"     : {"type": "BOOLEAN", "storage": "TEMPORARY"},
+        "tempbool"     : {"type": "BOOLEAN", "storage": "INTERMEDIATE"},
         "r"            : {"location": ["a", "b", "c", "d", "si", "di", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]},
         "m"            : {"union": [{"category": "dereference"}, {"location": ["stack", "memory"]}]},
         "rm"           : {"anyof": ["r", "m"]},
+        "label"        : {"category": "label"},
         "@"            : true,
 
-        "1"            : {"category": "constant", "type": "INTEGER", "value":  1},
-        "3"            : {"category": "constant", "type": "INTEGER", "value":  3},
+        "1"            : {"category": "constant", "type": "INTEGER", "value": 1},
+        "3"            : {"category": "constant", "type": "INTEGER", "value": 3},
         "a"            : {"location": "a"},
         "al"           : {"location": "a", "size": 1},
         "ax"           : {"location": "a", "size": 2},
@@ -97,33 +98,75 @@
     "no_output": {"category": ["label", "constant"]},
 
     "transfers": [
-        {"input": "constint:0", "output": "r:1", "target": "MOV"},
-        {"input": "r:0",        "output": "r:1", "target": "MOV"},
-        {"input": "r:0",        "output": "m:1", "target": "MOV"},
-        {"input": "m:0",        "output": "r:1", "target": "MOV"}
+        {"input": {"src": "r"},        "output": {"dest": "r"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}},
+        {"input": {"src": "constint"}, "output": {"dest": "r"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}},
+        {"input": {"src": "r"},        "output": {"dest": "m"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}},
+        {"input": {"src": "m"},        "output": {"dest": "r"}, "target": {"instruction": "MOV", "input": ["src"], "output": ["dest"]}}
     ],
 
+    "ir": {
+        "MARKER":         {"input": [], "output": true,                 "translate": false},
+        "BLOCK":          {"input": [], "output": false, "block": true, "translate": false},
+        "FUNCTION":       {"input": [], "output": false, "block": true, "translate": false},
+
+        "CALL_FUNCTION":  {"input": "any", "output": true,  "translate": "custom"},
+        "CALL_PROCEDURE": {"input": "any", "output": false, "translate": "custom"},
+
+        "JUMP":           {"input": ["target"],              "output": false},
+        "JUMP_IF_TRUE":   {"input": ["target", "predicate"], "output": false},
+        "JUMP_IF_FALSE":  {"input": ["target", "predicate"], "output": false},
+        "RETURN_VAL":     {"input": ["value"],               "output": false},
+        "RETURN":         {"input": [],                      "output": false},
+
+        "COPY":           {"input": ["source"],              "output": true},
+        "PLUS":           {"input": ["operand"],             "output": true},
+        "MINUS":          {"input": ["operand"],             "output": true},
+        "ADDRESSOF":      {"input": ["operand"],             "output": true},
+        "FLOAT_TO_FLOAT": {"input": ["operand"],             "output": true},
+        "INT_TO_FLOAT":   {"input": ["operand"],             "output": true},
+        "FLOAT_TO_INT":   {"input": ["operand"],             "output": true},
+
+        "MUL":            {"input": ["left", "right"],       "output": true},
+        "DIV":            {"input": ["left", "right"],       "output": true},
+        "MOD":            {"input": ["left", "right"],       "output": true},
+        "ADD":            {"input": ["left", "right"],       "output": true},
+        "SUB":            {"input": ["left", "right"],       "output": true},
+        "LT":             {"input": ["left", "right"],       "output": true},
+        "LE":             {"input": ["left", "right"],       "output": true},
+        "GE":             {"input": ["left", "right"],       "output": true},
+        "GT":             {"input": ["left", "right"],       "output": true},
+        "EQ":             {"input": ["left", "right"],       "output": true},
+        "NE":             {"input": ["left", "right"],       "output": true},
+        "BITWISE_AND":    {"input": ["left", "right"],       "output": true},
+        "BITWISE_XOR":    {"input": ["left", "right"],       "output": true},
+        "BITWISE_OR":     {"input": ["left", "right"],       "output": true},
+        "LSHIFT":         {"input": ["left", "right"],       "output": true},
+        "RSHIFT":         {"input": ["left", "right"],       "output": true},
+        "LOGICAL_AND":    {"input": ["left", "right"],       "output": true},
+        "LOGICAL_OR":     {"input": ["left", "right"],       "output": true}
+    },
+
     "translations": [
-        {"ir": {"tag": "ADD", "input": [ "rm:0",   "1:1"]},             "target": {"instruction": "INC", "input": [0]}},
-        {"ir": {"tag": "ADD", "input": [  "1:0",  "rm:1"]},             "target": {"instruction": "INC", "input": [1]}},
-        {"ir": {"tag": "ADD", "input": [ "rm:0",  "-1:1"]},             "target": {"instruction": "DEC", "input": [0]}},
-        {"ir": {"tag": "ADD", "input": [ "-1:0",  "rm:1"]},             "target": {"instruction": "DEC", "input": [1]}},
-        {"ir": {"tag": "ADD", "input": ["int:0", "int:1"]},             "target": {"instruction": "ADD", "input": [0, 1]}},
+        {"ir": {"tag": "ADD", "left": "rm",  "right": "1" }, "target": {"instruction": "INC", "input": ["left"]}},
+        {"ir": {"tag": "ADD", "left": "1",   "right": "rm"}, "target": {"instruction": "INC", "input": ["right"]}},
+        {"ir": {"tag": "ADD", "left": "rm",  "right": "-1"}, "target": {"instruction": "DEC", "input": ["left"]}},
+        {"ir": {"tag": "ADD", "left": "-1",  "right": "rm"}, "target": {"instruction": "DEC", "input": ["right"]}},
+        {"ir": {"tag": "ADD"},                               "target": {"instruction": "ADD"}},
 
-        {"ir": {"tag": "SUB", "input": [ "rm:0",   "1:1"]},             "target": {"instruction": "DEC", "input": [0]}},
-        {"ir": {"tag": "SUB", "input": [ "rm:0",  "-1:1"]},             "target": {"instruction": "INC", "input": [0]}},
-        {"ir": {"tag": "SUB", "input": ["int:0", "int:1"]},             "target": {"instruction": "SUB", "input": [0, 1]}},
+        {"ir": {"tag": "SUB", "left": "rm",  "right":  "1"}, "target": {"instruction": "DEC", "input": ["left"]}},
+        {"ir": {"tag": "SUB", "left": "rm",  "right": "-1"}, "target": {"instruction": "INC", "input": ["left"]}},
+        {"ir": {"tag": "SUB"},                               "target": {"instruction": "SUB"}},
 
-        {"ir": {"tag": "COPY", "input": ["int:0"], "output": ["int:1"]}, "target": {"instruction": "MOV", "input": [0], "output": [1]}},
+        {"ir": {"tag": "COPY"},                              "target": {"instruction": "MOV"}},
 
-        {"ir": {"tag": "JUMP", "input": ["label:0"]},                    "target": {"instruction": "JMP", "input": [0]}},
+        {"ir": {"tag": "JUMP", "target": "label"},           "target": {"instruction": "JMP"}},
 
-        {"ir"    : [{"tag": "EQ",           "input": ["int:0", "int:1"], "output": ["tempbool:2"]},
-                    {"tag": "JUMP_IF_TRUE", "input": ["label:3", 2]}],
-         "target": [{"instruction": "CMP",  "input": [0, 1]},
-                    {"instruction": "JE",   "input": [3]}]},
+        {"ir"    : [{"tag": "EQ",           "left": "int", "right": "int", "output": "tempbool"},
+                    {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
+                    {"instruction": "JE",   "input": ["$1.target"]}]},
 
-        {"ir": {"tag": "RETURN", "input": ["a:0"]},                        "target": {"instruction": "RET", "input": []}},
-        {"ir": {"tag": "RETURN", "input": []},                             "target": {"instruction": "RET"}}
+        {"ir": {"tag": "RETURN_VAL", "value": "a"}, "target": {"instruction": "RET", "input": []}},
+        {"ir": {"tag": "RETURN"},                   "target": {"instruction": "RET"}}
     ]
 }

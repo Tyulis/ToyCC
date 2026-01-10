@@ -7,3 +7,6 @@
 [submodule "lib/c-testsuite"]
 	path = lib/c-testsuite
 	url = ssh://git@gitea.tyulis.fr:2222/gmignerot/c-testsuite.git
+[submodule "lib/opcodes-x86_64"]
+	path = lib/opcodes-x86_64
+	url = ssh://git@gitea.tyulis.fr:2222/gmignerot/Opcodes.git

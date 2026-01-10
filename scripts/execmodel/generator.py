@@ -228,8 +228,8 @@ def generate_instruction_set(translation_model: TranslationModel, instruction_se
                  ["ir/declaration.h", "arch/x86_64/allocation.h"], ["vector", "optional"])
 
 
-def generate_execmodel(translation_model, instruction_set, output_dir):
+def generate_execmodel(translation_model, output_dir):
     generate_locations(translation_model, output_dir)
-    generate_operand_types(translation_model, output_dir)
-    generate_translations(translation_model, output_dir)
-    generate_instruction_set(translation_model, instruction_set, output_dir)
+    #generate_operand_types(translation_model, output_dir)
+    #generate_translations(translation_model, output_dir)
+    #generate_instruction_set(translation_model, instruction_set, output_dir)

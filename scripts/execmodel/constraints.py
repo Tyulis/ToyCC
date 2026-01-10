@@ -53,7 +53,10 @@ class Constraint:
         if self.type in (ConstraintType.DISJUNCTION, ConstraintType.CONJUNCTION) and len(self.parameter) == 1:
             for constraint in self.parameter:
                 return constraint
-        return {CONSTRAINT_TYPE_NAME[self.type]: self.parameter}
+        elif self.type == ConstraintType.CONSTANT:
+            return self.parameter
+        else:
+            return {CONSTRAINT_TYPE_NAME[self.type]: self.parameter}
 
 CONSTRAINT_TRUE  = Constraint(ConstraintType.CONSTANT, True)
 CONSTRAINT_FALSE = Constraint(ConstraintType.CONSTANT, False)
@@ -160,7 +163,7 @@ def simplify_pairwise_and(left: Constraint, right: Constraint) -> Constraint|Non
             if left.parameter == True:
                 return right
             else:
-                return CONSTANT_FALSE
+                return CONSTRAINT_FALSE
         case (ConstraintType.CONJUNCTION, _) | (ConstraintType.DISJUNCTION, _):
             raise TranslationModelError("Constraints must be in disjunctive normal form before simplifying them")
         case (ConstraintType.CATEGORY, ConstraintType.CATEGORY) | (ConstraintType.TYPE, ConstraintType.TYPE) | (ConstraintType.LOCATION, ConstraintType.LOCATION) | (ConstraintType.SIZE, ConstraintType.SIZE) | (ConstraintType.VALUE_EQ, ConstraintType.VALUE_EQ) | (ConstraintType.STORAGE, ConstraintType.STORAGE):
@@ -292,7 +295,7 @@ def simplify_disjunction(expression: Constraint) -> Constraint:
             subexpression = tuple(conjunction.parameter)[0]
             if subexpression.type == ConstraintType.CONSTANT:
                 if subexpression.parameter == True:
-                    return Constraint(ConstraintType.DISJUNCTION, conjunction)  # Finding a literal True in a disjunction is a shortcut
+                    return Constraint(ConstraintType.DISJUNCTION, frozenset({conjunction}))  # Finding a literal True in a disjunction is a shortcut
                 else:
                     continue  # Skip Falses
         disjunction.add(conjunction)
@@ -316,10 +319,11 @@ def simplify_disjunction(expression: Constraint) -> Constraint:
                     break
         new_length = len(disjunction)
 
+    if len(disjunction) == 0:
+        disjunction.add(CONSTRAINT_FALSE)
     return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
 
-def load_constraint_expression(description, previous_types: dict[str, OperandType]) -> Constraint:
-    constraint = parse_constraint_expression(description, previous_types)
+def to_simplified_constraint(constraint: Constraint) -> Constraint:
     dnf = to_dnf(constraint)
 
     if dnf.type == ConstraintType.CONJUNCTION:
@@ -328,13 +332,58 @@ def load_constraint_expression(description, previous_types: dict[str, OperandTyp
         dnf = Constraint(ConstraintType.DISJUNCTION, frozenset({Constraint(ConstraintType.CONJUNCTION, frozenset({dnf}))}))
 
     simplified_conjunctions = {simplify_conjunction(conjunction) for conjunction in dnf.parameter}
-    return simplify_disjunction(Constraint(ConstraintType.DISJUNCTION, frozenset(simplified_conjunctions)))
+    result = simplify_disjunction(Constraint(ConstraintType.DISJUNCTION, frozenset(simplified_conjunctions)))
+    #if is_true(result):
+        #print(constraint, "->", result)
+    return result
+
+def load_constraint_expression(description, previous_types: dict[str, OperandType]) -> Constraint:
+    constraint = parse_constraint_expression(description, previous_types)
+    return to_simplified_constraint(constraint)
+
+def denormalize(constraint: Constraint) -> Constraint:
+    if constraint.type == ConstraintType.DISJUNCTION:
+        if len(constraint.parameter) == 1:
+            conjunction = list(constraint.parameter)[0]
+            if conjunction.type == ConstraintType.CONJUNCTION and len(conjunction.parameter) == 1:
+                return list(conjunction.parameter)[0]
+            else:
+                return conjunction
+
+        common = None
+        for conjunction in constraint.parameter:
+            if conjunction.type != ConstraintType.CONJUNCTION:
+                return constraint
+
+            if common is None:
+                common = conjunction.parameter
+            else:
+                common &= conjunction.parameter
+
+        if len(common) == 0:
+            return constraint
+        else:
+            new_disjunction = set()
+            for conjunction in constraint.parameter:
+                new_disjunction.add(Constraint(ConstraintType.CONJUNCTION, frozenset(conjunction.parameter - common)))
+            return Constraint(ConstraintType.CONJUNCTION, frozenset({Constraint(ConstraintType.DISJUNCTION, frozenset(new_disjunction))} | common))
+    else:
+        return constraint
 
 # Check if a simplified expression is a literal false
 def is_false(constraint: Constraint) -> bool:
     if constraint.type == ConstraintType.CONJUNCTION:
-        return CONSTRAINT_FALSE in constraint.parameter
+        return any(is_false(sub) for sub in constraint.parameter)
     elif constraint.type == ConstraintType.DISJUNCTION:
-        return all([is_false(sub) for sub in constraint.parameter])
+        return all(is_false(sub) for sub in constraint.parameter)
     else:
         return constraint == CONSTRAINT_FALSE
+
+# Check if a simplified expression is a literal true
+def is_true(constraint: Constraint) -> bool:
+    if constraint.type == ConstraintType.CONJUNCTION:
+        return all(is_true(sub) for sub in constraint.parameter)
+    elif constraint.type == ConstraintType.DISJUNCTION:
+        return any(is_true(sub) for sub in constraint.parameter)
+    else:
+        return constraint == CONSTRAINT_TRUE
