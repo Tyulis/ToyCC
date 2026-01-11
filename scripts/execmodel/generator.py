@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from opcodes.x86_64 import *
 from execmodel.model import *
 
@@ -41,7 +42,7 @@ def write_source(content, source_path, includes=(), stdincludes=()):
         f.write("}\n")
 
 # -------- Value locations
-def generate_locations(translation_model, output_dir):
+def generate_locations(translation_model: TranslationModel, output_dir: Path):
     content = "enum class Location {\n"
     for index, location in enumerate(translation_model.locations):
         content += f"    {location} = {index},\n"
@@ -50,7 +51,7 @@ def generate_locations(translation_model, output_dir):
 
 
 # -------- Graph matcher
-def generate_translation_tags(translation_model, output_dir):
+def generate_translation_tags(translation_model: TranslationModel, output_dir: Path):
     header_content = ""
 
     group_tags = "enum class TranslationGroupTag {\n"
@@ -79,23 +80,55 @@ def generate_group_subgraph(group: TranslationGroup) -> str:
         content += "};\n"
     return content
 
-def generate_matcher(translation_model, output_dir):
+def generate_matcher_functions(translation_model: TranslationModel) -> tuple[str, str]:
+    prototype = "std::vector<toycc::arch::x86_64::TranslationMatch> match_translations(const toycc::ir::DependencyMatrix& dependencies)"
+    header_content = f"{prototype};\n"
+
+    source_content = ""
+    source_content += f"template <TranslationGroupTag group>\n"
+    source_content += f"void match_translation_group(std::vector<toycc::arch::x86_64::TranslationMatch>& matches, const toycc::ir::DependencyMatrix& matrix);\n\n"
+
+    for group in translation_model.translations.values():
+        source_content += f"template<> inline void match_translation_group<TranslationGroupTag::{group.tag()}>"
+        source_content += f"(std::vector<toycc::arch::x86_64::TranslationMatch>& matches, const toycc::ir::DependencyMatrix& matrix) {{\n"
+
+        subgraph_name = "TRIVIAL_SUBGRAPH" if len(group.statements) <= 1 else f"SUBGRAPH_{group.tag()}"
+        source_content += f"    std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> matched_statements = "
+        source_content += f"toycc::arch::x86_64::match_dependency_subgraph(matrix, STATEMENTS_{group.tag()}, {subgraph_name});\n"
+
+        source_content += f"    for (const std::vector<std::shared_ptr<ir::DependencyNode>>& match : matched_statements)\n"
+        source_content += f"        matches.emplace_back(TranslationGroupTag::{group.tag()}, match);\n"
+        source_content += f"}}\n\n"
+
+    source_content += f"{prototype} {{\n"
+    source_content += f"    std::vector<toycc::arch::x86_64::TranslationMatch> matches;\n"
+    for group in translation_model.translations.values():
+        source_content += f"    match_translation_group<TranslationGroupTag::{group.tag()}> (matches, dependencies);\n"
+    source_content += f"    return matches;\n"
+    source_content += "}\n"
+
+    return header_content, source_content
+
+def generate_matcher(translation_model: TranslationModel, output_dir: Path):
     header_content = ""
     source_content = "const static arma::imat TRIVIAL_SUBGRAPH = {};\n\n"
 
     for group in translation_model.translations.values():
         source_content += generate_group_subgraph(group) + "\n"
 
-    matcher_header = os.path.join(output_dir, "matcher.h")
-    write_header(header_content, matcher_header, ["ir/statement.h", "arch/x86_64/execmodel.h"])
-    write_source(source_content, os.path.join(output_dir, "matcher.cpp"), [matcher_header], ["armadillo"])
+    matcher_header, matcher_source = generate_matcher_functions(translation_model)
+    header_content += matcher_header
+    source_content += matcher_source
+
+    write_header(header_content, output_dir / "matcher.h", ["ir/statement.h", "arch/x86_64/execmodel.h"])
+    write_source(source_content, output_dir / "matcher.cpp", ["arch/x86_64/execmodel.h", output_dir / "matcher.h"], ["memory", "vector", "armadillo"])
 
 def generate_translations(translation_model, output_dir):
     generate_translation_tags(translation_model, output_dir)
     generate_matcher(translation_model, output_dir)
 
 
-def generate_execmodel(translation_model, output_dir):
+def generate_execmodel(translation_model: TranslationModel, output_dir: Path):
     generate_locations(translation_model, output_dir)
     generate_translations(translation_model, output_dir)
     #generate_operand_types(translation_model, output_dir)
