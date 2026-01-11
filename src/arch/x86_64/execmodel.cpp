@@ -1,12 +1,13 @@
 #include <utility>
 #include "arch/x86_64/execmodel.h"
+#include "util/combinatorics.hpp"
 
 namespace toycc::arch::x86_64 {
     const std::unordered_set<Location> CALLER_SAVED = {Location::a, Location::c, Location::d, Location::si, Location::di, Location::r8, Location::r9, Location::r10, Location::r11};
     const std::unordered_set<Location> CALLEE_SAVED = {Location::b, Location::r12, Location::r13, Location::r14, Location::r15};
     // FIXME : XMM LOCs not implemented
 
-    const std::unordered_map<Location, std::unordered_map<size_t, std::string>> REGISTER_NAMES= {
+    const std::unordered_map<Location, std::unordered_map<size_t, std::string>> REGISTER_NAMES = {
         {Location::a,    {{1,   "%al"}, {2,   "%ax"}, {4,  "%eax"}, {8, "%rax"}}},
         {Location::b,    {{1,   "%bl"}, {2,   "%bx"}, {4,  "%ebx"}, {8, "%rbx"}}},
         {Location::c,    {{1,   "%cl"}, {2,   "%cx"}, {4,  "%ecx"}, {8, "%rcx"}}},
@@ -25,16 +26,80 @@ namespace toycc::arch::x86_64 {
         {Location::r15,  {{1, "%r15b"}, {2, "%r15w"}, {4, "%r15d"}, {8, "%r15"}}},
     };
 
-    std::unordered_set<std::shared_ptr<ir::DependencyNode>> get_entry_statements(const ir::DependencyGraph& graph) {
-        std::unordered_set<std::shared_ptr<ir::DependencyNode>> entry_statements;
-        for (std::shared_ptr<ir::DependencyNode> entry_node : graph.sources()) {
-            if (entry_node->is_statement())
-                entry_statements.insert(entry_node);
-            else
-                for (std::shared_ptr<ir::DependencyNode> next_node : graph.next_nodes(entry_node))
-                    entry_statements.insert(next_node);
+    static bool match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
+        // Find which values are links between the selected statements (= which values have more than two edges in the statement combination)
+        std::vector<size_t> link_columns;
+        for (size_t column = 0; column < graph.values.size(); column++) {
+            size_t nof_uses = 0;
+            for (size_t row : statement_combination)
+                if (graph.matrix(row, column) != 0)
+                    nof_uses += 1;
+
+            if (nof_uses >= 2)
+                link_columns.push_back(column);
         }
-        return entry_statements;
+
+        // Check all permutations for a match
+        for (Permutations<size_t> column_permutations(link_columns, link_columns.size()); !column_permutations.done(); column_permutations.next()) {
+            std::vector<size_t> columns = column_permutations.current();
+            bool is_match = true;
+            for (const auto& [subgraph_column, graph_column] : std::ranges::enumerate_view(columns)) {
+                for (const auto& [subgraph_row, graph_row] : std::ranges::enumerate_view(statement_combination)) {
+                    if (subgraph(subgraph_row, subgraph_column) != 0 && subgraph(subgraph_row, subgraph_column) != graph.matrix(graph_row, graph_column)) {
+                        is_match = false;
+                        goto exit_matching;
+                    }
+                }
+            }
+            exit_matching: ;
+
+            if (is_match)
+                return true;
+        }
+
+        return false;
+    }
+
+    std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> match_dependency_subgraph
+            (const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag> subgraph_tags, const arma::imat& subgraph)
+    {
+        if (graph.statements.size() < subgraph_tags.size())
+            return {};
+
+        std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> matches;
+
+        // Special case : no need for subgraph matching when the subgraph only has one node
+        if (subgraph_tags.size() == 1) {
+            for (std::shared_ptr<ir::DependencyNode> statement : graph.statements) {
+                if (statement->statement().tag == subgraph_tags[0]) {
+                    matches.emplace_back(1);
+                    matches.back()[0] = statement;
+                }
+            }
+            return matches;
+        }
+
+        // General case : subgraph matching for subgraphs with more than one node
+        std::vector<std::vector<size_t>> statement_matches(subgraph_tags.size());
+        for (const auto& [node_index, node] : std::ranges::enumerate_view(graph.statements))
+            for (const auto& [tag_index, tag] : std::ranges::enumerate_view(subgraph_tags))
+                if (node->statement().tag == tag)
+                    statement_matches[tag_index].push_back(node_index);
+
+        for (const std::vector<size_t>& statement_match : statement_matches)
+            if (statement_match.empty())
+                return {};
+
+        for (CartesianProduct<size_t> product(statement_matches); !product.done(); product.next()) {
+            std::vector<size_t> combination = product.current();
+            if (match_statement_combination(graph, subgraph, combination)) {
+                matches.emplace_back(combination.size());
+                for (const auto& [set_index, statement_index] : std::ranges::enumerate_view(combination))
+                    matches.back()[set_index] = graph.statements[statement_index];
+            }
+        }
+
+        return matches;
     }
 
     std::optional<Location> best_location(const std::unordered_set<Location> available_locations) {

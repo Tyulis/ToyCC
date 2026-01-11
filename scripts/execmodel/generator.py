@@ -53,83 +53,42 @@ def generate_locations(translation_model, output_dir):
 def generate_translation_tags(translation_model, output_dir):
     header_content = ""
 
-    max_depth = max(len(translation.ir) for translation in translation_model.translations)
-    header_content += f"constexpr size_t MAX_TRANSLATION_DEPTH = {max_depth};\n"
+    group_tags = "enum class TranslationGroupTag {\n"
+    translation_tags = "enum class TranslationTag {\n"
 
-    header_content += "enum class TranslationTag {\n"
-    for translation in translation_model.translations:
-        header_content += f"    {translation.tag},\n"
-    header_content += "};\n"
+    for group_tag, group in translation_model.translations.items():
+        group_tags += f"    {group_tag},\n"
+        for translation in group.translations:
+            translation_tags += f"    {translation.tag},\n"
 
-    write_header(header_content, os.path.join(output_dir, TRANSLATION_TAG_HEADER), [], ["cstddef"])
+    group_tags += "};\n"
+    translation_tags += "};\n"
 
-def group_statements_array(translation: TranslationSpec) -> str:
-    # Subgraph description
-    source_content  = f"constexpr static std::array<toycc::ir::StatementTag, {len(translation.ir)}> STATEMENTS_{translation.group_tag} = {{"
-    for index, spec in enumerate(translation.ir):
-        source_content += f"toycc::ir::StatementTag::{spec.tag}"
-        if index != len(translation.ir) - 1:
-            source_content += ", "
-    source_content += "};\n"
-    return source_content
+    header_content = group_tags + "\n" + translation_tags
+    write_header(header_content, os.path.join(output_dir, TRANSLATION_TAG_HEADER))
 
-def generate_translation_matcher(translation: TranslationSpec) -> tuple[str, str]:
-    prototype = f"template<> toycc::arch::x86_64::MatchingResult match_translation<TranslationTag::{translation.tag}> (const toycc::arch::x86_64::StackFrame& frame, const toycc::ir::DependencyGraph& graph)"
-    header_content = f"{prototype};\n"
-    source_content = ""
+def generate_group_subgraph(group: TranslationGroup) -> str:
+    content = f"const static std::vector<toycc::ir::StatementTag> STATEMENTS_{group.tag()} = {{"
+    content += ", ".join(f"toycc::ir::StatementTag::{tag}" for tag in group.statements)
+    content += "};\n"
 
-    links = translation.ir_links()
-    if len(links) > 0:
-        source_content += (f"constexpr static std::array<std::pair<size_t, size_t>, {len(links)}> LINKS_{translation.tag} = {{" +
-                           ", ".join(f"std::pair{{{link[0]}, {link[1]}}}" for link in links) +
-                           "};\n")
-
-    source_content += f"{prototype} {{\n"
-    source_content += f"    std::vector<std::shared_ptr<toycc::ir::DependencyNode>> statements = toycc::arch::x86_64::match_subgraph_statements(graph, STATEMENTS_{translation.group_tag}, LINKS_{translation.tag});\n"
-    source_content +=  "}\n"
-
-    return header_content, source_content
+    if len(group.statements) > 1:
+        content += f"const static arma::imat SUBGRAPH_{group.tag()} = {{"
+        for row in group.subgraph:
+            content += "{" + ", ".join(str(cell) for cell in row) + "}, "
+        content += "};\n"
+    return content
 
 def generate_matcher(translation_model, output_dir):
-    header_content =  "template <TranslationTag tag>\n"
-    header_content += "toycc::arch::x86_64::MatchingResult match_translation(const toycc::arch::x86_64::StackFrame& frame, const toycc::ir::DependencyGraph& graph);\n\n"
+    header_content = ""
+    source_content = "const static arma::imat TRIVIAL_SUBGRAPH = {};\n\n"
 
-    source_files = {}
-    for translation in translation_model.translations:
-        matcher_header, matcher_source = generate_translation_matcher(translation)
+    for group in translation_model.translations.values():
+        source_content += generate_group_subgraph(group) + "\n"
 
-        header_content += matcher_header;
-        if translation.group_tag not in source_files:
-            source_files[translation.group_tag] = group_statements_array(translation)
-        source_files[translation.group_tag] += matcher_source + "\n"
-
-    matcher_dir = os.path.join(output_dir, MATCHER_DIRECTORY)
-    matcher_header = os.path.join(output_dir, MATCHER_HEADER)
-    os.makedirs(matcher_dir, exist_ok=True)
-    for group, content in source_files.items():
-        write_source(content, os.path.join(matcher_dir, f"{group}.cpp"), ["ir/flow.h", "arch/x86_64/execmodel.hpp", "arch/x86_64/allocation.h", matcher_header], ["array", "utility"])
-
-    header_content = "std::vector<toycc::arch::x86_64::MatchingResult> match_translations(const toycc::arch::x86_64::StackFrame& frame, const toycc::ir::DependencyGraph& graph);\n"
-    source_content = ""
-
-    write_header(header_content, os.path.join(output_dir, "matcher.h"), ["ir/flow.h", "arch/x86_64/execmodel.hpp", "arch/x86_64/allocation.h"])
-    write_source(source_content, os.path.join(output_dir, "matcher.cpp"), [matcher_header])
-
-def generate_matcher(translation_model: TranslationModel, output_dir: str):
-    prototype = "std::vector<toycc::arch::x86_64::MatchingResult> match_translations(const toycc::arch::x86_64::StackFrame& frame, const toycc::ir::DependencyGraph& graph)"
-    header_content = f"{prototype};\n"
-
-    source_content  = f"{prototype} {{\n"
-    source_content += f"    std::unordered_set<std::shared_ptr<toycc::ir::DependencyNode>> entry_statements = toycc::arch::x86_64::get_entry_statements(graph);\n"
-    source_content += f"    std::vector<toycc::arch::x86_64::MatchingResult> matches;\n"
-    source_content += f"    for (std::shared_ptr<toycc::ir::DependencyNode> node : entry_statements) {{\n"
-    source_content += f"        const Statement& statement = node->statement();\n"
-    source_content += f"        "
-    source_content += f"    }}\n"
-    source_content += "}\n"
-
-    write_header(header_content, os.path.join(output_dir, "matcher.h"), ["ir/flow.h", "arch/x86_64/execmodel.h", "arch/x86_64/allocation.h"])
-    write_source(source_content, os.path.join(output_dir, "matcher.cpp"), [os.path.join(output_dir, "matcher.h")])
+    matcher_header = os.path.join(output_dir, "matcher.h")
+    write_header(header_content, matcher_header, ["ir/statement.h", "arch/x86_64/execmodel.h"])
+    write_source(source_content, os.path.join(output_dir, "matcher.cpp"), [matcher_header], ["armadillo"])
 
 def generate_translations(translation_model, output_dir):
     generate_translation_tags(translation_model, output_dir)

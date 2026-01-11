@@ -8,6 +8,32 @@
 #include "util/graph.hpp"
 
 namespace toycc::ir {
+    DependencyMatrix to_dependency_matrix(const DependencyGraph& graph) {
+        DependencyMatrix result;
+        std::unordered_map<std::shared_ptr<DependencyNode>, size_t> value_indices;
+        for (std::shared_ptr<DependencyNode> node : graph.nodes()) {
+            if (node->is_statement()) {
+                result.statements.push_back(node);
+            } else if (node->is_value()) {
+                value_indices[node] = result.values.size();
+                result.values.push_back(node);
+            }
+        }
+
+        result.matrix = arma::imat(result.statements.size(), result.values.size(), arma::fill::zeros);
+        for (const auto& [row, statement_node] : std::ranges::enumerate_view(result.statements)) {
+            for (const DependencyGraph::Edge& input : graph.in_edges(statement_node))
+                if (input.attr.operand_group == OperandGroup::INPUT || input.attr.type & DependencyType::READ)
+                    result.matrix(row, value_indices[input.entry]) = 1 + input.attr.operand_index;
+
+            for (const DependencyGraph::Edge& output : graph.out_edges(statement_node))
+                if (output.attr.operand_group == OperandGroup::OUTPUT || output.attr.type & DependencyType::WRITE)
+                    result.matrix(row, value_indices[output.entry]) = -(1 + output.attr.operand_index);
+        }
+
+        return result;
+    }
+
     // -------- DependencyNode
     bool DependencyNode::is_statement() const {
         return std::holds_alternative<Statement>(node);

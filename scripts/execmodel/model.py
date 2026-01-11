@@ -1,9 +1,11 @@
 import copy
 import itertools
+import collections
 
 from opcodes.x86_64 import *
 from execmodel.constraints import *
 
+unique_id = 0
 
 class TransferSpec:
     def __init__(self, form: InstructionForm, source: Constraint, destination: Constraint):
@@ -40,29 +42,112 @@ class TranslationTargetSpec:
         self.operands = operands
 
 class TranslationSpec:
-    def __init__(self, ir: list[TranslationIRSpec], target: list[TranslationTargetSpec]):
+    def __init__(self, ir: list[TranslationIRSpec], target: list[TranslationTargetSpec], subgraph: tuple[tuple[int]]):
         self.ir = ir
         self.target = target
-
-    def ir_links(self) -> set[tuple[int, int]]:
-        links = set()
-        for index, spec in enumerate(self.ir):
-            for name, operand in spec.operands.items():
-                if not isinstance(operand, Constraint) and operand[0] != index:
-                    links.add((operand[0], index))
-        return links
+        self.subgraph = subgraph
 
 class TranslationGroup:
-    def __init__(self, group_tag: tuple[str], specs: list[TranslationSpec]):
-        self.group_tag = group_tag
-        for i, spec in enumerate(specs):
-            spec.tag = "_".join(self.group_tag) + f"_{i}"
-        self.specs = specs
+    def __init__(self, first_translation: TranslationSpec):
+        self.statements = tuple(ir.tag for ir in first_translation.ir)
+        self.subgraph = first_translation.subgraph
+
+        global unique_id
+        self.unique_id = unique_id
+        unique_id += 1
+
+        first_translation.tag = f"{self.tag()}_0"
+        self.translations = [first_translation]
+
+    def tag(self):
+        return "_".join(self.statements) + f"_{self.unique_id}"
+
+    def contains(self, translation: TranslationSpec) -> bool:
+        translation_statements = tuple(statement.tag for statement in translation.ir)
+
+        if translation_statements == self.statements and translation.subgraph == self.subgraph:
+            return True
+        if len(translation.subgraph) != len(self.subgraph) or len(translation.subgraph[0]) != len(self.subgraph[0]):
+            return False
+
+        required_statements = collections.Counter(self.statements)
+        found_statements = collections.Counter(statement.tag for statement in translation.ir)
+        if required_statements != found_statements:
+            return False
+
+        allowed_row_permutations = []
+        for row_permutation in itertools.permutations(range(len(translation.subgraph))):
+            permuted_statements = tuple(translation_statements[row] for row in row_permutation)
+            if permuted_statements != self.statements:
+                continue
+
+            row_permuted_matrix = tuple(translation.subgraph[row] for row in row_permutation)
+            if row_permuted_matrix == self.subgraph:
+                return True
+            allowed_row_permutations.append(row_permuted_matrix)
+
+        for row_permuted_matrix in allowed_row_permutations:
+            for column_permutation in itertools.permutations(range(len(translation.subgraph[0]))):
+                col_permuted_matrix = tuple(tuple(row[column] for column in column_permutation) for row in row_permuted_matrix)
+                if col_permuted_matrix == self.subgraph:
+                    return True
+        return False
+
+    def try_add(self, translation: TranslationSpec) -> bool:
+        translation_statements = tuple(statement.tag for statement in translation.ir)
+
+        if translation_statements == self.statements and translation.subgraph == self.subgraph:
+            return self.add(translation)
+
+        required_statements = collections.Counter(self.statements)
+        found_statements = collections.Counter(statement.tag for statement in translation.ir)
+        if required_statements != found_statements:
+            return False
+
+        if len(translation.subgraph) != len(self.subgraph) or len(translation.subgraph[0]) != len(self.subgraph[0]):
+            return False
+
+        allowed_row_permutations = []
+        for row_permutation in itertools.permutations(range(len(translation.subgraph))):
+            permuted_statements = tuple(translation_statements[row] for row in row_permutation)
+            if permuted_statements != self.statements:
+                continue
+
+            row_permuted_matrix = tuple(translation.subgraph[row] for row in row_permutation)
+            if row_permuted_matrix == self.subgraph:
+                return self.add(translation, row_permutation)
+            allowed_row_permutations.append(row_permuted_matrix)
+
+            for column_permutation in itertools.permutations(range(len(translation.subgraph[0]))):
+                col_permuted_matrix = tuple(tuple(row[column] for column in column_permutation) for row in row_permuted_matrix)
+                if col_permuted_matrix == self.subgraph:
+                    return self.add(translation, row_permutation)
+        return False
+
+    def add(self, translation: TranslationSpec, statement_permutation: list[int] = None) -> True:
+        if statement_permutation is not None:
+            translation.ir = [translation.ir[row] for row in statement_permutation]
+            for statement in translation.ir:
+                new_operands = {}
+                for name, operand in statement.operands.items():
+                    if not isinstance(operand, Constraint):
+                        operand = (statement_permutation[operand[0]], operand[1])
+                    new_operands[name] = operand
+                statement.operands = new_operands
+
+            for target in translation.target:
+                new_operands = []
+                for initial_index, name in target.operands:
+                    new_operands.append((statement_permutation[initial_index], name))
+                target.operands = new_operands
+
+        translation.tag = f"{self.tag()}_{len(self.translations)}"
+        self.translations.append(translation)
+        return True
+
 
 class TranslationModel:
     def __init__(self, description: dict[str, object], instruction_set: dict[str, Instruction]):
-        self.unique_id = 0
-
         self.locations = description["locations"]
 
         self.operand_types = {}
@@ -125,20 +210,22 @@ class TranslationModel:
         else:
             return TransferSpec(form, source, destination)
 
-    def parse_translations(self, description: list[dict], instruction_set: dict[str, Instruction]) -> dict[tuple[str], TranslationGroup]:
-        groups = {}
-        for translation in description:
+    def parse_translations(self, description: list[dict], instruction_set: dict[str, Instruction]) -> dict[str, TranslationGroup]:
+        groups = []
+        for translation_desc in description:
             try:
-                for spec in self.parse_translation_set(translation, instruction_set):
-                    group_tag = tuple([ir.tag for ir in spec.ir])
-                    if group_tag in groups:
-                        groups[group_tag].append(spec)
-                    else:
-                        groups[group_tag] = [spec]
+                translations = self.parse_translation_set(translation_desc, instruction_set)
             except TranslationModelError:
-                raise TranslationModelError(f"Error while generating translation spec for {translation}")
+                raise TranslationModelError(f"Error while generating translation spec for {translation_desc}")
 
-        return {group_tag: TranslationGroup(group_tag, translations) for group_tag, translations in groups.items()}
+            for translation in translations:
+                for group in groups:
+                    if group.try_add(translation):
+                        break
+                else:
+                    groups.append(TranslationGroup(translation))
+
+        return {group.tag(): group for group in groups}
 
     def parse_translation_set(self, description: dict[str, object], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:
         if not isinstance(description["ir"], list):
@@ -281,8 +368,47 @@ class TranslationModel:
                                                                  if int(operand_id.partition(".")[0].strip("$")) == index}
             translation_ir.append(TranslationIRSpec(ir_desc["tag"], operands))
 
-        self.unique_id += 1
-        return TranslationSpec(translation_ir, translation_targets, self.unique_id)
+        subgraph = self.make_subgraph(translation_ir)
+        return TranslationSpec(translation_ir, translation_targets, subgraph)
+
+    def make_subgraph(self, translation_ir: list[TranslationIRSpec]) -> tuple[tuple[int]]:
+        if len(translation_ir) <= 1:
+            return ()
+
+        ir_specs = [self.ir[statement.tag] for statement in translation_ir]
+        columns = []
+        column_indices = {}
+
+        # Handle new operands and register their ids
+        for statement_index, statement in enumerate(translation_ir):
+            for name, operand in statement.operands.items():
+                if isinstance(operand, Constraint):
+                    column_indices[(statement_index, name)] = len(columns)
+                    columns.append([0] * len(translation_ir))
+                    operand_index = -1 if name == "output" else 1 + ir_specs[statement_index].input.index(name)
+                    columns[-1][statement_index] = operand_index
+
+        # Handle reference operands
+        for statement_index, statement in enumerate(translation_ir):
+            for name, operand in statement.operands.items():
+                if not isinstance(operand, Constraint):
+                    column_index = column_indices[tuple(operand)]
+                    operand_index = -1 if name == "output" else 1 + ir_specs[statement_index].input.index(name)
+                    columns[column_index][statement_index] = operand_index
+
+        # Remove values that aren't links (= not relevant in matching)
+        filtered_columns = []
+        for column in columns:
+            nof_uses = len([cell for cell in column if cell != 0])
+            if nof_uses >= 2:
+                filtered_columns.append(column)
+
+        # Transpose the matrix
+        matrix = []
+        for row in range(len(translation_ir)):
+            matrix.append(tuple(column[row] for column in filtered_columns))
+        return tuple(matrix)
+
 
 def serialize_model(obj):
     if isinstance(obj, Constraint):

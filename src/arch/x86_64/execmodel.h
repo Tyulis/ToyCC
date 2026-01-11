@@ -23,16 +23,8 @@ namespace toycc::arch::x86_64 {
     extern const std::unordered_set<Location> CALLEE_SAVED;
     extern const std::unordered_map<Location, std::unordered_map<size_t, std::string>> REGISTER_NAMES;
 
-    struct MatchingResult {
-        TranslationTag translation;
-        bool matches;
-        size_t live_overwrites_mismatches;  // Number of output operands that would overwrite live variables
-        size_t missing_operand_mismatches;  // Number of input operands that are not live yet
-        size_t location_mismatches;         // Number of operands that are in the wrong location
-        std::unordered_set<std::shared_ptr<ir::DependencyNode>> statement_nodes;
-    };
-
-    std::unordered_set<std::shared_ptr<ir::DependencyNode>> get_entry_statements(const ir::DependencyGraph& graph);
+    std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> match_dependency_subgraph
+            (const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag> statements, const arma::imat& subgraph);
 
     std::optional<Location> best_location(std::unordered_set<Location> available_locations);
 }

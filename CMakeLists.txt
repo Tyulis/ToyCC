@@ -11,6 +11,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(Boost CONFIG REQUIRED COMPONENTS program_options)
+find_package(Armadillo REQUIRED)
 
 # Include the ANTLR runtime
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -122,9 +123,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	src/
 	lib/subprocess/src/cpp
 	${Boost_INCLUDE_DIRS}
-	${libantlrcpp_INCLUDE_DIRS})
+	${libantlrcpp_INCLUDE_DIRS}
+	${ARMADILLO_INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
 	subprocess
 	antlr4_static
+	${ARMADILLO_LIBRARIES}
 	Boost::program_options)

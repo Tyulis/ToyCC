@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <variant>
+#include <armadillo>
 
 #include "ir/label.h"
 #include "ir/statement.h"
@@ -46,6 +47,13 @@ namespace toycc::ir {
     };
 
     using DependencyGraph = Graph<DependencyNode, Dependency>;
+
+    struct DependencyMatrix {
+        std::vector<std::shared_ptr<DependencyNode>> statements;  // Rows
+        std::vector<std::shared_ptr<DependencyNode>> values;      // Columns
+        arma::imat matrix;  // Matrix with n for statement.inputs[n-1], -n for statement.outputs[n-1], 0 when unlinked
+    };
+    DependencyMatrix to_dependency_matrix(const DependencyGraph& graph);
 
     enum class BasicBlockType {
         ENTRY, INNER, EXIT,
