@@ -44,8 +44,25 @@ class TranslationSpec:
         self.ir = ir
         self.target = target
 
+    def ir_links(self) -> set[tuple[int, int]]:
+        links = set()
+        for index, spec in enumerate(self.ir):
+            for name, operand in spec.operands.items():
+                if not isinstance(operand, Constraint) and operand[0] != index:
+                    links.add((operand[0], index))
+        return links
+
+class TranslationGroup:
+    def __init__(self, group_tag: tuple[str], specs: list[TranslationSpec]):
+        self.group_tag = group_tag
+        for i, spec in enumerate(specs):
+            spec.tag = "_".join(self.group_tag) + f"_{i}"
+        self.specs = specs
+
 class TranslationModel:
     def __init__(self, description: dict[str, object], instruction_set: dict[str, Instruction]):
+        self.unique_id = 0
+
         self.locations = description["locations"]
 
         self.operand_types = {}
@@ -108,14 +125,20 @@ class TranslationModel:
         else:
             return TransferSpec(form, source, destination)
 
-    def parse_translations(self, description: list[dict], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:
-        translations = []
+    def parse_translations(self, description: list[dict], instruction_set: dict[str, Instruction]) -> dict[tuple[str], TranslationGroup]:
+        groups = {}
         for translation in description:
             try:
-                translations.extend(self.parse_translation_set(translation, instruction_set))
+                for spec in self.parse_translation_set(translation, instruction_set):
+                    group_tag = tuple([ir.tag for ir in spec.ir])
+                    if group_tag in groups:
+                        groups[group_tag].append(spec)
+                    else:
+                        groups[group_tag] = [spec]
             except TranslationModelError:
                 raise TranslationModelError(f"Error while generating translation spec for {translation}")
-        return translations
+
+        return {group_tag: TranslationGroup(group_tag, translations) for group_tag, translations in groups.items()}
 
     def parse_translation_set(self, description: dict[str, object], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:
         if not isinstance(description["ir"], list):
@@ -258,7 +281,8 @@ class TranslationModel:
                                                                  if int(operand_id.partition(".")[0].strip("$")) == index}
             translation_ir.append(TranslationIRSpec(ir_desc["tag"], operands))
 
-        return TranslationSpec(translation_ir, translation_targets)
+        self.unique_id += 1
+        return TranslationSpec(translation_ir, translation_targets, self.unique_id)
 
 def serialize_model(obj):
     if isinstance(obj, Constraint):

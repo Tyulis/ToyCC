@@ -29,14 +29,6 @@ namespace toycc::arch::x86_64 {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
     }
 
-    // Called by the code generator whenever the output of an instruction is going to overwrite a variable
-    void StackFrame::save(Location location) {
-        std::shared_ptr<ir::Declaration> variable = content(location);
-        if (location == Location::stack)
-        std::unordered_set<Location> locations = locate(variable);
-        if
-    }
-
     void StackFrame::insert_return() {
         output.statement("popq %rbp");
         output.statement("ret");
@@ -47,8 +39,8 @@ namespace toycc::arch::x86_64 {
 
         code.statement("pushq %rbp");
         code.statement("movq %rsp, %rbp");
-        if (current_position > 0)
-            code.statement(std::format("subq ${}, %rsp", align_offset(current_position, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
+        if (current_offset > 0)
+            code.statement(std::format("subq ${}, %rsp", align_offset(current_offset, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
 
         code << output;
 

@@ -31,18 +31,23 @@ namespace toycc::ir {
     template <typename Location>
     struct StackFrame {
         // Stack variables management
-        std::unordered_map<std::shared_ptr<Declaration>, size_t> locals;
-        size_t current_position = 0;
+        std::unordered_map<std::shared_ptr<Declaration>, size_t> stack_offsets;
+        size_t current_offset = 0;
 
-        // Get the position of the requested variable in the stack frame.
+        // Get the offset of the requested variable in the stack frame.
         // If the variable is not yet in the stack frame, add it
-        size_t position(std::shared_ptr<Declaration> declaration) {
-            size_t position = current_position;
-            current_position += declaration->type->size(declaration->location);
-
-            locals[declaration] = position;
-            return position;
+        size_t offset(std::shared_ptr<Declaration> declaration) {
+            auto it = stack_offsets.find(declaration);
+            if (it == stack_offsets.end()) {
+                const size_t result = current_offset;
+                stack_offsets[declaration] = result;
+                current_offset += declaration->type->size(declaration->location);
+                return result;
+            } else {
+                return it->second;
+            }
         }
+
 
         // Value allocation management
         AllocationTable<Location> allocations;
@@ -59,12 +64,6 @@ namespace toycc::ir {
             auto it = location_index.find(location);
             if (it == location_index.end())  return nullptr;
             else                             return it->declaration;
-        }
-
-        void move(std::shared_ptr<Declaration> declaration, Location new_location) {
-            auto& declaration_index = allocations.template get<declaration_tag>();
-            declaration_index.erase(declaration);
-            declaration_index.insert(Allocation<Location> {declaration, new_location});
         }
     };
 }

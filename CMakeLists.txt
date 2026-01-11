@@ -44,6 +44,12 @@ add_custom_target(CParserDependencies
                   DEPENDS ${ANTLR_CParser_CXX_OUTPUTS}
                   COMMENT "Adding the CParserBase.h include in CParser.h")
 
+# Generate the translation model
+add_custom_target(TranslationModel
+                  COMMAND python3 scripts/execmodel-x86_64.py
+                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                  COMMENT "Generate the translation model")
+
 # Copy the prologues
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
 
@@ -109,6 +115,7 @@ add_executable(${PROJECT_NAME}
 	${ANTLR_CParser_CXX_OUTPUTS})
 
 add_dependencies(${PROJECT_NAME} CParserDependencies)
+add_dependencies(${PROJECT_NAME} TranslationModel)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
 	./

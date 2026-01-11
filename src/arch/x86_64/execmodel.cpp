@@ -25,6 +25,18 @@ namespace toycc::arch::x86_64 {
         {Location::r15,  {{1, "%r15b"}, {2, "%r15w"}, {4, "%r15d"}, {8, "%r15"}}},
     };
 
+    std::unordered_set<std::shared_ptr<ir::DependencyNode>> get_entry_statements(const ir::DependencyGraph& graph) {
+        std::unordered_set<std::shared_ptr<ir::DependencyNode>> entry_statements;
+        for (std::shared_ptr<ir::DependencyNode> entry_node : graph.sources()) {
+            if (entry_node->is_statement())
+                entry_statements.insert(entry_node);
+            else
+                for (std::shared_ptr<ir::DependencyNode> next_node : graph.next_nodes(entry_node))
+                    entry_statements.insert(next_node);
+        }
+        return entry_statements;
+    }
+
     std::optional<Location> best_location(const std::unordered_set<Location> available_locations) {
         if (available_locations.empty())
             return {};

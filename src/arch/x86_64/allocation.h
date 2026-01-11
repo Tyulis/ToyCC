@@ -21,8 +21,6 @@ namespace toycc::arch::x86_64 {
         void insert_return();
         std::string str() const;
 
-        void save(Location location);
-
         const ir::Procedure& procedure;
         CodeOutput output;
     };
