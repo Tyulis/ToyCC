@@ -7,8 +7,8 @@ namespace toycc::ir {
     enum class StatementTag {
         MARKER,  // No-op statement used to mark label positions without needing to update all positions when labels are moved around
         BLOCK, FUNCTION,
-        LOAD, CALL,
-        JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, RETURN,
+        LOAD, CALL_FUNCTION, CALL_PROCEDURE,
+        JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, RETURN, RETURN_VAL,
 
         // Unary operators
         COPY, PLUS, MINUS, ADDRESSOF, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT,
@@ -39,9 +39,11 @@ namespace toycc::ir {
         static Statement make_unary_operation(CodeLocation location, StatementTag tag, Operand input, Operand output);
         static Statement make_binary_operation(CodeLocation location, StatementTag tag, Operand left, Operand right, Operand output);
         static Statement make_load(CodeLocation location, Operand source, Operand destination);
+        static Statement make_call(CodeLocation location, Operand function, std::vector<Operand> arguments);
         static Statement make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, Operand return_value);
         static Statement make_jump(CodeLocation location, std::string label);
         static Statement make_conditional_jump(CodeLocation location, Operand predicate, std::string label, bool jump_if_is = true);
-        static Statement make_return(CodeLocation location, std::optional<Operand> return_value = {});
+        static Statement make_return(CodeLocation location);
+        static Statement make_return(CodeLocation location, Operand return_value);
     };
 }

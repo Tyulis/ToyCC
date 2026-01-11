@@ -291,7 +291,10 @@ namespace toycc::semantic {
         }
 
         RValue destination = declare_temporary(function_type->return_type, locate(call));
-        emit(Statement::make_call(location, function, parameters, destination));
+        if (function_type->category == TypeCategory::VOID)
+            emit(Statement::make_call(location, function, parameters));
+        else
+            emit(Statement::make_call(location, function, parameters, destination));
         return make_expression(destination, location);
     }
 

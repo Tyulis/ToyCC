@@ -12,11 +12,13 @@ namespace toycc::ir {
             case StatementTag::BLOCK:           return "BLOCK";
             case StatementTag::FUNCTION:        return "FUNCTION";
             case StatementTag::LOAD:            return "LOAD";
-            case StatementTag::CALL:            return "CALL";
+            case StatementTag::CALL_FUNCTION:   return "CALL_FUNCTION";
+            case StatementTag::CALL_PROCEDURE:  return "CALL_PROCEDURE";
             case StatementTag::JUMP:            return "JUMP";
             case StatementTag::JUMP_IF_TRUE:    return "JUMP_IF_TRUE";
             case StatementTag::JUMP_IF_FALSE:   return "JUMP_IF_FALSE";
             case StatementTag::RETURN:          return "RETURN";
+            case StatementTag::RETURN_VAL:      return "RETURN_VAL";
             case StatementTag::COPY:            return "COPY";
             case StatementTag::ADDRESSOF:       return "ADDRESSOF";
             case StatementTag::PLUS:            return "PLUS";
@@ -103,10 +105,16 @@ namespace toycc::ir {
         return {.tag = StatementTag::LOAD, .location = location, .inputs = {input}, .output = destination, .block = {}};
     }
 
+    Statement Statement::make_call(CodeLocation location, Operand function, std::vector<Operand> arguments) {
+        std::vector<Operand> inputs = {function};
+        inputs.append_range(arguments);
+        return {.tag = StatementTag::CALL_PROCEDURE, .location = location, .inputs = inputs, .output = {}, .block = {}};
+    }
+
     Statement Statement::make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, Operand return_value) {
         std::vector<Operand> inputs = {function};
         inputs.append_range(arguments);
-        return {.tag = StatementTag::CALL, .location = location, .inputs = inputs, .output = return_value, .block = {}};
+        return {.tag = StatementTag::CALL_FUNCTION, .location = location, .inputs = inputs, .output = return_value, .block = {}};
     }
 
     Statement Statement::make_jump(CodeLocation location, std::string label) {
@@ -118,10 +126,11 @@ namespace toycc::ir {
         return {.tag = tag, .location = location, .inputs = {{label, location}, predicate}, .output = {}, .block = {}};
     }
 
-    Statement Statement::make_return(CodeLocation location, std::optional<Operand> return_value) {
-        std::vector<Operand> inputs;
-        if (return_value.has_value())
-            inputs.push_back(return_value.value());
-        return {.tag = StatementTag::RETURN, .location = location, .inputs = inputs, .output = {}, .block = {}};
+    Statement Statement::make_return(CodeLocation location) {
+        return {.tag = StatementTag::RETURN, .location = location, .inputs = {}, .output = {}, .block = {}};
+    }
+
+    Statement Statement::make_return(CodeLocation location, Operand return_value) {
+        return {.tag = StatementTag::RETURN, .location = location, .inputs = {return_value}, .output = {}, .block = {}};
     }
 }

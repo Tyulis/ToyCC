@@ -61,7 +61,7 @@ namespace toycc::ir {
         std::unordered_map<std::shared_ptr<Declaration>, Dependency> outputs;
 
         // FIXME : Function calls may have arbitrary side effects, for now make them full barriers
-        if (statement.tag == StatementTag::CALL) {
+        if (statement.tag == StatementTag::CALL_FUNCTION || statement.tag == StatementTag::CALL_PROCEDURE) {
             for (std::shared_ptr<Declaration> decl : defined_decls) {
                 inputs [decl].type |= DependencyType::CALL;
                 outputs[decl].type |= DependencyType::CALL;
@@ -430,7 +430,7 @@ namespace toycc::ir {
                 else                                      previous_block = current_block;
 
                 current_block = nullptr;
-            } else if (statement.tag == StatementTag::CALL) {
+            } else if (statement.tag == StatementTag::CALL_FUNCTION || statement.tag == StatementTag::CALL_PROCEDURE) {
                 // Procedure calls may have arbitrary side effects. At least for now, split after calls
                 previous_block = current_block;
                 current_block = nullptr;
