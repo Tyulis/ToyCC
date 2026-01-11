@@ -13,11 +13,21 @@
 
 namespace toycc::ir {
     enum class DependencyType {
-        INPUT        = 0x01,
-        OUTPUT       = 0x02,
+        READ         = 0x01,
+        WRITE        = 0x02,
         CALL         = 0x04,
         DEREFERENCE  = 0x08,
         LIVE_ON_EXIT = 0x10,
+    };
+
+    enum class OperandGroup {
+        INDIRECT, INPUT, OUTPUT
+    };
+
+    struct Dependency {
+        Flags<DependencyType> type;
+        OperandGroup operand_group = OperandGroup::INDIRECT;  // Which kind of operand requires this dependency (INPUT or OUTPUT)
+        size_t operand_index = std::numeric_limits<size_t>::max();
     };
 
     struct DependencyNode {
@@ -35,7 +45,7 @@ namespace toycc::ir {
         bool operator== (std::shared_ptr<Declaration> rhs) const;
     };
 
-    using DependencyGraph = Graph<DependencyNode, Flags<DependencyType>>;
+    using DependencyGraph = Graph<DependencyNode, Dependency>;
 
     enum class BasicBlockType {
         ENTRY, INNER, EXIT,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bit>
 #include <utility>
 #include <type_traits>
 
@@ -106,6 +107,10 @@ namespace toycc {
 
             constexpr FlagsetIterator<T> end() const {
                 return {0};
+            }
+
+            constexpr std::size_t count() const {
+                return std::popcount(std::to_underlying(value));
             }
 
             constexpr operator bool() const {

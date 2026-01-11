@@ -57,14 +57,14 @@ namespace toycc::ir {
         exit_statement = statement_node;
 
         // Find all inputs and outputs of that statement
-        std::unordered_map<std::shared_ptr<Declaration>, Flags<DependencyType>> inputs;
-        std::unordered_map<std::shared_ptr<Declaration>, Flags<DependencyType>> outputs;
+        std::unordered_map<std::shared_ptr<Declaration>, Dependency> inputs;
+        std::unordered_map<std::shared_ptr<Declaration>, Dependency> outputs;
 
         // FIXME : Function calls may have arbitrary side effects, for now make them full barriers
         if (statement.tag == StatementTag::CALL) {
             for (std::shared_ptr<Declaration> decl : defined_decls) {
-                inputs [decl] |= DependencyType::CALL;
-                outputs[decl] |= DependencyType::CALL;
+                inputs [decl].type |= DependencyType::CALL;
+                outputs[decl].type |= DependencyType::CALL;
             }
         }
 
@@ -72,26 +72,37 @@ namespace toycc::ir {
         if (statement.output.has_value()) {
             if (statement.output->is_dereference()) {
                 for (std::shared_ptr<Declaration> decl : defined_decls)
-                    outputs[decl] |= DependencyType::DEREFERENCE;
+                    outputs[decl].type |= DependencyType::DEREFERENCE;
 
-                if (statement.output->has_variable_base())
-                    inputs[statement.output->declaration()] |= DependencyType::INPUT;
+                if (statement.output->has_variable_base()) {
+                    Dependency& dependency = inputs[statement.output->declaration()];
+                    dependency.type |= DependencyType::READ;
+                    dependency.operand_group = OperandGroup::OUTPUT;
+                    dependency.operand_index = 0;
+                }
             } else if (statement.output->is_variable()) {
-                outputs[statement.output->declaration()] |= DependencyType::OUTPUT;
+                Dependency& dependency = outputs[statement.output->declaration()];
+                dependency.type |= DependencyType::WRITE;
+                dependency.operand_group = OperandGroup::OUTPUT;
+                dependency.operand_index = 0;
             }
         }
 
-        for (const Operand& input : statement.inputs) {
+        for (const auto& [index, input] : std::ranges::enumerate_view(statement.inputs)) {
             if (input.is_dereference())
                 for (std::shared_ptr<Declaration> decl : defined_decls)
-                    inputs[decl] |= DependencyType::DEREFERENCE;
+                    inputs[decl].type |= DependencyType::DEREFERENCE;
 
-            if (input.has_variable_base())
-                inputs[input.declaration()] |= DependencyType::INPUT;
+            if (input.has_variable_base()) {
+                Dependency& dependency = inputs[input.declaration()];
+                dependency.type |= DependencyType::READ;
+                dependency.operand_group = OperandGroup::INPUT;
+                dependency.operand_index = index;
+            }
         }
 
         // Add edges from input variables, adding unknown ones as source nodes
-        for (const auto& [input, dependency_type] : inputs) {
+        for (const auto& [input, dependency] : inputs) {
             auto found = last_modification.find(input);
             std::shared_ptr<DependencyNode> input_node = nullptr;
             if (found == last_modification.end()) {
@@ -101,13 +112,13 @@ namespace toycc::ir {
                 input_node = found->second;
             }
 
-            dependencies.add_edge(input_node, statement_node, dependency_type);
+            dependencies.add_edge(input_node, statement_node, dependency);
         }
 
         // Add edges to output variables
-        for (const auto& [output, dependency_type] : outputs) {
+        for (const auto& [output, dependency] : outputs) {
             std::shared_ptr<DependencyNode> output_node = dependencies.emplace_node(output);
-            dependencies.add_edge(statement_node, output_node, dependency_type);
+            dependencies.add_edge(statement_node, output_node, dependency);
             last_modification[output] = output_node;
         }
     }
@@ -117,14 +128,14 @@ namespace toycc::ir {
         if (exit_statement.get() != nullptr) {
             for (const auto& [declaration, node] : last_modification) {
                 DependencyGraph::Edge exit_edge = dependencies.find_edge(node, exit_statement).value_or(DependencyGraph::Edge {node, exit_statement, {}});
-                exit_edge.attr |= DependencyType::LIVE_ON_EXIT;
+                exit_edge.attr.type |= DependencyType::LIVE_ON_EXIT;
 
                 if (!dependencies.contains(exit_statement, node))
                     dependencies.add_edge(exit_edge);
             }
 
             for (DependencyGraph::Edge edge : dependencies.in_edges(exit_statement)) {
-                edge.attr |= DependencyType::LIVE_ON_EXIT;
+                edge.attr.type |= DependencyType::LIVE_ON_EXIT;
                 dependencies.add_edge(edge);
             }
         }
@@ -137,12 +148,12 @@ namespace toycc::ir {
             for (std::shared_ptr<DependencyNode> node : dependencies.find_nodes(variable)) {
                 // Eliminate edges to the exit node that are just there to make the variable live on exit
                 for (DependencyGraph::Edge edge : dependencies.out_edges(node)) {
-                    if (!(edge.attr & DependencyType::LIVE_ON_EXIT))
+                    if (!(edge.attr.type & DependencyType::LIVE_ON_EXIT))
                         continue;
 
-                    edge.attr.clear(DependencyType::LIVE_ON_EXIT);
-                    if (!edge.attr)  dependencies.pop_edge(edge);
-                    else             dependencies.add_edge(edge);  // Replace the flags
+                    edge.attr.type.clear(DependencyType::LIVE_ON_EXIT);
+                    if (!edge.attr.type)  dependencies.pop_edge(edge);
+                    else                  dependencies.add_edge(edge);  // Replace the flags
                 }
 
                 // If that variable was only linked to be live on exit, remove the node
@@ -171,7 +182,7 @@ namespace toycc::ir {
 
             Flags<DependencyType> dependency_types;
             for (DependencyGraph::Edge edge : dependencies.out_edges(node))
-                dependency_types |= edge.attr;
+                dependency_types |= edge.attr.type;
             if (dependency_types & DependencyType::LIVE_ON_EXIT)
                 continue;
 
@@ -202,8 +213,44 @@ namespace toycc::ir {
             case BasicBlockType::ENTRY:  return "ENTRY";
             case BasicBlockType::INNER:  return "INNER";
             case BasicBlockType::EXIT:   return "EXIT";
-            default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown local block type");
         }
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown local block type");
+    }
+
+    static std::string dependency_type_repr(DependencyType type) {
+        switch (type) {
+            case DependencyType::READ:          return "READ";
+            case DependencyType::WRITE:         return "WRITE";
+            case DependencyType::CALL:          return "CALL";
+            case DependencyType::DEREFERENCE:   return "DEREFERENCE";
+            case DependencyType::LIVE_ON_EXIT:  return "LIVE_ON_EXIT";
+        }
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown dependency type");
+    }
+
+    static std::string operand_group_repr(OperandGroup type) {
+        switch (type) {
+            case OperandGroup::INDIRECT:  return "INDIRECT";
+            case OperandGroup::INPUT:     return "INPUT";
+            case OperandGroup::OUTPUT:    return "OUTPUT";
+        }
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown operand group");
+    }
+
+    static std::string dependency_repr(const Dependency& dependency) {
+        std::stringstream repr;
+        repr << "(";
+        size_t type_index = 0;
+        for (DependencyType type : dependency.type) {
+            if (type_index++ > 0)
+                repr << "|";
+            repr << dependency_type_repr(type);
+        }
+
+        repr << ") " << operand_group_repr(dependency.operand_group);
+        if (dependency.operand_group == OperandGroup::INPUT)
+            repr << "[" << dependency.operand_index << "]";
+        return repr.str();
     }
 
     // Write the graph in dot format to `dot`, return the name of any node in the cluster
@@ -234,7 +281,7 @@ namespace toycc::ir {
         }
 
         for (const DependencyGraph::Edge& edge : dependencies.edges())
-            dot << node_names[edge.entry] << " -> " << node_names[edge.exit] << ";\n";
+            dot << node_names[edge.entry] << " -> " << node_names[edge.exit] << " [label=\"" << dependency_repr(edge.attr) << "\"];\n";
 
         dot << "}\n";
         return node_names.begin()->second;
@@ -263,7 +310,7 @@ namespace toycc::ir {
                 live.insert(sink->declaration());
 
         for (const DependencyGraph::Edge& edge : dependencies.in_edges(exit_statement))
-            if (edge.attr & DependencyType::LIVE_ON_EXIT)
+            if (edge.attr.type & DependencyType::LIVE_ON_EXIT)
                 live.insert(edge.entry->declaration());
 
         return live;
