@@ -8,7 +8,7 @@ namespace toycc {
     template <typename T>
     class CartesianProduct {
         public:
-            CartesianProduct(const std::vector<std::vector<T>>& sets) : sets(sets), current_indices(sets.size()) {}
+            CartesianProduct(const std::vector<std::vector<T>>& sets) : current_indices(sets.size()), sets(sets) {}
 
             void next() {
                 size_t set_index = current_indices.size() - 1;

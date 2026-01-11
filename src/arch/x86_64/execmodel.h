@@ -23,13 +23,13 @@ namespace toycc::arch::x86_64 {
     extern const std::unordered_set<Location> CALLEE_SAVED;
     extern const std::unordered_map<Location, std::unordered_map<size_t, std::string>> REGISTER_NAMES;
 
-    struct TranslationMatch {
+    struct GroupMatch {
        TranslationGroupTag group;
        std::vector<std::shared_ptr<ir::DependencyNode>> statements;
+       std::vector<std::shared_ptr<ir::DependencyNode>> link_values;
     };
 
-    std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> match_dependency_subgraph
-            (const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag> statements, const arma::imat& subgraph);
+    std::vector<GroupMatch> match_dependency_subgraph(TranslationGroupTag group, const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag>& statements, const arma::imat& subgraph);
 
     std::optional<Location> best_location(std::unordered_set<Location> available_locations);
 }

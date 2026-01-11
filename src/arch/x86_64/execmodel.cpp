@@ -26,7 +26,8 @@ namespace toycc::arch::x86_64 {
         {Location::r15,  {{1, "%r15b"}, {2, "%r15w"}, {4, "%r15d"}, {8, "%r15"}}},
     };
 
-    static bool match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
+    // Return the indices of the inner values, or an empty optional if this combination doesn't match
+    static std::optional<std::vector<size_t>> match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
         // Find which values are links between the selected statements (= which values have more than two edges in the statement combination)
         std::vector<size_t> link_columns;
         for (size_t column = 0; column < graph.values.size(); column++) {
@@ -54,28 +55,23 @@ namespace toycc::arch::x86_64 {
             exit_matching: ;
 
             if (is_match)
-                return true;
+                return link_columns;
         }
 
-        return false;
+        return {};
     }
 
-    std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> match_dependency_subgraph
-            (const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag> subgraph_tags, const arma::imat& subgraph)
-    {
+    std::vector<GroupMatch> match_dependency_subgraph(TranslationGroupTag group, const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag>& subgraph_tags, const arma::imat& subgraph) {
         if (graph.statements.size() < subgraph_tags.size())
             return {};
 
-        std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> matches;
+        std::vector<GroupMatch> matches;
 
         // Special case : no need for subgraph matching when the subgraph only has one node
         if (subgraph_tags.size() == 1) {
-            for (std::shared_ptr<ir::DependencyNode> statement : graph.statements) {
-                if (statement->statement().tag == subgraph_tags[0]) {
-                    matches.emplace_back(1);
-                    matches.back()[0] = statement;
-                }
-            }
+            for (std::shared_ptr<ir::DependencyNode> statement : graph.statements)
+                if (statement->statement().tag == subgraph_tags[0])
+                    matches.push_back(GroupMatch {.group = group, .statements = {statement}, .link_values = {}});
             return matches;
         }
 
@@ -92,10 +88,13 @@ namespace toycc::arch::x86_64 {
 
         for (CartesianProduct<size_t> product(statement_matches); !product.done(); product.next()) {
             std::vector<size_t> combination = product.current();
-            if (match_statement_combination(graph, subgraph, combination)) {
-                matches.emplace_back(combination.size());
-                for (const auto& [set_index, statement_index] : std::ranges::enumerate_view(combination))
-                    matches.back()[set_index] = graph.statements[statement_index];
+            std::optional<std::vector<size_t>> link_columns = match_statement_combination(graph, subgraph, combination);
+            if (link_columns.has_value()) {
+                GroupMatch& match = matches.emplace_back(group);
+                for (size_t statement_index : combination)
+                    match.statements.push_back(graph.statements[statement_index]);
+                for (size_t value_index : link_columns.value())
+                    match.link_values.push_back(graph.values[value_index]);
             }
         }
 

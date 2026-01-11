@@ -81,16 +81,16 @@ def generate_group_subgraph(group: TranslationGroup) -> str:
     return content
 
 def generate_matcher_functions(translation_model: TranslationModel) -> tuple[str, str]:
-    prototype = "std::vector<toycc::arch::x86_64::TranslationMatch> match_translations(const toycc::ir::DependencyMatrix& dependencies)"
+    prototype = "std::vector<toycc::arch::x86_64::GroupMatch> match_groups(const toycc::ir::DependencyMatrix& dependencies)"
     header_content = f"{prototype};\n"
 
     source_content = ""
     source_content += f"template <TranslationGroupTag group>\n"
-    source_content += f"void match_translation_group(std::vector<toycc::arch::x86_64::TranslationMatch>& matches, const toycc::ir::DependencyMatrix& matrix);\n\n"
+    source_content += f"void match_translation_group(std::vector<toycc::arch::x86_64::GroupMatch>& matches, const toycc::ir::DependencyMatrix& matrix);\n\n"
 
     for group in translation_model.translations.values():
         source_content += f"template<> inline void match_translation_group<TranslationGroupTag::{group.tag()}>"
-        source_content += f"(std::vector<toycc::arch::x86_64::TranslationMatch>& matches, const toycc::ir::DependencyMatrix& matrix) {{\n"
+        source_content += f"(std::vector<toycc::arch::x86_64::GroupMatch>& matches, const toycc::ir::DependencyMatrix& matrix) {{\n"
 
         subgraph_name = "TRIVIAL_SUBGRAPH" if len(group.statements) <= 1 else f"SUBGRAPH_{group.tag()}"
         source_content += f"    std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> matched_statements = "
@@ -101,7 +101,7 @@ def generate_matcher_functions(translation_model: TranslationModel) -> tuple[str
         source_content += f"}}\n\n"
 
     source_content += f"{prototype} {{\n"
-    source_content += f"    std::vector<toycc::arch::x86_64::TranslationMatch> matches;\n"
+    source_content += f"    std::vector<toycc::arch::x86_64::GroupMatch> matches;\n"
     for group in translation_model.translations.values():
         source_content += f"    match_translation_group<TranslationGroupTag::{group.tag()}> (matches, dependencies);\n"
     source_content += f"    return matches;\n"
@@ -120,8 +120,8 @@ def generate_matcher(translation_model: TranslationModel, output_dir: Path):
     header_content += matcher_header
     source_content += matcher_source
 
-    write_header(header_content, output_dir / "matcher.h", ["ir/statement.h", "arch/x86_64/execmodel.h"])
-    write_source(source_content, output_dir / "matcher.cpp", ["arch/x86_64/execmodel.h", output_dir / "matcher.h"], ["memory", "vector", "armadillo"])
+    write_header(header_content, output_dir / "matcher.h", ["arch/x86_64/execmodel.h"])
+    write_source(source_content, output_dir / "matcher.cpp", ["ir/statement.h", "arch/x86_64/execmodel.h", output_dir / "matcher.h"], ["memory", "vector", "armadillo"])
 
 def generate_translations(translation_model, output_dir):
     generate_translation_tags(translation_model, output_dir)

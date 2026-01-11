@@ -100,10 +100,6 @@ namespace toycc::ir {
         return {.tag = tag, .location = location, .inputs = {left, right}, .output = output, .block = {}};
     }
 
-    Statement Statement::make_load(CodeLocation location, Operand input, Operand destination) {
-        return {.tag = StatementTag::LOAD, .location = location, .inputs = {input}, .output = destination, .block = {}};
-    }
-
     Statement Statement::make_call(CodeLocation location, Operand function, std::vector<Operand> arguments) {
         std::vector<Operand> inputs = {function};
         inputs.append_range(arguments);

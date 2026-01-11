@@ -38,7 +38,6 @@ namespace toycc::ir {
         static Statement make_addressof(CodeLocation location, Operand object, Operand output);
         static Statement make_unary_operation(CodeLocation location, StatementTag tag, Operand input, Operand output);
         static Statement make_binary_operation(CodeLocation location, StatementTag tag, Operand left, Operand right, Operand output);
-        static Statement make_load(CodeLocation location, Operand source, Operand destination);
         static Statement make_call(CodeLocation location, Operand function, std::vector<Operand> arguments);
         static Statement make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, Operand return_value);
         static Statement make_jump(CodeLocation location, std::string label);
