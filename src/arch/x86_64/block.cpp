@@ -43,6 +43,9 @@ namespace toycc::arch::x86_64 {
             bool is_entry_match = true;
             for (std::shared_ptr<DependencyNode> statement : match.statements) {
                 for (DependencyGraph::Edge input : graph.in_edges(statement)) {
+                    if (match.link_values.contains(input.entry))
+                        continue;
+
                     if (!graph.is_source(input.entry)) {
                         is_entry_match = false;
                         goto exit_statement_loop;

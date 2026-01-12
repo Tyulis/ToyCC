@@ -94,11 +94,42 @@ namespace toycc::arch::x86_64 {
                 for (size_t statement_index : combination)
                     match.statements.push_back(graph.statements[statement_index]);
                 for (size_t value_index : link_columns.value())
-                    match.link_values.push_back(graph.values[value_index]);
+                    match.link_values.insert(graph.values[value_index]);
             }
         }
 
         return matches;
+    }
+
+    void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match) {
+        // Even a fixable non-match is better than nothing
+        if (!result.has_value()) {
+            result = match;
+            return;
+        }
+
+        // FIXME : For now, keep the first match, since it's the first defined in the execmodel description
+        if (result->matches())
+            return;
+
+        // At this point, `result` is a fixable non-match. If `match` is a match, replace
+        if (match.matches()) {
+            result = match;
+            return;
+        }
+
+        const size_t result_transfers = *result->nof_transfers();
+        const std::optional<size_t> match_transfers = match.nof_transfers();
+
+        // If `match` is not fixable, skip
+        if (!match_transfers.has_value())
+            return;
+
+        // Both are fixable non-matches : keep the one that needs the fewest transfers
+        if (*match_transfers < result_transfers) {
+            result = match;
+            return;
+        }
     }
 
     std::optional<Location> best_location(const std::unordered_set<Location> available_locations) {
