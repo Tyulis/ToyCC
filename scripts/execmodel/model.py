@@ -283,11 +283,15 @@ class TranslationModel:
                 if len(target_form.operands) != nof_required_operands:
                     return None
             elif len(ir_descriptions) == 1:
+                nof_inputs = len([operand for operand in target_form.operands if operand.is_input])
+                nof_outputs = len([operand for operand in target_form.operands if operand.is_output])
                 ir_spec = self.ir[ir_descriptions[0]["tag"]]
-                nof_required_operands = len(ir_spec.input)
-                if ir_spec.output:
-                    nof_required_operands += 1
-                if len(target_form.operands) != nof_required_operands:
+
+                if len(ir_spec.input) != nof_inputs:
+                    return None
+                elif ir_spec.output and nof_outputs != 1:
+                    return None
+                elif not ir_spec.output and nof_outputs != 0:
                     return None
 
             input_index = 0

@@ -51,7 +51,7 @@ namespace toycc::arch::x86_64 {
     }
 
     inline OperandMatch is_constant(const ir::Operand& operand) {
-        return operand.is_constant() ? OperandMatch::OK : OperandMatch::KO;
+        return operand.is_constant() ? OperandMatch {OperandMatch::OK, Location::constant} : OperandMatch::KO;
     }
 
     inline OperandMatch is_variable(const ir::Operand& operand) {
@@ -59,11 +59,11 @@ namespace toycc::arch::x86_64 {
     }
 
     inline OperandMatch is_label(const ir::Operand& operand) {
-        return operand.is_label() ? OperandMatch::OK : OperandMatch::KO;
+        return operand.is_label() ? OperandMatch {OperandMatch::OK, Location::constant} : OperandMatch::KO;
     }
 
     inline OperandMatch is_dereference(const ir::Operand& operand) {
-        return operand.is_dereference() ? OperandMatch::OK : OperandMatch::KO;
+        return operand.is_dereference() ? OperandMatch {OperandMatch::OK, Location::memory} : OperandMatch::KO;
     }
 
     inline OperandMatch check_type(const ir::Operand& operand, ir::TypeCategory expected_category) {

@@ -65,5 +65,12 @@ namespace toycc::ir {
             if (it == location_index.end())  return nullptr;
             else                             return it->declaration;
         }
+
+        // Remove all existing locations of this variable and move it elsewhere
+        void move(std::shared_ptr<Declaration> declaration, Location location) {
+            auto& declaration_index = allocations.template get<declaration_tag>();
+            declaration_index.erase(declaration);
+            declaration_index.emplace(declaration, location);
+        }
     };
 }

@@ -2,10 +2,8 @@
 
 #include <array>
 #include <memory>
-#include <string>
 #include <optional>
 #include <unordered_set>
-#include <unordered_map>
 
 #include "ir/flow.h"
 #include "gen/execmodel/x86_64/location.h"
@@ -22,7 +20,6 @@ namespace toycc::arch::x86_64 {
 
     extern const std::unordered_set<Location> CALLER_SAVED;
     extern const std::unordered_set<Location> CALLEE_SAVED;
-    extern const std::unordered_map<Location, std::unordered_map<size_t, std::string>> REGISTER_NAMES;
 
     struct GroupMatch {
        TranslationGroupTag group;

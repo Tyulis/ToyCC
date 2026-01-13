@@ -321,8 +321,107 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
     write_header(header_content, output_dir / "translation_matcher.h", ["ir/flow.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector"])
     write_source(source_content, output_dir / "translation_matcher.cpp", [output_dir / "translation_matcher.h"] + group_headers)
 
+
+# -------- Code emission routines
+def generate_emission_translation(translation: Translation, translation_model: TranslationModel) -> Path:
+    prototype = f"template<> void emit_translation<TranslationTag::{translation.tag}> (StackFrame& frame, const TranslationMatch& match)"
+    header_content = f"{prototype};\n"
+
+    source_content  = f"{prototype} {{\n"
+
+    for target in translation.target:
+        inputs = []
+        outputs = []
+        for index, operand in enumerate(target.form.operands):
+            if operand.is_output:
+                outputs.append(index)
+            elif operand.is_input:
+                inputs.append(index)
+
+        operand_arguments = []
+        operand_moves = ""
+        operand_order = inputs + outputs
+        for operand_index in operand_order:
+            operand = target.form.operands[operand_index]
+            statement_index, operand_name = target.operands[operand_index]
+            ir_spec = translation_model.ir[translation.ir[statement_index].tag]
+
+            if operand.is_output:
+                output_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
+                output_location = f"*match.statements[{statement_index}].output->location"
+
+            if operand.is_input:
+                input_index = ir_spec.input.index(operand_name)
+                operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[{input_index}]"
+                operand_location = f"*match.statements[{statement_index}].input[{input_index}].location"
+            else:
+                operand_ref = output_ref
+                operand_location = output_location
+
+            operand_arguments.append(f"emit_operand(frame, {operand_ref}, {operand_location})")
+
+            if operand.is_output:
+                operand_moves += f"    move_operand(frame, {output_ref}, {operand_location});\n"
+
+        asm_format = f"{target.form.gas_name} " + ", ".join("{}" for _ in operand_order)
+
+        operand_code = ", ".join(operand_arguments)
+        source_content += f'    frame.output.statement(std::format("{asm_format}", {operand_code}));\n'
+        source_content += operand_moves
+
+    source_content += "}\n"
+
+    return header_content, source_content
+
+def generate_emission_group(group: TranslationGroup, translation_model: TranslationModel, output_dir: Path) -> Path:
+    header_path = output_dir / f"{group.tag()}.h"
+    source_path = output_dir / f"{group.tag()}.cpp"
+
+    header_content = "using namespace toycc::arch::x86_64;\n\n"
+    source_content = "using namespace toycc::arch::x86_64;\n\n"
+
+    for translation in group.translations:
+        translation_header, translation_source = generate_emission_translation(translation, translation_model)
+        header_content += translation_header
+        source_content += translation_source + "\n"
+
+    write_header(header_content, header_path, ["gen/execmodel/x86_64/emission.h"])
+    write_source(source_content, source_path, ["arch/x86_64/assembly.h", header_path], ["format"])
+    return header_path
+
+def generate_emission(translation_model: TranslationModel, output_dir: Path):
+    emission_dir = output_dir / "emission"
+    os.makedirs(emission_dir, exist_ok=True)
+
+    group_headers = []
+    for group in translation_model.translations.values():
+        group_headers.append(generate_emission_group(group, translation_model, emission_dir))
+
+    header_content = "using namespace toycc::arch::x86_64;\n\n"
+    source_content = "using namespace toycc::arch::x86_64;\n\n"
+
+    header_content += "template <TranslationTag translation>\n"
+    header_content += "void emit_translation(StackFrame& frame, const TranslationMatch& match);\n\n"
+
+    prototype = "void emit_code(StackFrame& frame, const TranslationMatch& match)"
+    header_content += f"{prototype};\n"
+
+    source_content += f"{prototype} {{\n"
+    source_content += f"    switch (match.translation) {{\n"
+
+    for group in translation_model.translations.values():
+        for translation in group.translations:
+            source_content += f"        case TranslationTag::{translation.tag}:  return emit_translation<TranslationTag::{translation.tag}> (frame, match);\n"
+
+    source_content += "    }\n"
+    source_content += "}\n"
+
+    write_header(header_content, output_dir / "emission.h", ["arch/x86_64/allocation.h", "arch/x86_64/execmodel.h", output_dir / "translation_tag.h"])
+    write_source(source_content, output_dir / "emission.cpp", [output_dir / "emission.h"] + group_headers)
+
 def generate_execmodel(translation_model: TranslationModel, output_dir: Path):
     generate_locations(translation_model, output_dir)
     generate_translation_tags(translation_model, output_dir)
     generate_group_matcher(translation_model, output_dir)
     generate_translation_matcher(translation_model, output_dir)
+    generate_emission(translation_model, output_dir)
