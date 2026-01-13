@@ -128,15 +128,16 @@ def generate_group_matcher(translation_model: TranslationModel, output_dir: Path
 
 
 # -------- Translation rules
-def generate_constraint(constraint: Constraint) -> str:
+def generate_constraint(constraint: Constraint, arg_usage: dict[str, bool]) -> str:
     match constraint.type:
         case ConstraintType.CONSTANT:
             return "OperandMatch::OK" if constraint.parameter else "OperandMatch::KO"
         case ConstraintType.CONJUNCTION:
-            return "(" + " & ".join(generate_constraint(sub) for sub in constraint.parameter) + ")"
+            return "(" + " & ".join(generate_constraint(sub, arg_usage) for sub in constraint.parameter) + ")"
         case ConstraintType.DISJUNCTION:
-            return "(" + " | ".join(generate_constraint(sub) for sub in constraint.parameter) + ")"
+            return "(" + " | ".join(generate_constraint(sub, arg_usage) for sub in constraint.parameter) + ")"
         case ConstraintType.CATEGORY:
+            arg_usage["operand"] = True
             match constraint.parameter:
                 case "constant":
                     return "is_constant(operand)"
@@ -149,34 +150,70 @@ def generate_constraint(constraint: Constraint) -> str:
                 case "_":
                     raise TranslationModelError(f"Invalid category constraint `{constraint.parameter}`")
         case ConstraintType.TYPE:
+            arg_usage["operand"] = True
             return f"check_type(operand, ir::TypeCategory::{constraint.parameter})"
         case ConstraintType.LOCATION:
+            arg_usage["frame"] = True
+            arg_usage["operand"] = True
             return f"check_location(frame, operand, Location::{constraint.parameter})"
         case ConstraintType.SIZE:
+            arg_usage["operand"] = True
             return f"check_size(operand, {constraint.parameter})"
         case ConstraintType.VALUE_EQ:
+            arg_usage["operand"] = True
             return f"check_value_eq(operand, {constraint.parameter})"
         case ConstraintType.VALUE_LE:
+            arg_usage["operand"] = True
             return f"check_value_le(operand, {constraint.parameter})"
         case ConstraintType.VALUE_GE:
+            arg_usage["operand"] = True
             return f"check_value_ge(operand, {constraint.parameter})"
         case ConstraintType.STORAGE:
+            arg_usage["operand"] = True
             return f"check_storage(operand, ir::StorageClass::{constraint.parameter})"
 
-def generate_operand_constraint(operand: Constraint, is_output: bool) -> str:
+def generate_operand_constraint(operand: Constraint, arg_usage: dict[str, bool]) -> str:
     denormalized = denormalize(operand)
-    return generate_constraint(denormalized)
+    return generate_constraint(denormalized, arg_usage)
 
-def generate_operand_condition(operand_condition_name: str, operand: Constraint|tuple[int, str], is_output: bool) -> str:
-    source  = f"static inline OperandMatch {operand_condition_name}(const StackFrame& frame, const ir::DependencyGraph& graph, const GroupMatch& group_match, const ir::Operand& operand){{\n"
-
+def generate_operand_condition(operand_condition_name: str, operand: Constraint|tuple[int, str], overwritten_by: list[int]) -> str:
+    conjunction = []
+    arg_usage = {"frame": False, "graph": False, "group_match": False, "operand": False}
     if isinstance(operand, Constraint):
-        source += f"    return {generate_operand_constraint(operand, is_output)};\n"
-    else:
-        source += "    return OperandMatch::OK;\n"  # FIXME : Should check liveness
+        conjunction.append(generate_operand_constraint(operand, arg_usage))
 
+    for overwrite_index in range(len(overwritten_by)):
+        arg_usage["frame"] = True
+        arg_usage["graph"] = True
+        arg_usage["group_match"] = True
+        arg_usage["operand"] = True
+        conjunction.append(f"check_overwrite(frame, graph, operand, overwrite_{overwrite_index}, group_match)")
+
+    if len(conjunction) == 0:
+        expression = "OperandMatch::OK"
+    else:
+        expression = " & ".join(f"({subexpression})" for subexpression in conjunction)
+
+
+    frame_arg       = " frame"       if arg_usage["frame"]       else ""
+    graph_arg       = " graph"       if arg_usage["graph"]       else ""
+    group_match_arg = " group_match" if arg_usage["group_match"] else ""
+    operand_arg     = " operand"     if arg_usage["operand"]     else ""
+
+    source  = f"static inline OperandMatch {operand_condition_name}(const StackFrame&{frame_arg}, const ir::DependencyGraph&{graph_arg}, const GroupMatch&{group_match_arg}, const ir::Operand&{operand_arg}"
+    if len(overwritten_by) > 0:
+        source += ", " + ", ".join(f"const ir::Operand& overwrite_{index}" for index in range(len(overwritten_by)))
+    source += "){\n"
+
+    source += f"    return {expression};\n"
     source += "}\n"
     return source;
+
+def generate_operand_ref(statement_index: int, input_index: int|None) -> str:
+    if input_index is None:  # Output
+        return f"(*group_match.statements[{statement_index}]->statement().output)"
+    else:
+        return f"group_match.statements[{statement_index}]->statement().inputs[{input_index}]"
 
 def generate_translation_matcher_function(translation: TranslationSpec, translation_model: TranslationModel) -> str:
     operand_conditions = []
@@ -193,25 +230,35 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
         outputs = []
 
         for name, operand in statement.operands.items():
+            overwritten_by = []
             if name == "output":
                 operand_list = outputs
-                operand_ref = f"(*group_match.statements[{statement_index}]->statement().output)"
+                operand_ref = generate_operand_ref(statement_index, None)
             else:
                 operand_list = inputs
                 input_index = ir_spec.input.index(name)
-                operand_ref = f"group_match.statements[{statement_index}]->statement().inputs[{input_index}]"
+                operand_ref = generate_operand_ref(statement_index, input_index)
+
+                for overwrite_statement_index, overwrite_statement in enumerate(translation.ir):
+                    for overwrite_operand_name, overwrite_operand in overwrite_statement.operands.items():
+                        if overwrite_operand_name == "output" and not isinstance(overwrite_operand, Constraint) and overwrite_operand[0] == statement_index and overwrite_operand[1] == name:
+                            overwritten_by.append(overwrite_statement_index)
+                            break
 
             operand_condition_name = f"condition_{translation.tag}_{statement_index}_{name}"
-            operand_conditions.append(generate_operand_condition(operand_condition_name, operand, name == "output"))
-            operand_match = f"{operand_condition_name}(frame, graph, group_match, {operand_ref})"
+            operand_conditions.append(generate_operand_condition(operand_condition_name, operand, overwritten_by))
+            operand_match = f"{operand_condition_name}(frame, graph, group_match, {operand_ref}"
+            if len(overwritten_by) > 0:
+                operand_match += ", " + ", ".join(generate_operand_ref(overwrite_statement_index, None) for overwrite_statement_index in overwritten_by)
+            operand_match += ")"
             operand_list.append(operand_match)
 
         source_content += "        StatementMatch {\n"
         source_content += "            .input = {" + ", ".join(inputs) + "},\n"
-        source_content += "            .output = {" + ", ".join(outputs) + "}},\n"
+        source_content += "            .output = {" + ", ".join(outputs) + "},\n"
         source_content += "        },\n"
 
-    source_content +=  "    };\n"
+    source_content +=  "    }};\n"
     source_content += "}\n\n"
     return "\n".join(operand_conditions) + "\n" + source_content
 

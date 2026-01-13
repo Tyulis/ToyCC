@@ -32,8 +32,15 @@ namespace toycc::arch::x86_64 {
 
     std::vector<GroupMatch> match_dependency_subgraph(TranslationGroupTag group, const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag>& statements, const arma::imat& subgraph);
 
-    enum class OperandMatch {
-        OK, REQUIRES_TRANSFER, KO,
+    struct OperandMatch {
+        enum MatchResult {OK, REQUIRES_TRANSFER, KO};
+
+        MatchResult match;
+        std::optional<Location> location;  // OK -> location to use ; REQUIRES_TRANSFER -> where it should go
+
+        inline OperandMatch() = default;
+        inline OperandMatch(MatchResult result) : match(result) {}
+        inline OperandMatch(MatchResult result, Location location) : match(result), location(location) {}
     };
 
     struct StatementMatch {
@@ -42,9 +49,9 @@ namespace toycc::arch::x86_64 {
 
         inline bool matches() const {
             for (const OperandMatch& operand : input)
-                if (operand != OperandMatch::OK)
+                if (operand.match != OperandMatch::OK)
                     return false;
-            if (output.has_value() && *output != OperandMatch::OK)
+            if (output.has_value() && output->match != OperandMatch::OK)
                 return false;
             return true;
         }
@@ -53,16 +60,16 @@ namespace toycc::arch::x86_64 {
         inline std::optional<size_t> nof_transfers() const {
             size_t result = 0;
             for (const OperandMatch& operand : input) {
-                if (operand == OperandMatch::REQUIRES_TRANSFER)
+                if (operand.match == OperandMatch::REQUIRES_TRANSFER)
                     result += 1;
-                else if (operand != OperandMatch::OK)
+                else if (operand.match != OperandMatch::OK)
                     return {};
             }
 
             if (output.has_value()) {
-                if (*output == OperandMatch::REQUIRES_TRANSFER)
+                if (output->match == OperandMatch::REQUIRES_TRANSFER)
                     result += 1;
-                else if (*output != OperandMatch::OK)
+                else if (output->match != OperandMatch::OK)
                     return {};
             }
             return result;
