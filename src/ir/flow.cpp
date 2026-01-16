@@ -460,7 +460,13 @@ namespace toycc::ir {
                 // Procedure calls may have arbitrary side effects. At least for now, split after calls
                 previous_block = current_block;
                 current_block = nullptr;
-            } else if (statement.tag == StatementTag::RETURN) {
+            } else if (statement.tag == StatementTag::RETURN || statement.tag == StatementTag::RETURN_VAL) {
+                std::shared_ptr<FunctionType> function_type = std::static_pointer_cast<FunctionType>(declaration->type);
+                if (function_type->return_type->category == TypeCategory::VOID && statement.tag == StatementTag::RETURN_VAL)
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Return statement with a value in a function with `void` return type", location);
+                else if (function_type->return_type->category != TypeCategory::VOID && statement.tag == StatementTag::RETURN)
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Return statement without a value in a function with non-void return type", location);
+
                 // Return -> connect to the exit block, don't connect to the next block in the flat code
                 blocks.add_edge(current_block, exit_block, FlowType::JUMP);
                 current_block  = nullptr;

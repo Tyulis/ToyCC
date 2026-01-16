@@ -1,5 +1,5 @@
-#include <utility>
 #include "arch/x86_64/execmodel.h"
+#include "util/strings.h"
 #include "util/combinatorics.hpp"
 
 namespace toycc::arch::x86_64 {
@@ -83,6 +83,9 @@ namespace toycc::arch::x86_64 {
     }
 
     void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match) {
+        if (!match.matches())
+            return;
+
         // Even a fixable non-match is better than nothing
         if (!result.has_value()) {
             result = match;
@@ -113,15 +116,81 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    std::optional<Location> best_location(const std::unordered_set<Location> available_locations) {
-        if (available_locations.empty())
-            return {};
+    // -------- Dump functions
 
-        Location best = *available_locations.begin();
-        for (auto it = ++available_locations.begin(); it != available_locations.end(); it++)
-            if (std::to_underlying(*it) < std::to_underlying(best))
-                best = *it;
+    std::ostream& operator<< (std::ostream& stream, const GroupMatch& match) {
+        stream << match.group << " {";
+        for (std::shared_ptr<ir::DependencyNode> node : match.statements)
+            stream << "\n" << node->statement().ir_code();
+        stream << "}";
+        return stream;
+    }
 
-        return best;
+    std::ostream& operator<< (std::ostream& stream, const OperandMatch& match) {
+        switch (match.match) {
+            case OperandMatch::OK:                 stream << "OK";  break;
+            case OperandMatch::REQUIRES_TRANSFER:  stream << "REQUIRES_TRANSFER";  break;
+            case OperandMatch::KO:                 stream << "KO";  break;
+        }
+
+        if (match.location.has_value())
+            stream << "(" << match.location.value() << ")";
+        return stream;
+    }
+
+    std::ostream& operator<< (std::ostream& stream, const StatementMatch& match) {
+        stream << "{";
+
+        if (!match.input.empty()) {
+            stream << "input: [";
+            for (const auto& [index, operand] : std::ranges::enumerate_view(match.input)) {
+                stream << operand;
+                if (static_cast<size_t>(index) != match.input.size() - 1)
+                    stream << ", ";
+            }
+
+            stream << "]";
+            if (match.output.has_value())
+                stream << ", ";
+        }
+
+        if (match.output.has_value())
+            stream << "output: [" << match.output.value() << "]";
+
+        stream << "}";
+        return stream;
+    }
+
+    std::ostream& operator<< (std::ostream& stream, const TranslationMatch& match) {
+        stream << match.translation << " {\n";
+        stream << indent(dump(match.group_match), true, "    ") << "\n";
+        for (const StatementMatch& statement : match.statements)
+            stream << indent(dump(statement), true, "    ") << "\n";
+        stream << "}";
+        return stream;
+    }
+
+    std::string dump(const GroupMatch& match) {
+        std::stringstream stream;
+        stream << match;
+        return stream.str();
+    }
+
+    std::string dump(const OperandMatch& match) {
+        std::stringstream stream;
+        stream << match;
+        return stream.str();
+    }
+
+    std::string dump(const StatementMatch& match) {
+        std::stringstream stream;
+        stream << match;
+        return stream.str();
+    }
+
+    std::string dump(const TranslationMatch& match) {
+        std::stringstream stream;
+        stream << match;
+        return stream.str();
     }
 }

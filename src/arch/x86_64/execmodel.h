@@ -99,7 +99,15 @@ namespace toycc::arch::x86_64 {
         }
     };
 
-    void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match);
+    std::ostream& operator<< (std::ostream& stream, const GroupMatch& match);
+    std::ostream& operator<< (std::ostream& stream, const OperandMatch& match);
+    std::ostream& operator<< (std::ostream& stream, const StatementMatch& match);
+    std::ostream& operator<< (std::ostream& stream, const TranslationMatch& match);
 
-    std::optional<Location> best_location(std::unordered_set<Location> available_locations);
+    std::string dump(const GroupMatch& match);
+    std::string dump(const OperandMatch& match);
+    std::string dump(const StatementMatch& match);
+    std::string dump(const TranslationMatch& match);
+
+    void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match);
 }

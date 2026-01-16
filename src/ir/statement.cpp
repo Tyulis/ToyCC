@@ -126,6 +126,6 @@ namespace toycc::ir {
     }
 
     Statement Statement::make_return(CodeLocation location, Operand return_value) {
-        return {.tag = StatementTag::RETURN, .location = location, .inputs = {return_value}, .output = {}, .block = {}};
+        return {.tag = StatementTag::RETURN_VAL, .location = location, .inputs = {return_value}, .output = {}, .block = {}};
     }
 }

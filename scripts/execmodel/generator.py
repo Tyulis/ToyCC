@@ -4,7 +4,6 @@ from opcodes.x86_64 import *
 from execmodel.model import *
 
 LOCATION_HEADER = "location.h"
-TRANSLATION_TAG_HEADER = "translation_tag.h"
 MATCHER_HEADER = "matcher.h"
 
 MATCHER_DIRECTORY = "matcher"
@@ -31,7 +30,7 @@ def write_header(content, header_path, includes=(), stdincludes=()):
     full_content += "\n";
     full_content += "namespace toycc::execmodel::x86_64 {\n";
     full_content += "\n".join("    " + line for line in content.splitlines())
-    full_content += "}\n"
+    full_content += "\n}\n"
     write_file(full_content, header_path)
 
 
@@ -44,36 +43,82 @@ def write_source(content, source_path, includes=(), stdincludes=()):
     full_content += "\n"
     full_content += "namespace toycc::execmodel::x86_64 {\n"
     full_content += "\n".join("    " + line for line in content.splitlines())
-    full_content += "}\n"
+    full_content += "\n}\n"
     write_file(full_content, source_path)
 
 
 # -------- Value locations
 def generate_locations(translation_model: TranslationModel, output_dir: Path):
-    content = "enum class Location {\n"
+    location_enum = "enum class Location {\n"
+    location_repr = "    switch (location) {\n"
+
     for index, location in enumerate(translation_model.locations):
-        content += f"    {location} = {index},\n"
-    content += "};"
-    write_header(content, os.path.join(output_dir, LOCATION_HEADER))
+        location_enum += f"    {location} = {index},\n"
+        location_repr += f'        case Location::{location}:  output << "{location}";  return output;\n'
+
+    location_enum += "};\n"
+    location_repr += "}\n"
+
+    location_repr_prototype = "std::ostream& operator<< (std::ostream& output, Location location)"
+
+    header_content = ""
+    source_content = ""
+
+    header_content += location_enum + "\n"
+    header_content += f"{location_repr_prototype};\n"
+
+    source_content += f"{location_repr_prototype} {{\n"
+    source_content += location_repr
+    source_content += '    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown location");\n'
+    source_content += "}\n"
+
+    write_header(header_content, output_dir / "location.h", [], ["iostream"])
+    write_source(source_content, output_dir / "location.cpp", ["diagnostic.h", output_dir / "location.h"], ["iostream"])
 
 
 # -------- Graph matcher
 def generate_translation_tags(translation_model: TranslationModel, output_dir: Path):
-    header_content = ""
+
 
     group_tags = "enum class TranslationGroupTag {\n"
+    group_repr = "    switch (tag) {\n"
     translation_tags = "enum class TranslationTag {\n"
+    translation_repr = "    switch (tag) {\n"
 
     for group_tag, group in translation_model.translations.items():
         group_tags += f"    {group_tag},\n"
+        group_repr += f'        case TranslationGroupTag::{group_tag}:  output << "{group_tag}";  return output;\n'
         for translation in group.translations:
             translation_tags += f"    {translation.tag},\n"
+            translation_repr += f'        case TranslationTag::{translation.tag}:  output << "{translation.tag}";  return output;\n'
 
     group_tags += "};\n"
+    group_repr += "}\n"
     translation_tags += "};\n"
+    translation_repr += "}\n"
 
-    header_content = group_tags + "\n" + translation_tags
-    write_header(header_content, os.path.join(output_dir, TRANSLATION_TAG_HEADER))
+    group_repr_prototype       = "std::ostream& operator<< (std::ostream& output, TranslationGroupTag tag)"
+    translation_repr_prototype = "std::ostream& operator<< (std::ostream& output, TranslationTag tag)"
+
+    header_content = ""
+    source_content = ""
+
+    header_content += group_tags + "\n"
+    header_content += translation_tags + "\n"
+    header_content += f"{group_repr_prototype};\n"
+    header_content += f"{translation_repr_prototype};\n"
+
+    source_content += f"{group_repr_prototype} {{\n"
+    source_content += group_repr
+    source_content += '    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown translation group tag");\n'
+    source_content += "}\n\n"
+    source_content += f"{translation_repr_prototype} {{\n"
+    source_content += translation_repr
+    source_content += '    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown translation tag");\n'
+    source_content += "}\n\n"
+
+    write_header(header_content, output_dir / "translation_tag.h",   [], ["iostream"])
+    write_source(source_content, output_dir / "translation_tag.cpp", ["diagnostic.h", output_dir / "translation_tag.h"], ["iostream"])
 
 def generate_group_subgraph(group: TranslationGroup) -> str:
     content = f"const static std::vector<ir::StatementTag> STATEMENTS_{group.tag()} = {{"
@@ -368,13 +413,12 @@ def generate_emission_translation(translation: Translation, translation_model: T
             if operand.is_output:
                 operand_moves += f"    move_operand(frame, {output_ref}, {operand_location});\n"
 
-        asm_format = f"{target.form.gas_name} " + ", ".join("{}" for _ in operand_order)
-
         if len(operand_arguments) == 0:
-            function_content += f'    frame.output.statement("{asm_format}");\n'
+            function_content += f'    frame.output.statement("{target.form.gas_name}");\n'
         else:
             uses_match = True
             operand_code = ", ".join(operand_arguments)
+            asm_format = f"{target.form.gas_name} " + ", ".join("{}" for _ in operand_order)
             function_content += f'    frame.output.statement(std::format("{asm_format}", {operand_code}));\n'
         function_content += operand_moves
 

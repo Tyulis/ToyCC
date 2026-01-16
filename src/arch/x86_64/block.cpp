@@ -21,8 +21,12 @@ namespace toycc::arch::x86_64 {
     void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
         std::vector<GroupMatch> entry_matches = find_entry_matches(graph, group_matches);
         std::vector<TranslationMatch> translation_matches = toycc::execmodel::x86_64::match_translations(frame, graph, entry_matches);
-        if (translation_matches.size() == 0)
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
+        if (translation_matches.empty()) {
+            Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
+            for (const GroupMatch& group : entry_matches)
+                diagnostic.add_note(DiagnosticLevel::NOTE, dump(group));
+            throw diagnostic;
+        }
 
         const TranslationMatch& selected_match = select_translation(translation_matches);
         if (selected_match.matches()) {
@@ -79,8 +83,12 @@ namespace toycc::arch::x86_64 {
                 selected_index = index;
         }
 
-        if (!selected_index.has_value())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match selected");
+        if (!selected_index.has_value()) {
+            Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match selected");
+            for (const TranslationMatch& match : matches)
+                diagnostic.add_note(DiagnosticLevel::NOTE, dump(match));
+            throw diagnostic;
+        }
 
         return matches.at(selected_index.value());
     }
