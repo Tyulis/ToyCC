@@ -4,6 +4,7 @@ sys.path.append(os.path.join("lib", "opcodes-x86_64"))
 
 import json
 import pprint
+import argparse
 from pathlib import Path
 from opcodes.x86_64 import *
 from execmodel.model import *
@@ -27,13 +28,19 @@ def preprocess_instruction(instruction: Instruction) -> Instruction:
     return instruction
 
 if __name__ == "__main__":
-    instruction_list = read_instruction_set(os.path.join("lib", "opcodes-x86_64", "opcodes", "x86_64.xml"))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("gen_dir", help="Generate the outputs in <gen_dir>/gen/execmodel/...", nargs="?")
+    args = parser.parse_args()
+
+    gen_dir = Path(args.gen_dir or ".")
+
+    instruction_list = read_instruction_set(Path("lib") / "opcodes-x86_64" / "opcodes" / "x86_64.xml")
     instruction_set = {instruction.name: preprocess_instruction(instruction) for instruction in instruction_list}
 
     with open(Path("execmodel") / "x86_64.json") as f:
         translation_model = TranslationModel(json.load(f), instruction_set)
 
-    output_dir = Path("gen") / "execmodel" / "x86_64"
+    output_dir = gen_dir / "gen" / "execmodel" / "x86_64"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 

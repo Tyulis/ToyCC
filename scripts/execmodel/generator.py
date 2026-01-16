@@ -10,38 +10,43 @@ MATCHER_HEADER = "matcher.h"
 MATCHER_DIRECTORY = "matcher"
 INSTRUCTION_DIRECTORY = "instruction"
 
-generated_sources = set()
-generated_headers = set()
-
 BOOL = {True: "true", False: "false"}
 
-def write_header(content, header_path, includes=(), stdincludes=()):
-    generated_headers.add(header_path)
+def write_file(content, path):
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            initial_content = f.read()
+        if initial_content == content:
+            return
 
-    with open(header_path, "w") as f:
-        f.write("#pragma once\n\n")
-        for include in stdincludes:
-            f.write(f"#include <{include}>\n")
-        for include in includes:
-            f.write(f'#include "{include}"\n')
-        f.write("\n")
-        f.write("namespace toycc::execmodel::x86_64 {\n")
-        for line in content.splitlines():
-            f.write(f"    {line}\n")
-        f.write("}\n")
+    with open(path, "w") as f:
+        f.write(content)
+
+def write_header(content, header_path, includes=(), stdincludes=()):
+    full_content = "#pragma once\n\n"
+    for include in stdincludes:
+        full_content += f"#include <{include}>\n"
+    for include in includes:
+        full_content += f'#include "{include}"\n'
+    full_content += "\n";
+    full_content += "namespace toycc::execmodel::x86_64 {\n";
+    full_content += "\n".join("    " + line for line in content.splitlines())
+    full_content += "}\n"
+    write_file(full_content, header_path)
+
 
 def write_source(content, source_path, includes=(), stdincludes=()):
-    generated_sources.add(source_path)
-    with open(source_path, "w") as f:
-        for include in stdincludes:
-            f.write(f"#include <{include}>\n")
-        for include in includes:
-            f.write(f'#include "{include}"\n')
-        f.write("\n")
-        f.write("namespace toycc::execmodel::x86_64 {\n")
-        for line in content.splitlines():
-            f.write(f"    {line}\n")
-        f.write("}\n")
+    full_content = ""
+    for include in stdincludes:
+        full_content += f"#include <{include}>\n"
+    for include in includes:
+        full_content += f'#include "{include}"\n'
+    full_content += "\n"
+    full_content += "namespace toycc::execmodel::x86_64 {\n"
+    full_content += "\n".join("    " + line for line in content.splitlines())
+    full_content += "}\n"
+    write_file(full_content, source_path)
+
 
 # -------- Value locations
 def generate_locations(translation_model: TranslationModel, output_dir: Path):
@@ -75,11 +80,16 @@ def generate_group_subgraph(group: TranslationGroup) -> str:
     content += ", ".join(f"ir::StatementTag::{tag}" for tag in group.statements)
     content += "};\n"
 
-    if len(group.statements) > 1:
-        content += f"const static arma::imat SUBGRAPH_{group.tag()} = {{"
-        for row in group.subgraph:
-            content += "{" + ", ".join(str(cell) for cell in row) + "}, "
-        content += "};\n"
+    if len(group.subgraph) > 0:
+        if len(group.subgraph[0]) == 1:
+            content += f"const static arma::icolvec SUBGRAPH_{group.tag()} = {{"
+            content += ", ".join(str(row[0]) for row in group.subgraph)
+            content += "};\n"
+        else:
+            content += f"const static arma::imat SUBGRAPH_{group.tag()} = {{"
+            for row in group.subgraph:
+                content += "{" + ", ".join(str(cell) for cell in row) + "}, "
+            content += "};\n"
     return content
 
 def generate_group_matcher_functions(translation_model: TranslationModel) -> tuple[str, str]:
@@ -94,12 +104,8 @@ def generate_group_matcher_functions(translation_model: TranslationModel) -> tup
         source_content += f"template<> inline void match_subgraph_group<TranslationGroupTag::{group.tag()}>"
         source_content += f"(std::vector<GroupMatch>& matches, const ir::DependencyMatrix& matrix) {{\n"
 
-        subgraph_name = "TRIVIAL_SUBGRAPH" if len(group.statements) <= 1 else f"SUBGRAPH_{group.tag()}"
-        source_content += f"    std::vector<std::vector<std::shared_ptr<ir::DependencyNode>>> matched_statements = "
-        source_content += f"match_dependency_subgraph(matrix, STATEMENTS_{group.tag()}, {subgraph_name});\n"
-
-        source_content += f"    for (const std::vector<std::shared_ptr<ir::DependencyNode>>& match : matched_statements)\n"
-        source_content += f"        matches.emplace_back(TranslationGroupTag::{group.tag()}, match);\n"
+        subgraph_name = "TRIVIAL_SUBGRAPH" if len(group.subgraph) == 0 else f"SUBGRAPH_{group.tag()}"
+        source_content += f"    matches.insert_range(matches.begin(), match_dependency_subgraph(TranslationGroupTag::{group.tag()}, matrix, STATEMENTS_{group.tag()}, {subgraph_name}));\n"
         source_content += f"}}\n\n"
 
     source_content += f"{prototype} {{\n"
@@ -161,13 +167,13 @@ def generate_constraint(constraint: Constraint, arg_usage: dict[str, bool]) -> s
             return f"check_size(operand, {constraint.parameter})"
         case ConstraintType.VALUE_EQ:
             arg_usage["operand"] = True
-            return f"check_value_eq(operand, {constraint.parameter})"
+            return f'check_value_eq(operand, ir::IntegerConstant("{constraint.parameter}"))'
         case ConstraintType.VALUE_LE:
             arg_usage["operand"] = True
-            return f"check_value_le(operand, {constraint.parameter})"
+            return f'check_value_le(operand, ir::IntegerConstant("{constraint.parameter}"))'
         case ConstraintType.VALUE_GE:
             arg_usage["operand"] = True
-            return f"check_value_ge(operand, {constraint.parameter})"
+            return f'check_value_ge(operand, ir::IntegerConstant("{constraint.parameter}"))'
         case ConstraintType.STORAGE:
             arg_usage["operand"] = True
             return f"check_storage(operand, ir::StorageClass::{constraint.parameter})"
@@ -217,13 +223,8 @@ def generate_operand_ref(statement_index: int, input_index: int|None) -> str:
 
 def generate_translation_matcher_function(translation: TranslationSpec, translation_model: TranslationModel) -> str:
     operand_conditions = []
-    source_content = f"template<> TranslationMatch match_translation<TranslationTag::{translation.tag}> (const StackFrame& frame, const ir::DependencyGraph& graph, const GroupMatch& group_match) {{\n"
-
-    ir_specs = [translation_model.ir[statement.tag] for statement in translation.ir]
-
-    statement_initializer = "{" + ", ".join(f"StatementMatch {{{len(ir_spec.input)}, {BOOL[ir_spec.output]}}}" for ir_spec in ir_specs) + "}"
-
-    source_content += f"    return {{.translation = TranslationTag::{translation.tag}, .group_match = group_match, .statements = {{\n"
+    statements_code = ""
+    has_operands = False
     for statement_index, statement in enumerate(translation.ir):
         ir_spec = translation_model.ir[statement.tag]
         inputs = []
@@ -253,11 +254,18 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
             operand_match += ")"
             operand_list.append(operand_match)
 
-        source_content += "        StatementMatch {\n"
-        source_content += "            .input = {" + ", ".join(inputs) + "},\n"
-        source_content += "            .output = {" + ", ".join(outputs) + "},\n"
-        source_content += "        },\n"
+        if len(inputs) > 0 or len(outputs) > 0:
+            has_operands = True
 
+        statements_code += "        StatementMatch {\n"
+        statements_code += "            .input = {" + ", ".join(inputs) + "},\n"
+        statements_code += "            .output = {" + ", ".join(outputs) + "},\n"
+        statements_code += "        },\n"
+
+    source_content =  f"template<> TranslationMatch match_translation<TranslationTag::{translation.tag}> "
+    source_content += f"(const StackFrame&{' frame' if has_operands else ''}, const ir::DependencyGraph&{' graph' if has_operands else ''}, const GroupMatch& group_match) {{\n"
+    source_content += f"    return {{.translation = TranslationTag::{translation.tag}, .group_match = group_match, .statements = {{\n"
+    source_content += statements_code
     source_content +=  "    }};\n"
     source_content += "}\n\n"
     return "\n".join(operand_conditions) + "\n" + source_content
@@ -318,17 +326,14 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
     source_content +=  "    return matches;\n"
     source_content +=  "}\n"
 
-    write_header(header_content, output_dir / "translation_matcher.h", ["ir/flow.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector"])
+    write_header(header_content, output_dir / "translation_matcher.h", ["ir/flow.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector", "optional"])
     write_source(source_content, output_dir / "translation_matcher.cpp", [output_dir / "translation_matcher.h"] + group_headers)
 
 
 # -------- Code emission routines
 def generate_emission_translation(translation: Translation, translation_model: TranslationModel) -> Path:
-    prototype = f"template<> void emit_translation<TranslationTag::{translation.tag}> (StackFrame& frame, const TranslationMatch& match)"
-    header_content = f"{prototype};\n"
-
-    source_content  = f"{prototype} {{\n"
-
+    function_content = ""
+    uses_match = False
     for target in translation.target:
         inputs = []
         outputs = []
@@ -365,10 +370,19 @@ def generate_emission_translation(translation: Translation, translation_model: T
 
         asm_format = f"{target.form.gas_name} " + ", ".join("{}" for _ in operand_order)
 
-        operand_code = ", ".join(operand_arguments)
-        source_content += f'    frame.output.statement(std::format("{asm_format}", {operand_code}));\n'
-        source_content += operand_moves
+        if len(operand_arguments) == 0:
+            function_content += f'    frame.output.statement("{asm_format}");\n'
+        else:
+            uses_match = True
+            operand_code = ", ".join(operand_arguments)
+            function_content += f'    frame.output.statement(std::format("{asm_format}", {operand_code}));\n'
+        function_content += operand_moves
 
+    prototype = f"template<> void emit_translation<TranslationTag::{translation.tag}> (StackFrame& frame, const TranslationMatch&{' match' if uses_match else ''})"
+    header_content = f"{prototype};\n"
+
+    source_content  = f"{prototype} {{\n"
+    source_content += function_content
     source_content += "}\n"
 
     return header_content, source_content

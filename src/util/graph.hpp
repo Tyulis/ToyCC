@@ -306,6 +306,11 @@ namespace toycc {
                 return contains(node) && entry_index.find(node) == entry_index.end();
             }
 
+            // Check whether the node is connected to any edge
+            inline bool is_connected(std::shared_ptr<Node> node) const {
+                return is_source(node) && is_sink(node);
+            }
+
             // Get all edges that come into the requested node
             inline EdgeSet in_edges(std::shared_ptr<Node> node) const {
                 const ExitEdgeIndex& exit_index = exit_edge_index();

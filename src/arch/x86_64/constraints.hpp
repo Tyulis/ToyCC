@@ -117,7 +117,7 @@ namespace toycc::arch::x86_64 {
         std::shared_ptr<ir::DependencyNode> input_node = nullptr;
         for (std::shared_ptr<ir::DependencyNode> statement : group_statements) {
             for (std::shared_ptr<ir::DependencyNode> node : graph.previous_nodes(statement)) {
-                if (node == input_variable) {
+                if (node->is_value() && node->declaration() == input_variable) {
                     input_node = node;
                     goto exit_find_input_node;
                 }

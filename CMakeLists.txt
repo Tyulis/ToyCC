@@ -26,7 +26,7 @@ file(MAKE_DIRECTORY
      ${CMAKE_CURRENT_SOURCE_DIR}/gen/arch/x86_64)
 
 # Generate the parser
-set(PARSER_SRC ${CMAKE_CURRENT_SOURCE_DIR}/gen/parser)
+set(PARSER_SRC ${CMAKE_CURRENT_BINARY_DIR}/gen/parser)
 set(CLEXER_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/CLexer.g4)
 set(CPARSER_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/CParser.g4)
 antlr_target(CLexer ${CLEXER_G4}
@@ -41,18 +41,19 @@ antlr_target(CParser ${CPARSER_G4}
 
 # Add the CParserBase include in CParser.h
 add_custom_target(CParserDependencies
-                  COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/CParserDependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/gen/parser/CParser.h
+                  COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/CParserDependencies.py ${CMAKE_CURRENT_BINARY_DIR}/gen/parser/CParser.h
                   DEPENDS ${ANTLR_CParser_CXX_OUTPUTS}
                   COMMENT "Adding the CParserBase.h include in CParser.h")
 
 # Generate the translation model
 add_custom_target(TranslationModel
-                  COMMAND python3 scripts/execmodel-x86_64.py
+                  COMMAND python3 scripts/execmodel-x86_64.py ${CMAKE_CURRENT_BINARY_DIR}
                   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                   COMMENT "Generate the translation model")
 
 # Copy the prologues
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
+file(GLOB_RECURSE GENERATED_EXECMODEL_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/gen/execmodel/**/*.cpp)
 
 # Compile the app
 add_executable(${PROJECT_NAME}
@@ -68,6 +69,7 @@ add_executable(${PROJECT_NAME}
 	src/arch/codegen.cpp
 	src/arch/datamodel.cpp
 	src/arch/x86_64/allocation.cpp
+	src/arch/x86_64/assembly.cpp
 	src/arch/x86_64/block.cpp
 	src/arch/x86_64/datamodel.cpp
 	src/arch/x86_64/execmodel.cpp
@@ -111,13 +113,15 @@ add_executable(${PROJECT_NAME}
 	src/util/tempfile.cpp
 
 	${ANTLR_CLexer_CXX_OUTPUTS}
-	${ANTLR_CParser_CXX_OUTPUTS})
+	${ANTLR_CParser_CXX_OUTPUTS}
+
+	${GENERATED_EXECMODEL_SOURCES})
 
 add_dependencies(${PROJECT_NAME} CParserDependencies)
 add_dependencies(${PROJECT_NAME} TranslationModel)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-	./
+	${CMAKE_CURRENT_BINARY_DIR}
 	src/
 	lib/subprocess/src/cpp
 	${Boost_INCLUDE_DIRS}
