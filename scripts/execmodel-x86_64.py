@@ -3,6 +3,7 @@ import sys
 sys.path.append(os.path.join("lib", "opcodes-x86_64"))
 
 import json
+import jsonc
 import pprint
 import argparse
 from pathlib import Path
@@ -37,8 +38,8 @@ if __name__ == "__main__":
     instruction_list = read_instruction_set(Path("lib") / "opcodes-x86_64" / "opcodes" / "x86_64.xml")
     instruction_set = {instruction.name: preprocess_instruction(instruction) for instruction in instruction_list}
 
-    with open(Path("execmodel") / "x86_64.json") as f:
-        translation_model = TranslationModel(json.load(f), instruction_set)
+    with open(Path("execmodel") / "x86_64.jsonc") as f:
+        translation_model = TranslationModel(jsonc.load(f), instruction_set)
 
     output_dir = gen_dir / "gen" / "execmodel" / "x86_64"
     if not os.path.exists(output_dir):

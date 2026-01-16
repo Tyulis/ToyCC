@@ -11,11 +11,12 @@
         "int"          : {"type": "INTEGER"},
         "bool"         : {"type": "BOOL"},
         "tempbool"     : {"type": "BOOL", "storage": "INTERMEDIATE"},
-        "r"            : {"location": ["a", "b", "c", "d", "si", "di", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]},
+        "r"            : {"location": ["a", "b", "c", "d", "si", "di", "bp", "sp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]},
+        "rd"           : {"location": ["a", "b", "c", "d", "si", "di",             "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]},
         "m"            : {"union": [{"category": "dereference"}, {"location": ["stack", "memory"]}]},
         "rm"           : {"anyof": ["r", "m"]},
+        "rdm"          : {"anyof": ["rd", "m"]},
         "label"        : {"category": "label"},
-        "@"            : true,
 
         "1"            : {"category": "constant", "type": "INTEGER", "value": 1},
         "3"            : {"category": "constant", "type": "INTEGER", "value": 3},
@@ -38,6 +39,10 @@
         "r16"          : {"anyof": "r", "size": 2},
         "r32"          : {"anyof": "r", "size": 4},
         "r64"          : {"anyof": "r", "size": 8},
+        "rd8"          : {"anyof": "rd", "size": 1},
+        "rd16"         : {"anyof": "rd", "size": 2},
+        "rd32"         : {"anyof": "rd", "size": 4},
+        "rd64"         : {"anyof": "rd", "size": 8},
         "mm"           : false,
         "xmm"          : false,
         "xmm{k}"       : false,
@@ -142,26 +147,46 @@
     },
 
     "translations": [
-        {"ir": {"tag": "ADD", "left": "rm",  "right": "1" }, "target": {"instruction": "INC", "input": ["left"]}},
-        {"ir": {"tag": "ADD", "left": "1",   "right": "rm"}, "target": {"instruction": "INC", "input": ["right"]}},
-        {"ir": {"tag": "ADD", "left": "rm",  "right": "-1"}, "target": {"instruction": "DEC", "input": ["left"]}},
-        {"ir": {"tag": "ADD", "left": "-1",  "right": "rm"}, "target": {"instruction": "DEC", "input": ["right"]}},
+        // -------- ADD
+        {"ir": {"tag": "ADD", "left": "rdm",  "right": "1" },  "target": {"instruction": "INC", "input": ["left"]}},
+        {"ir": {"tag": "ADD", "left": "1",    "right": "rdm"}, "target": {"instruction": "INC", "input": ["right"]}},
+        {"ir": {"tag": "ADD", "left": "rdm",  "right": "-1"},  "target": {"instruction": "DEC", "input": ["left"]}},
+        {"ir": {"tag": "ADD", "left": "-1",   "right": "rdm"}, "target": {"instruction": "DEC", "input": ["right"]}},
         {"ir": {"tag": "ADD"},                               "target": {"instruction": "ADD"}},
 
-        {"ir": {"tag": "SUB", "left": "rm",  "right":  "1"}, "target": {"instruction": "DEC", "input": ["left"]}},
-        {"ir": {"tag": "SUB", "left": "rm",  "right": "-1"}, "target": {"instruction": "INC", "input": ["left"]}},
-        {"ir": {"tag": "SUB"},                               "target": {"instruction": "SUB"}},
+        // -------- SUB
+        {"ir": {"tag": "SUB", "left": "rdm",  "right":  "1"}, "target": {"instruction": "DEC", "input": ["left"]}},
+        {"ir": {"tag": "SUB", "left": "rdm",  "right": "-1"}, "target": {"instruction": "INC", "input": ["left"]}},
+        {"ir": {"tag": "SUB"},                                "target": {"instruction": "SUB"}},
 
+        // -------- COPY
         {"ir": {"tag": "COPY"},                              "target": {"instruction": "MOV"}},
 
+        // -------- Unconditional JUMP
         {"ir": {"tag": "JUMP", "target": "label"},           "target": {"instruction": "JMP"}},
 
+        // -------- JUMP_IF_TRUE
         {"ir"    : [{"tag": "EQ",           "left": "int", "right": "int", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
                     {"instruction": "JE",   "input": ["$1.target"]}]},
 
-        {"ir": {"tag": "RETURN_VAL", "value": "a"}, "target": {"instruction": "RET", "input": []}},
-        {"ir": {"tag": "RETURN"},                   "target": {"instruction": "RET"}}
+        // -------- RETURN_VAL
+        {"ir":       {"tag": "RETURN_VAL", "value": "constint"},
+         "allocate": {"return_register": {"location": "a"}, "saved_stack": {"location": "bp", "size": 8}},
+         "target":  [{"instruction": "MOV", "input": ["value"], "output": "$return_register"},
+                     {"instruction": "POP", "output": "$saved_stack"},
+                     {"instruction": "RET", "input": []}]},
+
+        {"ir":       {"tag": "RETURN_VAL", "value": "a"},
+         "allocate": {"saved_stack": {"location": "bp", "size": 8}},
+         "target":  [{"instruction": "POP", "output": "$saved_stack"},
+                     {"instruction": "RET", "input": []}]},
+
+        // -------- RETURN
+        {"ir":       {"tag": "RETURN"},
+         "allocate": {"saved_stack": {"location": "bp", "size": 8}},
+         "target":  [{"instruction": "POP", "output": "$saved_stack"},
+                     {"instruction": "RET", "input": []}]},
     ]
 }
