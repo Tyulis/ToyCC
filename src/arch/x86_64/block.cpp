@@ -3,9 +3,10 @@
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/execmodel.h"
 #include "gen/execmodel/x86_64/group_matcher.h"
-#include "gen/execmodel/x86_64/transfer_matcher.h"
 #include "gen/execmodel/x86_64/translation_matcher.h"
 #include "gen/execmodel/x86_64/emission.h"
+#include "gen/execmodel/x86_64/transfer_matcher.h"
+#include "gen/execmodel/x86_64/transfer_emission.h"
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, const std::unordered_set<std::shared_ptr<ir::Declaration>>&) {
@@ -35,6 +36,7 @@ namespace toycc::arch::x86_64 {
 
         toycc::execmodel::x86_64::emit_code(frame, selected_match);
         clear_processed_statements(graph, selected_match.group_match);
+        frame.flush_intermediates();
     }
 
     std::vector<GroupMatch> CodeGenerator::find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
@@ -101,14 +103,16 @@ namespace toycc::arch::x86_64 {
                     continue;
 
                 if (!input_match.location.has_value())
-                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Transfers without location hints are not implemented");
+                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Transfers without location hints are not implemented").add_note(DiagnosticLevel::NOTE, dump(match));
+                if (!input_match.free)
+                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Transfers to occupied locations are not implemented").add_note(DiagnosticLevel::NOTE, dump(match));
 
                 ir::Operand& input = statement.inputs[input_index];
                 transfer(frame, input, input_match.location.value());
             }
 
-            if (statement_match.output.has_value())
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Output operand transfers are not implemented");
+            if (statement_match.output.has_value() && statement_match.output->match == OperandMatch::REQUIRES_TRANSFER)
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Output operand transfers are not implemented").add_note(DiagnosticLevel::NOTE, dump(match));
         }
 
         for (const auto& [allocation_index, allocation_match] : std::ranges::enumerate_view(match.allocations)) {
@@ -119,9 +123,15 @@ namespace toycc::arch::x86_64 {
     }
 
     void CodeGenerator::transfer(StackFrame& frame, ir::Operand& operand, Location destination) {
-        std::optional<toycc::execmodel::x86_64::TransferTag> transfer = toycc::execmodel::x86_64::match_transfers(frame, operand, destination);
-        if (!transfer.has_value())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No transfer match for operand {}", operand.ir_code());
+        if (frame.locate(operand).empty())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Attempted a transfer on operand {} that has no location", operand.ir_code()), operand.location)
+                   .add_note(DiagnosticLevel::NOTE, frame.dump());
+
+        std::optional<TransferMatch> match = toycc::execmodel::x86_64::match_transfers(frame, operand, destination);
+        if (!match.has_value())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("No transfer match for operand {}", operand.ir_code()), operand.location)
+                   .add_note(DiagnosticLevel::NOTE, frame.dump());
+        toycc::execmodel::x86_64::emit_transfer(frame, operand, destination, match.value());
     }
 
     void CodeGenerator::clear_processed_statements(ir::DependencyGraph& graph, const GroupMatch& match) {

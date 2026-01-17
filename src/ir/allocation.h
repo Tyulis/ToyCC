@@ -67,11 +67,22 @@ namespace toycc::ir {
             else                             return it->declaration;
         }
 
-        // Remove all existing locations of this variable and move it elsewhere
+        // Remove all existing locations of this variable and move it elsewhere. If there is something at `location`, it is overwritten
         void move(std::shared_ptr<Declaration> declaration, Location location) {
             auto& declaration_index = allocations.template get<declaration_tag>();
+            auto& location_index = allocations.template get<location_tag>();
+
             declaration_index.erase(declaration);
+            location_index.erase(location);
+
             declaration_index.emplace(declaration, location);
+        }
+
+        // Add another location for a variable. If there is already something at `location`, it is overwritten
+        void copy(std::shared_ptr<Declaration> declaration, Location location) {
+            auto& location_index = allocations.template get<location_tag>();
+            location_index.erase(location);
+            location_index.emplace(declaration, location);
         }
     };
 }

@@ -558,13 +558,14 @@ def generate_transfer_matcher_function(translation_model: TranslationModel, tran
     if arg_usage["graph"] or arg_usage["group_match"]:
         raise TranslationModelError("Can't use the dependency graph or group match in a transfer matcher'")
 
-    destination_expression = f"{set_name}.contains(destination)"
-
     frame_arg   = " frame"   if arg_usage["frame"]   else ""
     operand_arg = " operand" if arg_usage["operand"] else ""
 
-    source_content += f"template<> bool match_transfer<TransferTag::{transfer.tag}> (const StackFrame&{frame_arg}, const ir::Operand&{operand_arg}, Location destination) {{\n"
-    source_content += f"    return ({expression}).match == OperandMatch::OK && ({destination_expression});\n"
+    source_content += f"template<> std::optional<TransferMatch> match_transfer<TransferTag::{transfer.tag}> (const StackFrame&{frame_arg}, const ir::Operand&{operand_arg}, Location destination) {{\n"
+    source_content += f"    if (!{set_name}.contains(destination))  return {{}};\n"
+    source_content += f"    OperandMatch match = {expression};\n"
+    source_content += f"    if (match.match == OperandMatch::OK)  return TransferMatch {{.transfer = TransferTag::{transfer.tag}, .source_location = match.location}};\n"
+    source_content += f"    else                                  return {{}};\n"
     source_content +=  "}\n"
     return source_content
 
@@ -572,26 +573,61 @@ def generate_transfer_matcher(translation_model: TranslationModel, output_dir: P
     header_content = "using namespace toycc::arch::x86_64;\n\n"
     source_content = "using namespace toycc::arch::x86_64;\n\n"
 
-    prototype = "std::optional<TransferTag> match_transfers(const StackFrame& frame, const ir::Operand& operand, Location destination)"
+    prototype = "std::optional<TransferMatch> match_transfers(const StackFrame& frame, const ir::Operand& operand, Location destination)"
     header_content += f"{prototype};\n"
 
     source_content += "template <TransferTag tag>\n"
-    source_content += "bool match_transfer(const StackFrame& frame, const ir::Operand& operand, Location destination);\n\n"
+    source_content += "std::optional<TransferMatch> match_transfer(const StackFrame& frame, const ir::Operand& operand, Location destination);\n\n"
 
-    dispatch_code = ""
+    dispatch_code = "std::optional<TransferMatch> match = {};\n"
     for transfer in translation_model.transfers:
         function_source = generate_transfer_matcher_function(translation_model, transfer)
         source_content += function_source
-        dispatch_code += f"    if (match_transfer<TransferTag::{transfer.tag}> (frame, operand, destination))  return TransferTag::{transfer.tag};\n"
+        dispatch_code += f"    if ((match = match_transfer<TransferTag::{transfer.tag}> (frame, operand, destination)).has_value())  return match;\n"
 
     source_content += f"\n{prototype} {{\n"
     source_content +=       dispatch_code
     source_content +=  "    return {};\n"
     source_content +=  "}\n"
 
-    write_header(header_content, output_dir / "transfer_matcher.h", ["ir/declaration.h", "arch/x86_64/allocation.h", output_dir / "location.h", output_dir / "transfer_tag.h"])
+    write_header(header_content, output_dir / "transfer_matcher.h", ["ir/declaration.h", "arch/x86_64/execmodel.h", "arch/x86_64/allocation.h", output_dir / "location.h"])
     write_source(source_content, output_dir / "transfer_matcher.cpp", ["arch/x86_64/constraints.hpp", output_dir / "transfer_matcher.h"], ["unordered_set"])
 
+
+# -------- Transfer emission
+def generate_transfer_emission(translation_model: TranslationModel, output_dir: Path):
+    header_content = "using namespace toycc::arch::x86_64;\n\n"
+    source_content = "using namespace toycc::arch::x86_64;\n\n"
+
+    prototype = "void emit_transfer(StackFrame& frame, ir::Operand& operand, Location destination, const TransferMatch& match)"
+    header_content += f"{prototype};\n"
+
+    source_content += f"\n{prototype} {{\n"
+    source_content += "    std::string mnemonic;"
+
+    source_content += "    switch (match.transfer) {\n"
+    for transfer in translation_model.transfers:
+        source_content += f'        case TransferTag::{transfer.tag}:  mnemonic = "{transfer.form.gas_name}";  break;\n'
+    source_content +=  '        default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown transfer tag");\n'
+    source_content += "    }\n"
+
+
+    source_content += '    Location source = match.source_location.value_or(*frame.locate(operand).begin());\n'
+    source_content += '    ir::Operand source_operand = operand;\n'
+    source_content += '    if (operand.is_constant() || operand.is_dereference()) {\n'
+    source_content += '        std::shared_ptr<ir::Declaration> temporary = frame.declare_intermediate(operand.type(), operand.location);\n'
+    source_content += '        frame.copy(temporary, destination);\n'
+    source_content += '        operand = temporary;\n'
+    source_content += '    } else if (operand.is_label()) {\n'
+    source_content += '        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Transferring labels is not supported", operand.location);\n'
+    source_content += '    } else if (operand.is_variable()) {\n'
+    source_content += '        frame.copy(operand.declaration(), destination);\n'
+    source_content += '    } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);\n'
+    source_content += '    frame.output.statement(std::format("{} {}, {}", mnemonic, emit_operand(frame, source_operand, source), emit_operand(frame, operand, destination)));\n'
+    source_content += '}\n'
+
+    write_header(header_content, output_dir / "transfer_emission.h", ["ir/declaration.h", "arch/x86_64/execmodel.h", "arch/x86_64/allocation.h", output_dir / "location.h"])
+    write_source(source_content, output_dir / "transfer_emission.cpp", ["diagnostic.h", "arch/x86_64/assembly.h", output_dir / "transfer_emission.h"])
 
 # -------- Entry point
 def generate_execmodel(translation_model: TranslationModel, output_dir: Path) -> set[Path]:
@@ -602,4 +638,5 @@ def generate_execmodel(translation_model: TranslationModel, output_dir: Path) ->
     generate_emission(translation_model, output_dir)
     generate_transfer_tags(translation_model, output_dir)
     generate_transfer_matcher(translation_model, output_dir)
+    generate_transfer_emission(translation_model, output_dir)
     return generated_files

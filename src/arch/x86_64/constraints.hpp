@@ -13,6 +13,10 @@ namespace toycc::arch::x86_64 {
             return left;
         else if (right.match == OperandMatch::KO)
             return right;
+        else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value() && left.free)
+            return left;
+        else if (right.match == OperandMatch::REQUIRES_TRANSFER && right.location.has_value() && right.free)
+            return right;
         else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value())
             return left;
         else if (right.match == OperandMatch::REQUIRES_TRANSFER && right.location.has_value())
@@ -37,6 +41,10 @@ namespace toycc::arch::x86_64 {
         else if (left.match == OperandMatch::OK)
             return left;
         else if (right.match == OperandMatch::OK)
+            return right;
+        else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value() && left.free)
+            return left;
+        else if (right.match == OperandMatch::REQUIRES_TRANSFER && right.location.has_value() && right.free)
             return right;
         else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value())
             return left;
@@ -74,10 +82,8 @@ namespace toycc::arch::x86_64 {
         const std::unordered_set<Location> locations = frame.locate(operand);
         if (locations.contains(expected_location))
             return {OperandMatch::OK, expected_location};
-        else if (frame.content(expected_location).get() == nullptr)
-            return {OperandMatch::REQUIRES_TRANSFER, expected_location};
         else
-            return OperandMatch::REQUIRES_TRANSFER;
+            return {OperandMatch::REQUIRES_TRANSFER, expected_location, frame.content(expected_location).get() == nullptr};
     }
 
     inline OperandMatch check_size(const ir::Operand& operand, size_t expected_size) {

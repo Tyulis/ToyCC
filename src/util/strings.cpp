@@ -224,7 +224,7 @@ namespace toycc {
         std::stringstream indented;
         std::vector<std::string> lines = split(str, "\n");
         for (unsigned line_index = 0; line_index < lines.size(); line_index++) {
-            if (indent_first_line || line_index > 0)
+            if ((indent_first_line || line_index > 0) && !lines[line_index].empty())
                 indented << prefix;
             indented << lines[line_index];
             if (line_index < lines.size() - 1)

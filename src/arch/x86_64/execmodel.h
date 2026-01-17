@@ -7,10 +7,12 @@
 
 #include "ir/flow.h"
 #include "gen/execmodel/x86_64/location.h"
+#include "gen/execmodel/x86_64/transfer_tag.h"
 #include "gen/execmodel/x86_64/translation_tag.h"
 
 namespace toycc::arch::x86_64 {
     using toycc::execmodel::x86_64::Location;
+    using toycc::execmodel::x86_64::TransferTag;
     using toycc::execmodel::x86_64::TranslationTag;
     using toycc::execmodel::x86_64::TranslationGroupTag;
 
@@ -34,11 +36,12 @@ namespace toycc::arch::x86_64 {
 
         MatchResult match;
         std::optional<Location> location;  // OK -> location to use ; REQUIRES_TRANSFER -> where it should go
+        bool free = false;  // Whether the REQUIRES_TRANSFER location is currently free
 
         inline OperandMatch() = default;
         inline OperandMatch(MatchResult result) : match(result) {}
-        inline OperandMatch(MatchResult result, Location location) : match(result), location(location) {}
-        inline OperandMatch(MatchResult result, std::optional<Location> location) : match(result), location(location) {}
+        inline OperandMatch(MatchResult result, Location location, bool free = true) : match(result), location(location), free(free) {}
+        inline OperandMatch(MatchResult result, std::optional<Location> location, bool free = true) : match(result), location(location), free(free) {}
     };
 
     struct StatementMatch {
@@ -113,13 +116,20 @@ namespace toycc::arch::x86_64 {
         }
     };
 
+    struct TransferMatch {
+        TransferTag transfer;
+        std::optional<Location> source_location;  // Value -> source location to use ; Empty -> any source location
+    };
+
     std::ostream& operator<< (std::ostream& stream, const GroupMatch& match);
     std::ostream& operator<< (std::ostream& stream, const OperandMatch& match);
+    std::ostream& operator<< (std::ostream& stream, const TransferMatch& match);
     std::ostream& operator<< (std::ostream& stream, const StatementMatch& match);
     std::ostream& operator<< (std::ostream& stream, const TranslationMatch& match);
 
     std::string dump(const GroupMatch& match);
     std::string dump(const OperandMatch& match);
+    std::string dump(const TransferMatch& match);
     std::string dump(const StatementMatch& match);
     std::string dump(const TranslationMatch& match);
 

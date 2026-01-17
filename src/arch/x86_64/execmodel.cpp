@@ -138,6 +138,13 @@ namespace toycc::arch::x86_64 {
         return stream;
     }
 
+    std::ostream& operator<< (std::ostream& stream, const TransferMatch& match) {
+        stream << match.transfer;
+        if (match.source_location.has_value())
+            stream << " from " << match.source_location.value();
+        return stream;
+    }
+
     std::ostream& operator<< (std::ostream& stream, const StatementMatch& match) {
         stream << "{";
 
@@ -179,6 +186,12 @@ namespace toycc::arch::x86_64 {
     }
 
     std::string dump(const OperandMatch& match) {
+        std::stringstream stream;
+        stream << match;
+        return stream.str();
+    }
+
+    std::string dump(const TransferMatch& match) {
         std::stringstream stream;
         stream << match;
         return stream.str();
