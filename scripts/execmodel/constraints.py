@@ -58,25 +58,54 @@ class Constraint:
         else:
             return {CONSTRAINT_TYPE_NAME[self.type]: self.parameter}
 
+class ConstraintContext:
+    def __init__(self, operand_types: dict[str, Constraint], category_locations: dict[str, set[str]]):
+        self.operand_types      : dict[str, Constraint] = operand_types
+        self.category_locations : dict[str, set[str]]   = category_locations
+
+    def get_type(self, name: str) -> Constraint:
+        if name in self.operand_types:
+            return self.operand_types[name]
+        else:
+            raise TranslationModelError(f"New constraints can only reference operand types defined earlier : `{name}` was not defined previously")
+
+    def make_category_constraint(self, category: str) -> Constraint:
+        if category not in self.category_locations:
+            raise TranslationModelError(f"Invalid value category `{category}`")
+
+        disjunction = set()
+        for location in self.category_locations[category]:
+            disjunction.add(Constraint(ConstraintType.LOCATION, location))
+
+        return Constraint(ConstraintType.CONJUNCTION, frozenset({
+            Constraint(ConstraintType.CATEGORY, category),
+            Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
+        }))
+
+
 CONSTRAINT_TRUE  = Constraint(ConstraintType.CONSTANT, True)
 CONSTRAINT_FALSE = Constraint(ConstraintType.CONSTANT, False)
 
-def parse_constraint_union(expressions: list[str], previous_types: dict[str, OperandType]) -> Constraint:
-    disjunction = {parse_constraint_expression(expression, previous_types) for expression in expressions}
+def parse_constraint_union(expressions: list[str], context: ConstraintContext) -> Constraint:
+    disjunction = {parse_constraint_expression(expression, context) for expression in expressions}
     return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
 
-def parse_constraint_category(categories: str|list[str], previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_category(categories: str|list[str], context: ConstraintContext) -> Constraint:
     if isinstance(categories, str):
-        return Constraint(ConstraintType.CATEGORY, categories)
+        return context.make_category_constraint(categories)
+
+    disjunction = set()
+    for category in categories:
+        disjunction.add(context.make_category_constraint(category))
     return Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.CATEGORY, category) for category in categories))
 
-def parse_constraint_type(types: str|list[str], previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_type(types: str|list[str], context: ConstraintContext) -> Constraint:
     if isinstance(types, str):
         return Constraint(ConstraintType.TYPE, types)
-    return Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.TYPES, type) for type in types))
+    return Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.TYPE, type) for type in types))
 
-def parse_constraint_value(value, previous_types: dict[str, OperandType]) -> Constraint:
-    conjunction = {Constraint(ConstraintType.CATEGORY, "constant"), Constraint(ConstraintType.VALUE_EQ, value)}
+def parse_constraint_value(value, context: ConstraintContext) -> Constraint:
+    conjunction = {context.make_category_constraint("constant"), Constraint(ConstraintType.VALUE_EQ, value)}
     if isinstance(value, int):
         conjunction.add(Constraint(ConstraintType.TYPE, "INTEGER"))
     elif isinstance(value, float):
@@ -85,44 +114,34 @@ def parse_constraint_value(value, previous_types: dict[str, OperandType]) -> Con
         raise TranslationModelError(f"Invalid type for constant value `{value}`")
     return Constraint(ConstraintType.CONJUNCTION, frozenset(conjunction))
 
-def parse_constraint_location(locations, previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_location(locations, context: ConstraintContext) -> Constraint:
     if isinstance(locations, str):
         return Constraint(ConstraintType.LOCATION, locations)
 
     disjunction = {Constraint(ConstraintType.LOCATION, location) for location in locations}
     return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
 
-def parse_constraint_size(size: int, previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_size(size: int, context: ConstraintContext) -> Constraint:
     return Constraint(ConstraintType.SIZE, size)
 
-def parse_constraint_value_bits(bits: int, previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_value_bits(bits: int, context: ConstraintContext) -> Constraint:
     min_signed_value = -2**(bits-1)
     max_unsigned_value = 2**bits - 1
-    conjunction = {Constraint(ConstraintType.CATEGORY, "constant"), Constraint(ConstraintType.TYPE, "INTEGER"),
+    conjunction = {context.make_category_constraint("constant"), Constraint(ConstraintType.TYPE, "INTEGER"),
                    Constraint(ConstraintType.VALUE_GE, min_signed_value), Constraint(ConstraintType.VALUE_LE, max_unsigned_value)}
     return Constraint(ConstraintType.CONJUNCTION, frozenset(conjunction))
 
-def parse_constraint_anyof(type_names: list[str], previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_anyof(type_names: list[str], context: ConstraintContext) -> Constraint:
     if isinstance(type_names, str):
-        if type_names not in previous_types:
-            raise TranslationModelError(f"`anyof` can only reference operand types defined earlier : `{name}` was not defined previously")
-        return previous_types[type_names]
+        return context.get_type(type_names)
+    return Constraint(ConstraintType.DISJUNCTION, frozenset(context.get_type(name) for name in type_names))
 
-    disjunction = set()
-    for name in type_names:
-        if name not in previous_types:
-            raise TranslationModelError(f"`anyof` can only reference operand types defined earlier : `{name}` was not defined previously")
-        disjunction.add(previous_types[name])
-    return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
-
-def parse_constraint_storage(storages: str|list[str], previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_storage(storages: str|list[str], context: ConstraintContext) -> Constraint:
     if isinstance(storages, str):
         return Constraint(ConstraintType.STORAGE, storages)
+    return Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.STORAGE, storage) for storage in storages))
 
-    disjunction = {Constraint(ConstraintType.STORAGE, storage) for storage in storages}
-    return Constraint(ConstraintType.DISJUNCTION, frozenset(disjunction))
-
-def parse_constraint_expression(expression, previous_types: dict[str, OperandType]) -> Constraint:
+def parse_constraint_expression(expression, context: ConstraintContext) -> Constraint:
     if isinstance(expression, bool):
         return Constraint(ConstraintType.CONSTANT, expression)
 
@@ -137,7 +156,7 @@ def parse_constraint_expression(expression, previous_types: dict[str, OperandTyp
                          "value_bits": parse_constraint_value_bits,
                          "anyof"     : parse_constraint_anyof,
                          "storage"   : parse_constraint_storage,
-        }[operator](value, previous_types)
+        }[operator](value, context)
         conjunction.add(subexpression)
 
     return Constraint(ConstraintType.CONJUNCTION, frozenset(conjunction))
@@ -333,12 +352,10 @@ def to_simplified_constraint(constraint: Constraint) -> Constraint:
 
     simplified_conjunctions = {simplify_conjunction(conjunction) for conjunction in dnf.parameter}
     result = simplify_disjunction(Constraint(ConstraintType.DISJUNCTION, frozenset(simplified_conjunctions)))
-    #if is_true(result):
-        #print(constraint, "->", result)
     return result
 
-def load_constraint_expression(description, previous_types: dict[str, OperandType]) -> Constraint:
-    constraint = parse_constraint_expression(description, previous_types)
+def load_constraint_expression(description, context: ConstraintContext) -> Constraint:
+    constraint = parse_constraint_expression(description, context)
     return to_simplified_constraint(constraint)
 
 def denormalize(constraint: Constraint) -> Constraint:
@@ -387,3 +404,42 @@ def is_true(constraint: Constraint) -> bool:
         return any(is_true(sub) for sub in constraint.parameter)
     else:
         return constraint == CONSTRAINT_TRUE
+
+# Get the acceptable locations for a constraint in DNF
+def constraint_locations(constraint: Constraint, all_locations: set[str]) -> set[str]:
+    if constraint.type == ConstraintType.DISJUNCTION:
+        locations = set()
+        for sub in constraint.parameter:
+            locations |= constraint_locations(sub, all_locations)
+        return locations
+    elif constraint.type == ConstraintType.CONJUNCTION:
+        locations = all_locations.copy()
+        for sub in constraint.parameter:
+            locations &= constraint_locations(sub, all_locations)
+        return locations
+    elif constraint.type == ConstraintType.LOCATION:
+        return {constraint.parameter}
+    else:
+        return all_locations
+
+# Get the acceptable sizes for a constraint in DNF
+def constraint_sizes(constraint: Constraint) -> set[int]|None:
+    if constraint.type == ConstraintType.DISJUNCTION:
+        sizes = set()
+        for sub in constraint.parameter:
+            sizes |= constraint_sizes(sub)
+        return sizes
+    elif constraint.type == ConstraintType.CONJUNCTION:
+        sizes = None
+        for sub in constraint.parameter:
+            sub_sizes = constraint_sizes(sub)
+            if sub_sizes is not None:
+                if sizes is None:
+                    sizes = sub_sizes
+                else:
+                    sizes &= sub_sizes
+        return sizes
+    elif constraint.type == ConstraintType.SIZE:
+        return {constraint.parameter}
+    else:
+        return None

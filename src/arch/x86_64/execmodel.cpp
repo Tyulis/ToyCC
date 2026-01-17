@@ -166,6 +166,8 @@ namespace toycc::arch::x86_64 {
         stream << indent(dump(match.group_match), true, "    ") << "\n";
         for (const StatementMatch& statement : match.statements)
             stream << indent(dump(statement), true, "    ") << "\n";
+        for (const OperandMatch& allocation : match.allocations)
+            stream << allocation << ", ";
         stream << "}";
         return stream;
     }

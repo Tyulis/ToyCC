@@ -38,6 +38,7 @@ namespace toycc::arch::x86_64 {
         inline OperandMatch() = default;
         inline OperandMatch(MatchResult result) : match(result) {}
         inline OperandMatch(MatchResult result, Location location) : match(result), location(location) {}
+        inline OperandMatch(MatchResult result, std::optional<Location> location) : match(result), location(location) {}
     };
 
     struct StatementMatch {
@@ -77,10 +78,14 @@ namespace toycc::arch::x86_64 {
         TranslationTag translation;
         GroupMatch group_match;
         std::vector<StatementMatch> statements;
+        std::vector<OperandMatch> allocations;
 
         inline bool matches() const {
             for (const StatementMatch& statement : statements)
                 if (!statement.matches())
+                    return false;
+            for (const OperandMatch& allocation : allocations)
+                if (allocation.match != OperandMatch::OK)
                     return false;
             return true;
         }
@@ -88,6 +93,7 @@ namespace toycc::arch::x86_64 {
         // Return the number of transfers required to fix this match, or empty optional if it's not fixable
         inline std::optional<size_t> nof_transfers() const {
             size_t result = 0;
+
             for (const StatementMatch& statement : statements) {
                 std::optional<size_t> nof_transfers_statement = statement.nof_transfers();
                 if (nof_transfers_statement.has_value())
@@ -95,6 +101,14 @@ namespace toycc::arch::x86_64 {
                 else
                     return {};
             }
+
+            for (const OperandMatch& allocation : allocations) {
+                if (allocation.match == OperandMatch::KO)
+                    return {};
+                else if (allocation.match == OperandMatch::REQUIRES_TRANSFER)
+                    result += 1;
+            }
+
             return result;
         }
     };

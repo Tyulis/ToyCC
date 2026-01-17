@@ -46,6 +46,7 @@ class TranslationSpec:
         self.ir = ir
         self.target = target
         self.allocations = allocations
+        self.allocation_order = tuple(allocations.keys())
         self.subgraph = subgraph
 
 class TranslationGroup:
@@ -150,17 +151,24 @@ class TranslationGroup:
 class TranslationModel:
     def __init__(self, description: dict[str, object], instruction_set: dict[str, Instruction]):
         self.locations = description["locations"]
+        self.category_locations = {name: set(locations) for name, locations in description["category_locations"].items()}
 
         self.operand_types = {}
         for name, expression in description["operand_types"].items():
-            self.operand_types[name] = load_constraint_expression(expression, self.operand_types)
+            self.operand_types[name] = load_constraint_expression(expression, self.constraint_context())
 
-        self.no_reuse  = load_constraint_expression(description["no_reuse"], self.operand_types)
-        self.no_output = load_constraint_expression(description["no_output"], self.operand_types)
+        self.no_reuse  = load_constraint_expression(description["no_reuse"], self.constraint_context())
+        self.no_output = load_constraint_expression(description["no_output"], self.constraint_context())
+
+        allowed_allocations = set(self.locations) - set(description["no_allocation"])
+        self.allocation_constraint = Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.LOCATION, location) for location in allowed_allocations))
 
         self.ir = {tag: IRSpec(tag, spec) for tag, spec in description["ir"].items()}
         self.transfers = self.parse_transfers(description["transfers"], instruction_set)
         self.translations = self.parse_translations(description["translations"], instruction_set)
+
+    def constraint_context(self) -> ConstraintContext:
+        return ConstraintContext(self.operand_types, self.category_locations)
 
     def get_type(self, name: str) -> Constraint:
         if name in self.operand_types:
@@ -241,7 +249,6 @@ class TranslationModel:
         if "allocate" in description:
             for name, constraint in description["allocate"].items():
                 allocations[f"${name}"] = load_constraint_expression(constraint, self.operand_types)
-        print(allocations)
 
         target_forms = []
         for target in description["target"]:
@@ -374,14 +381,9 @@ class TranslationModel:
 
                 elif main_id in allocations:
                     base_constraint = allocations[main_id]
-                    conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type]}))
+                    conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type], self.allocation_constraint}))
                     allocations[main_id] = to_simplified_constraint(conjunction)
-
                     target_operands.append(("allocations", main_id))
-                    print(target_form, main_id)
-                    print(base_constraint)
-                    print(self.operand_types[operand.type])
-                    print(allocations[main_id])
 
                 if input_id is not None and output_id is not None:
                     if input_id in ir_operands:

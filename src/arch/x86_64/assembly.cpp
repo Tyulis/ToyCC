@@ -26,6 +26,54 @@ namespace toycc::arch::x86_64 {
         {Location::r15,  {{1, "%r15b"}, {2, "%r15w"}, {4, "%r15d"}, {8, "%r15"}}},
     };
 
+    // -------- Intermediate allocation overload
+    std::string emit_operand(Location location, size_t size) {
+        switch (location) {
+            case Location::constant:
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Constants should be handled elsewhere");
+
+            case Location::a:
+            case Location::b:
+            case Location::c:
+            case Location::d:
+            case Location::sp:
+            case Location::bp:
+            case Location::si:
+            case Location::di:
+            case Location::r8:
+            case Location::r9:
+            case Location::r10:
+            case Location::r11:
+            case Location::r12:
+            case Location::r13:
+            case Location::r14:
+            case Location::r15:
+            case Location::mm0:
+            case Location::mm1:
+            case Location::mm2:
+            case Location::mm3:
+            case Location::mm4:
+            case Location::mm5:
+            case Location::mm6:
+            case Location::mm7:
+            case Location::mm8:
+            case Location::mm9:
+            case Location::mm10:
+            case Location::mm11:
+            case Location::mm12:
+            case Location::mm13:
+            case Location::mm14:
+            case Location::mm15:
+                return REGISTER_NAMES.at(location).at(size);
+
+            case Location::stack:
+            case Location::memory:
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Intermediate allocations can't be in memory");
+        }
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown location");
+    }
+
+    // -------- IR operand overload
     static inline std::string location_code(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location location) {
         switch (location) {
             case Location::constant:

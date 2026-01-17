@@ -6,7 +6,7 @@
 
 namespace toycc::arch::x86_64 {
     // -------- StackFrame
-    StackFrame::StackFrame(const ir::Procedure& procedure) : procedure(procedure) {
+    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>() {
         auto& declaration_index = allocations.get<ir::declaration_tag>();
 
         size_t integer_parameter_index = 0;
@@ -29,9 +29,17 @@ namespace toycc::arch::x86_64 {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
     }
 
-    void StackFrame::insert_return() {
-        output.statement("popq %rbp");
-        output.statement("ret");
+    // If one is available, return a free location among the `locations`
+    std::optional<Location> StackFrame::allocate(const std::unordered_set<Location>& locations) const {
+        const auto& location_index = allocations.template get<ir::location_tag>();
+        for (Location location : locations) {
+            if (location == Location::constant || location == Location::memory || location == Location::stack)
+                continue;  // FIXME : For now, don't allocate additional space on the stack for intermediate allocations
+
+            if (location_index.find(location) != location_index.end())
+                return location;
+        }
+        return {};
     }
 
     std::string StackFrame::str() const {

@@ -269,7 +269,8 @@ def generate_operand_ref(statement_index: int, input_index: int|None) -> str:
 def generate_translation_matcher_function(translation: TranslationSpec, translation_model: TranslationModel) -> str:
     operand_conditions = []
     statements_code = ""
-    has_operands = False
+    uses_frame = False
+    uses_graph = False
     for statement_index, statement in enumerate(translation.ir):
         ir_spec = translation_model.ir[statement.tag]
         inputs = []
@@ -300,18 +301,47 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
             operand_list.append(operand_match)
 
         if len(inputs) > 0 or len(outputs) > 0:
-            has_operands = True
+            uses_frame = True
+            uses_graph = True
 
-        statements_code += "        StatementMatch {\n"
-        statements_code += "            .input = {" + ", ".join(inputs) + "},\n"
-        statements_code += "            .output = {" + ", ".join(outputs) + "},\n"
-        statements_code += "        },\n"
+        statements_code += "            StatementMatch {\n"
+        statements_code += "                .input = {" + ", ".join(inputs) + "},\n"
+        statements_code += "                .output = {" + ", ".join(outputs) + "},\n"
+        statements_code += "            },\n"
 
-    source_content =  f"template<> TranslationMatch match_translation<TranslationTag::{translation.tag}> "
-    source_content += f"(const StackFrame&{' frame' if has_operands else ''}, const ir::DependencyGraph&{' graph' if has_operands else ''}, const GroupMatch& group_match) {{\n"
+    allocation_set_code = ""
+    allocation_code = ""
+    allocation_match_code = ""
+    for index, name in enumerate(translation.allocation_order):
+        constraint = translation.allocations[name]
+        locations = constraint_locations(constraint, set(translation_model.locations))
+        locations_code = ", ".join(f"Location::{location}" for location in locations)
+
+        set_name = f"ALLOC_{translation.tag}_{name.strip('$')}_{index}_SET"
+        location_name = f"alloc_{name.strip('$')}_{index}_location"
+        allocation_set_code += f"static const std::unordered_set<Location> {set_name} = {{{locations_code}}};\n"
+        allocation_code     += f"    const std::optional<Location> {location_name} = frame.allocate({set_name});\n"
+        allocation_match_code += f"            OperandMatch {{({location_name}.has_value() ? OperandMatch::OK : OperandMatch::REQUIRES_TRANSFER), {location_name}}},\n"
+        uses_frame = True
+
+    frame_arg = " frame" if uses_frame else ""
+    graph_arg = " graph" if uses_graph else ""
+
+    source_content = ""
+    source_content += allocation_set_code
+    source_content += f"template<> TranslationMatch match_translation<TranslationTag::{translation.tag}> "
+    source_content += f"(const StackFrame&{frame_arg}, const ir::DependencyGraph&{graph_arg}, const GroupMatch& group_match) {{\n"
+    source_content +=       allocation_code
     source_content += f"    return {{.translation = TranslationTag::{translation.tag}, .group_match = group_match, .statements = {{\n"
-    source_content += statements_code
-    source_content +=  "    }};\n"
+    source_content +=               statements_code
+    source_content +=  "        },\n"
+    if allocation_match_code == "":
+        source_content += "        .allocations = {}"
+    else:
+        source_content += "        .allocations = {\n"
+        source_content +=              allocation_match_code
+        source_content += "        },\n"
+    source_content +=  "    };\n"
     source_content += "}\n\n"
     return "\n".join(operand_conditions) + "\n" + source_content
 
@@ -393,25 +423,34 @@ def generate_emission_translation(translation: Translation, translation_model: T
         operand_order = inputs + outputs
         for operand_index in operand_order:
             operand = target.form.operands[operand_index]
-            statement_index, operand_name = target.operands[operand_index]
-            ir_spec = translation_model.ir[translation.ir[statement_index].tag]
-
-            if operand.is_output:
-                output_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
-                output_location = f"*match.statements[{statement_index}].output->location"
-
-            if operand.is_input:
-                input_index = ir_spec.input.index(operand_name)
-                operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[{input_index}]"
-                operand_location = f"*match.statements[{statement_index}].input[{input_index}].location"
+            if target.operands[operand_index][0] == "allocations":
+                _, allocation_name = target.operands[operand_index]
+                allocation_index = translation.allocation_order.index(allocation_name)
+                operand_location = f"*match.allocations[{allocation_index}].location"
+                operand_sizes = constraint_sizes(translation.allocations[allocation_name])
+                if operand_sizes is None or len(operand_sizes) != 1:
+                    raise TranslationModelError(f"There must be exactly one valid size for an intermediate allocation, found {operand_sizes}")
+                operand_arguments.append(f"emit_operand({operand_location}, {operand_sizes.pop()})")
             else:
-                operand_ref = output_ref
-                operand_location = output_location
+                statement_index, operand_name = target.operands[operand_index]
+                ir_spec = translation_model.ir[translation.ir[statement_index].tag]
 
-            operand_arguments.append(f"emit_operand(frame, {operand_ref}, {operand_location})")
+                if operand.is_output:
+                    output_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
+                    output_location = f"*match.statements[{statement_index}].output->location"
 
-            if operand.is_output:
-                operand_moves += f"    move_operand(frame, {output_ref}, {operand_location});\n"
+                if operand.is_input:
+                    input_index = ir_spec.input.index(operand_name)
+                    operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[{input_index}]"
+                    operand_location = f"*match.statements[{statement_index}].input[{input_index}].location"
+                else:
+                    operand_ref = output_ref
+                    operand_location = output_location
+
+                operand_arguments.append(f"emit_operand(frame, {operand_ref}, {operand_location})")
+
+                if operand.is_output:
+                    operand_moves += f"    move_operand(frame, {output_ref}, {operand_location});\n"
 
         if len(operand_arguments) == 0:
             function_content += f'    frame.output.statement("{target.form.gas_name}");\n'

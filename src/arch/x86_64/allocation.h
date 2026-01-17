@@ -13,15 +13,13 @@ namespace toycc::arch::x86_64 {
     using Allocation = ir::Allocation<Location>;
 
     // Stack frame object that automatically generates its frame push and pop code
-    struct StackFrame : ir::StackFrame<Location> {
+    struct StackFrame : public ir::StackFrame<Location> {
         StackFrame(const ir::Procedure& procedure);
 
         std::unordered_set<Location> locate(const ir::Operand& operand) const;
-
-        void insert_return();
+        std::optional<Location> allocate(const std::unordered_set<Location>& locations) const;
         std::string str() const;
 
-        const ir::Procedure& procedure;
         CodeOutput output;
     };
 
