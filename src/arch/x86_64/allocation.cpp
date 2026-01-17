@@ -76,8 +76,7 @@ namespace toycc::arch::x86_64 {
 
     std::string StackFrame::dump() const {
         std::stringstream result;
-        result << "Frame " << name << " {\n";
-        result << "    code = {\n";
+        result << "Frame " << name << " {code = {\n";
         result << indent(output.str(), true, "    ");
         result << "    }, allocations = {";
 

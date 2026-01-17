@@ -78,12 +78,24 @@ namespace toycc::arch::x86_64 {
         return (operand.type()->category == expected_category) ? OperandMatch::OK : OperandMatch::KO;
     }
 
-    inline OperandMatch check_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
+    inline OperandMatch check_in_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
         const std::unordered_set<Location> locations = frame.locate(operand);
+        if (locations.empty())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Input operand {} has no location", operand.ir_code()), operand.location)
+                   .add_note(DiagnosticLevel::NOTE, frame.dump());
+
         if (locations.contains(expected_location))
             return {OperandMatch::OK, expected_location};
         else
             return {OperandMatch::REQUIRES_TRANSFER, expected_location, frame.content(expected_location).get() == nullptr};
+    }
+
+    inline OperandMatch check_out_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
+        const std::unordered_set<Location> locations = frame.locate(operand);
+        if (locations.contains(expected_location) || frame.content(expected_location).get() == nullptr)
+            return {OperandMatch::OK, expected_location};
+        else
+            return {OperandMatch::REQUIRES_TRANSFER, expected_location, false};
     }
 
     inline OperandMatch check_size(const ir::Operand& operand, size_t expected_size) {

@@ -47,6 +47,7 @@ namespace toycc::ir {
     };
 
     using DependencyGraph = Graph<DependencyNode, Dependency>;
+    std::string dot_graph(const DependencyGraph& graph, std::string cluster_name);
 
     struct DependencyMatrix {
         std::vector<std::shared_ptr<DependencyNode>> statements;  // Rows

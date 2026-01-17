@@ -308,7 +308,7 @@ namespace toycc {
 
             // Check whether the node is connected to any edge
             inline bool is_connected(std::shared_ptr<Node> node) const {
-                return is_source(node) && is_sink(node);
+                return !(is_source(node) && is_sink(node));
             }
 
             // Get all edges that come into the requested node

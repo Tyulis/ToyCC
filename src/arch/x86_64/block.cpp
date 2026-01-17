@@ -9,12 +9,17 @@
 #include "gen/execmodel/x86_64/transfer_emission.h"
 
 namespace toycc::arch::x86_64 {
+    static constexpr bool TRACE_GRAPH = false;
+
     void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, const std::unordered_set<std::shared_ptr<ir::Declaration>>&) {
         ir::DependencyGraph graph = block->dependencies;
         ir::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);
 
         while (!graph.empty()) {
+            if constexpr (TRACE_GRAPH)
+                std::cout << ir::dot_graph(graph, "block");
+
             code_generation_iteration(frame, graph, group_matches);
             clear_obsolete_matches(group_matches, graph);
         }
@@ -22,6 +27,14 @@ namespace toycc::arch::x86_64 {
 
     void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
         std::vector<GroupMatch> entry_matches = find_entry_matches(graph, group_matches);
+        if (entry_matches.empty()) {
+            Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No entry group matches");
+            diagnostic.add_note(DiagnosticLevel::NOTE, ir::dot_graph(graph, "remainder"));
+            for (const GroupMatch& group : group_matches)
+                diagnostic.add_note(DiagnosticLevel::NOTE, dump(group));
+            throw diagnostic;
+        }
+
         std::vector<TranslationMatch> translation_matches = toycc::execmodel::x86_64::match_translations(frame, graph, entry_matches);
         if (translation_matches.empty()) {
             Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
@@ -112,7 +125,9 @@ namespace toycc::arch::x86_64 {
             }
 
             if (statement_match.output.has_value() && statement_match.output->match == OperandMatch::REQUIRES_TRANSFER)
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Output operand transfers are not implemented").add_note(DiagnosticLevel::NOTE, dump(match));
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Output operand transfers are not implemented")
+                       .add_note(DiagnosticLevel::NOTE, dump(match))
+                       .add_note(DiagnosticLevel::NOTE, frame.dump());
         }
 
         for (const auto& [allocation_index, allocation_match] : std::ranges::enumerate_view(match.allocations)) {

@@ -176,14 +176,14 @@ def generate_group_matcher(translation_model: TranslationModel, output_dir: Path
 
 
 # -------- Translation rules
-def generate_constraint(constraint: Constraint, arg_usage: dict[str, bool]) -> str:
+def generate_constraint(constraint: Constraint, is_output: bool, arg_usage: dict[str, bool]) -> str:
     match constraint.type:
         case ConstraintType.CONSTANT:
             return "OperandMatch::OK" if constraint.parameter else "OperandMatch::KO"
         case ConstraintType.CONJUNCTION:
-            return "(" + " & ".join(generate_constraint(sub, arg_usage) for sub in sorted(constraint.parameter)) + ")"
+            return "(" + " & ".join(generate_constraint(sub, is_output, arg_usage) for sub in sorted(constraint.parameter)) + ")"
         case ConstraintType.DISJUNCTION:
-            return "(" + " | ".join(generate_constraint(sub, arg_usage) for sub in sorted(constraint.parameter)) + ")"
+            return "(" + " | ".join(generate_constraint(sub, is_output, arg_usage) for sub in sorted(constraint.parameter)) + ")"
         case ConstraintType.CATEGORY:
             arg_usage["operand"] = True
             match constraint.parameter:
@@ -203,7 +203,7 @@ def generate_constraint(constraint: Constraint, arg_usage: dict[str, bool]) -> s
         case ConstraintType.LOCATION:
             arg_usage["frame"] = True
             arg_usage["operand"] = True
-            return f"check_location(frame, operand, Location::{constraint.parameter})"
+            return f"check_{'out' if is_output else 'in'}_location(frame, operand, Location::{constraint.parameter})"
         case ConstraintType.SIZE:
             arg_usage["operand"] = True
             return f"check_size(operand, {constraint.parameter})"
@@ -220,15 +220,15 @@ def generate_constraint(constraint: Constraint, arg_usage: dict[str, bool]) -> s
             arg_usage["operand"] = True
             return f"check_storage(operand, ir::StorageClass::{constraint.parameter})"
 
-def generate_operand_constraint(operand: Constraint, arg_usage: dict[str, bool]) -> str:
+def generate_operand_constraint(operand: Constraint, is_output: bool, arg_usage: dict[str, bool]) -> str:
     denormalized = denormalize(operand)
-    return generate_constraint(denormalized, arg_usage)
+    return generate_constraint(denormalized, is_output, arg_usage)
 
-def generate_operand_condition(operand_condition_name: str, operand: Constraint|tuple[int, str], overwritten_by: list[int]) -> str:
+def generate_operand_condition(operand_condition_name: str, operand: Constraint|tuple[int, str], is_output: bool, overwritten_by: list[int]) -> str:
     conjunction = []
     arg_usage = {"frame": False, "graph": False, "group_match": False, "operand": False}
     if isinstance(operand, Constraint):
-        conjunction.append(generate_operand_constraint(operand, arg_usage))
+        conjunction.append(generate_operand_constraint(operand, is_output, arg_usage))
 
     for overwrite_index in range(len(overwritten_by)):
         arg_usage["frame"] = True
@@ -290,7 +290,7 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
                             break
 
             operand_condition_name = f"condition_{translation.tag}_{statement_index}_{name}"
-            operand_conditions.append(generate_operand_condition(operand_condition_name, operand, overwritten_by))
+            operand_conditions.append(generate_operand_condition(operand_condition_name, operand, name == "output", overwritten_by))
             operand_match = f"{operand_condition_name}(frame, graph, group_match, {operand_ref}"
             if len(overwritten_by) > 0:
                 operand_match += ", " + ", ".join(generate_operand_ref(overwrite_statement_index, None) for overwrite_statement_index in overwritten_by)
@@ -553,7 +553,7 @@ def generate_transfer_matcher_function(translation_model: TranslationModel, tran
     source_content += "};\n"
 
     arg_usage = {"frame": False, "graph": False, "group_match": False, "operand": False}
-    expression = generate_operand_constraint(transfer.source, arg_usage)
+    expression = generate_operand_constraint(transfer.source, False, arg_usage)
 
     if arg_usage["graph"] or arg_usage["group_match"]:
         raise TranslationModelError("Can't use the dependency graph or group match in a transfer matcher'")

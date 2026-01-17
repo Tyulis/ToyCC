@@ -8,6 +8,63 @@
 #include "util/graph.hpp"
 
 namespace toycc::ir {
+    static std::string dependency_type_repr(DependencyType type) {
+        switch (type) {
+            case DependencyType::READ:          return "READ";
+            case DependencyType::WRITE:         return "WRITE";
+            case DependencyType::CALL:          return "CALL";
+            case DependencyType::DEREFERENCE:   return "DEREFERENCE";
+            case DependencyType::LIVE_ON_EXIT:  return "LIVE_ON_EXIT";
+        }
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown dependency type");
+    }
+
+    static std::string operand_group_repr(OperandGroup type) {
+        switch (type) {
+            case OperandGroup::INDIRECT:  return "INDIRECT";
+            case OperandGroup::INPUT:     return "INPUT";
+            case OperandGroup::OUTPUT:    return "OUTPUT";
+        }
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown operand group");
+    }
+
+    static std::string dependency_repr(const Dependency& dependency) {
+        std::stringstream repr;
+        repr << "(";
+        size_t type_index = 0;
+        for (DependencyType type : dependency.type) {
+            if (type_index++ > 0)
+                repr << "|";
+            repr << dependency_type_repr(type);
+        }
+
+        repr << ") " << operand_group_repr(dependency.operand_group);
+        if (dependency.operand_group == OperandGroup::INPUT)
+            repr << "[" << dependency.operand_index << "]";
+        return repr.str();
+    }
+
+    std::string dot_graph(const DependencyGraph& graph, std::string cluster_name) {
+        std::stringstream dot;
+        dot << "digraph " << cluster_name << " {\n";
+        size_t node_index = 0;
+        std::unordered_map<std::shared_ptr<DependencyNode>, std::string> node_names;
+        for (std::shared_ptr<DependencyNode> node : graph.nodes()) {
+            const std::string node_name = node_names[node] = std::format("{}_{}", cluster_name, node_index++);
+            if (node->is_statement())
+                dot << node_name << " [label=\"" << node->statement().ir_code() << "\" shape=box];\n";
+            else if (node->is_value())
+                dot << node_name << " [label=\"" << node->declaration()->name << "\" shape=ellipse];\n";
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
+        }
+
+        for (const DependencyGraph::Edge& edge : graph.edges())
+            dot << node_names[edge.entry] << " -> " << node_names[edge.exit] << " [label=\"" << dependency_repr(edge.attr) << "\"];\n";
+
+        dot << "}\n";
+        return dot.str();
+    }
+
     DependencyMatrix to_dependency_matrix(const DependencyGraph& graph) {
         DependencyMatrix result;
         std::unordered_map<std::shared_ptr<DependencyNode>, size_t> value_indices;
@@ -241,42 +298,6 @@ namespace toycc::ir {
             case BasicBlockType::EXIT:   return "EXIT";
         }
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown local block type");
-    }
-
-    static std::string dependency_type_repr(DependencyType type) {
-        switch (type) {
-            case DependencyType::READ:          return "READ";
-            case DependencyType::WRITE:         return "WRITE";
-            case DependencyType::CALL:          return "CALL";
-            case DependencyType::DEREFERENCE:   return "DEREFERENCE";
-            case DependencyType::LIVE_ON_EXIT:  return "LIVE_ON_EXIT";
-        }
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown dependency type");
-    }
-
-    static std::string operand_group_repr(OperandGroup type) {
-        switch (type) {
-            case OperandGroup::INDIRECT:  return "INDIRECT";
-            case OperandGroup::INPUT:     return "INPUT";
-            case OperandGroup::OUTPUT:    return "OUTPUT";
-        }
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown operand group");
-    }
-
-    static std::string dependency_repr(const Dependency& dependency) {
-        std::stringstream repr;
-        repr << "(";
-        size_t type_index = 0;
-        for (DependencyType type : dependency.type) {
-            if (type_index++ > 0)
-                repr << "|";
-            repr << dependency_type_repr(type);
-        }
-
-        repr << ") " << operand_group_repr(dependency.operand_group);
-        if (dependency.operand_group == OperandGroup::INPUT)
-            repr << "[" << dependency.operand_index << "]";
-        return repr.str();
     }
 
     // Write the graph in dot format to `dot`, return the name of any node in the cluster
