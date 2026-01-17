@@ -24,6 +24,8 @@ namespace toycc::arch::x86_64 {
 
             std::vector<GroupMatch> find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches);
             const TranslationMatch& select_translation(const std::vector<TranslationMatch>& matches);
+            void emit_transfers(StackFrame& frame, TranslationMatch& match);
+            void transfer(StackFrame& frame, ir::Operand& operand, Location destination);
             void clear_processed_statements(ir::DependencyGraph& graph, const GroupMatch& match);
             void clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const ir::DependencyGraph& graph);
 

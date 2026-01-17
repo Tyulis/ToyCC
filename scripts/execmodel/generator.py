@@ -514,6 +514,85 @@ def generate_emission(translation_model: TranslationModel, output_dir: Path):
     write_source(source_content, output_dir / "emission.cpp", [output_dir / "emission.h"] + group_headers)
 
 
+# -------- Transfer tags
+def generate_transfer_tags(translation_model: TranslationModel, output_dir: Path):
+    dump_prototype = "std::ostream& operator<< (std::ostream& output, TransferTag tag)"
+
+    enum_code  = "enum class TransferTag {\n"
+    dump_code  = f"{dump_prototype} {{\n"
+    dump_code +=  "    switch (tag) {\n"
+
+    for transfer in translation_model.transfers:
+        enum_code += f"    {transfer.tag},\n"
+        dump_code += f'        case TransferTag::{transfer.tag}: output << "{transfer.tag}";  return output;\n'
+
+    enum_code += "};\n"
+
+    dump_code += "    }\n"
+    dump_code += '    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown transfer tag");\n'
+    dump_code += "}\n"
+
+    header_content = enum_code + "\n"
+    header_content += f"{dump_prototype};\n"
+
+    source_content = dump_code
+
+    write_header(header_content, output_dir / "transfer_tag.h", [], ["iostream"])
+    write_source(source_content, output_dir / "transfer_tag.cpp", ["diagnostic.h", output_dir / "transfer_tag.h"], ["iostream"])
+
+
+# -------- Transfer matcher
+def generate_transfer_matcher_function(translation_model: TranslationModel, transfer: TransferSpec) -> str:
+    source_content = ""
+
+    allowed_destinations = constraint_locations(transfer.destination, set(translation_model.locations))
+    set_name = f"{transfer.tag}_DESTINATIONS"
+
+    source_content += f"static const std::unordered_set<Location> {set_name} = {{"
+    source_content += ", ".join(f"Location::{location}" for location in sorted(allowed_destinations))
+    source_content += "};\n"
+
+    arg_usage = {"frame": False, "graph": False, "group_match": False, "operand": False}
+    expression = generate_operand_constraint(transfer.source, arg_usage)
+
+    if arg_usage["graph"] or arg_usage["group_match"]:
+        raise TranslationModelError("Can't use the dependency graph or group match in a transfer matcher'")
+
+    destination_expression = f"{set_name}.contains(destination)"
+
+    frame_arg   = " frame"   if arg_usage["frame"]   else ""
+    operand_arg = " operand" if arg_usage["operand"] else ""
+
+    source_content += f"template<> bool match_transfer<TransferTag::{transfer.tag}> (const StackFrame&{frame_arg}, const ir::Operand&{operand_arg}, Location destination) {{\n"
+    source_content += f"    return ({expression}).match == OperandMatch::OK && ({destination_expression});\n"
+    source_content +=  "}\n"
+    return source_content
+
+def generate_transfer_matcher(translation_model: TranslationModel, output_dir: Path):
+    header_content = "using namespace toycc::arch::x86_64;\n\n"
+    source_content = "using namespace toycc::arch::x86_64;\n\n"
+
+    prototype = "std::optional<TransferTag> match_transfers(const StackFrame& frame, const ir::Operand& operand, Location destination)"
+    header_content += f"{prototype};\n"
+
+    source_content += "template <TransferTag tag>\n"
+    source_content += "bool match_transfer(const StackFrame& frame, const ir::Operand& operand, Location destination);\n\n"
+
+    dispatch_code = ""
+    for transfer in translation_model.transfers:
+        function_source = generate_transfer_matcher_function(translation_model, transfer)
+        source_content += function_source
+        dispatch_code += f"    if (match_transfer<TransferTag::{transfer.tag}> (frame, operand, destination))  return TransferTag::{transfer.tag};\n"
+
+    source_content += f"\n{prototype} {{\n"
+    source_content +=       dispatch_code
+    source_content +=  "    return {};\n"
+    source_content +=  "}\n"
+
+    write_header(header_content, output_dir / "transfer_matcher.h", ["ir/declaration.h", "arch/x86_64/allocation.h", output_dir / "location.h", output_dir / "transfer_tag.h"])
+    write_source(source_content, output_dir / "transfer_matcher.cpp", ["arch/x86_64/constraints.hpp", output_dir / "transfer_matcher.h"], ["unordered_set"])
+
+
 # -------- Entry point
 def generate_execmodel(translation_model: TranslationModel, output_dir: Path) -> set[Path]:
     generate_locations(translation_model, output_dir)
@@ -521,4 +600,6 @@ def generate_execmodel(translation_model: TranslationModel, output_dir: Path) ->
     generate_group_matcher(translation_model, output_dir)
     generate_translation_matcher(translation_model, output_dir)
     generate_emission(translation_model, output_dir)
+    generate_transfer_tags(translation_model, output_dir)
+    generate_transfer_matcher(translation_model, output_dir)
     return generated_files

@@ -49,7 +49,7 @@ if __name__ == "__main__":
         pprint.pprint(json.loads(json.dumps(translation_model, default=serialize_model)),
                       compact=True, stream=f, width=140, sort_dicts=True)
 
-    generated_files = generate_execmodel(translation_model, output_dir)
+    generated_files = generate_execmodel(translation_model, output_dir) | {output_dir / "translation_model.py"}
 
     # Cleanup leftover files from previous generations
     for dirpath, dirnames, filenames in output_dir.walk():

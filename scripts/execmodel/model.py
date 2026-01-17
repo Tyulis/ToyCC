@@ -183,11 +183,14 @@ class TranslationModel:
         return transfers
 
     def parse_transfer_set(self, instruction: Instruction) -> list[TransferSpec]:
+        transfer_index = 0
         transfers = []
         for form in instruction.forms:
             spec = self.make_transfer_spec(form)
             if spec is not None:
+                spec.tag = f"{form.name}_{transfer_index}"
                 transfers.append(spec)
+                transfer_index += 1
         return transfers
 
     def make_transfer_spec(self, form: InstructionForm) -> TransferSpec|None:

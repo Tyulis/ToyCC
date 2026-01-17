@@ -3,6 +3,7 @@
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/execmodel.h"
 #include "gen/execmodel/x86_64/group_matcher.h"
+#include "gen/execmodel/x86_64/transfer_matcher.h"
 #include "gen/execmodel/x86_64/translation_matcher.h"
 #include "gen/execmodel/x86_64/emission.h"
 
@@ -28,13 +29,12 @@ namespace toycc::arch::x86_64 {
             throw diagnostic;
         }
 
-        const TranslationMatch& selected_match = select_translation(translation_matches);
-        if (selected_match.matches()) {
-            toycc::execmodel::x86_64::emit_code(frame, selected_match);
-            clear_processed_statements(graph, selected_match.group_match);
-        } else {
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Transfers are not implemented");
-        }
+        TranslationMatch selected_match = select_translation(translation_matches);
+        if (!selected_match.matches())
+            emit_transfers(frame, selected_match);
+
+        toycc::execmodel::x86_64::emit_code(frame, selected_match);
+        clear_processed_statements(graph, selected_match.group_match);
     }
 
     std::vector<GroupMatch> CodeGenerator::find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
@@ -91,6 +91,37 @@ namespace toycc::arch::x86_64 {
         }
 
         return matches.at(selected_index.value());
+    }
+
+    void CodeGenerator::emit_transfers(StackFrame& frame, TranslationMatch& match) {
+        for (const auto& [statement_index, statement_match] : std::ranges::enumerate_view(match.statements)) {
+            ir::Statement& statement = match.group_match.statements[statement_index]->statement();
+            for (const auto& [input_index, input_match] : std::ranges::enumerate_view(statement_match.input)) {
+                if (input_match.match != OperandMatch::REQUIRES_TRANSFER)
+                    continue;
+
+                if (!input_match.location.has_value())
+                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Transfers without location hints are not implemented");
+
+                ir::Operand& input = statement.inputs[input_index];
+                transfer(frame, input, input_match.location.value());
+            }
+
+            if (statement_match.output.has_value())
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Output operand transfers are not implemented");
+        }
+
+        for (const auto& [allocation_index, allocation_match] : std::ranges::enumerate_view(match.allocations)) {
+            if (allocation_match.match != OperandMatch::REQUIRES_TRANSFER)
+                continue;
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Intermediate allocation transfers are not implemented");
+        }
+    }
+
+    void CodeGenerator::transfer(StackFrame& frame, ir::Operand& operand, Location destination) {
+        std::optional<toycc::execmodel::x86_64::TransferTag> transfer = toycc::execmodel::x86_64::match_transfers(frame, operand, destination);
+        if (!transfer.has_value())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No transfer match for operand {}", operand.ir_code());
     }
 
     void CodeGenerator::clear_processed_statements(ir::DependencyGraph& graph, const GroupMatch& match) {
