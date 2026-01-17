@@ -25,7 +25,7 @@ namespace toycc::arch::x86_64 {
         else if (operand.is_label())
             return {Location::constant};
         else if (operand.is_variable())
-            return locate(operand.declaration());
+            return ir::StackFrame<Location>::locate(operand.declaration());
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
     }
 
@@ -36,7 +36,7 @@ namespace toycc::arch::x86_64 {
             if (location == Location::constant || location == Location::memory || location == Location::stack)
                 continue;  // FIXME : For now, don't allocate additional space on the stack for intermediate allocations
 
-            if (location_index.find(location) != location_index.end())
+            if (location_index.find(location) == location_index.end())
                 return location;
         }
         return {};

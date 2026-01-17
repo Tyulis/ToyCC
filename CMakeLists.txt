@@ -46,14 +46,14 @@ add_custom_target(CParserDependencies
                   COMMENT "Adding the CParserBase.h include in CParser.h")
 
 # Generate the translation model
-add_custom_target(TranslationModel
-                  COMMAND python3 scripts/execmodel-x86_64.py ${CMAKE_CURRENT_BINARY_DIR}
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                  COMMENT "Generate the translation model")
+execute_process(COMMAND python3 scripts/execmodel-x86_64.py ${CMAKE_CURRENT_BINARY_DIR}
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                OUTPUT_VARIABLE GENERATED_EXECMODEL_SOURCES)
+string(STRIP ${GENERATED_EXECMODEL_SOURCES} GENERATED_EXECMODEL_SOURCES)
+separate_arguments(GENERATED_EXECMODEL_SOURCES)
 
 # Copy the prologues
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
-file(GLOB_RECURSE GENERATED_EXECMODEL_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/gen/execmodel/**/*.cpp)
 
 # Compile the app
 add_executable(${PROJECT_NAME}
@@ -118,7 +118,6 @@ add_executable(${PROJECT_NAME}
 	${GENERATED_EXECMODEL_SOURCES})
 
 add_dependencies(${PROJECT_NAME} CParserDependencies)
-add_dependencies(${PROJECT_NAME} TranslationModel)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
 	${CMAKE_CURRENT_BINARY_DIR}

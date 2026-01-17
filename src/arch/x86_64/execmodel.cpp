@@ -83,7 +83,7 @@ namespace toycc::arch::x86_64 {
     }
 
     void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match) {
-        if (!match.matches())
+        if (!match.matches() && !match.nof_transfers().has_value())
             return;
 
         // Even a fixable non-match is better than nothing

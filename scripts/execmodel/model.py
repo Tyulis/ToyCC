@@ -459,6 +459,6 @@ def serialize_model(obj):
     elif isinstance(obj, (set, frozenset)):
         return list(obj)
     elif isinstance(obj, InstructionForm):
-        return {"name": obj.name, "gas_name": obj.gas_name, "operands": obj.operands}
+        return str(obj)
     else:
         return obj.__dict__

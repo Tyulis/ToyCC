@@ -132,7 +132,7 @@ namespace toycc::arch::x86_64 {
         if (operand.has_constant_base()) {
             const ir::Constant& base = operand.constant();
             if (base.is_integer())
-                code << base.integer();
+                code << "$" << base.integer();
             else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer constants are not implemented", base.location);
         } else if (operand.has_label_base()) {
             code << operand.label();

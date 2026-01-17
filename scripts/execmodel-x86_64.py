@@ -9,7 +9,7 @@ import argparse
 from pathlib import Path
 from opcodes.x86_64 import *
 from execmodel.model import *
-from execmodel.generator import generate_execmodel
+from execmodel.generator import generate_execmodel, generated_files
 
 def preprocess_instruction_form(form: InstructionForm) -> InstructionForm:
     has_output = any(operand.is_output for operand in form.operands)
@@ -49,5 +49,13 @@ if __name__ == "__main__":
         pprint.pprint(json.loads(json.dumps(translation_model, default=serialize_model)),
                       compact=True, stream=f, width=140, sort_dicts=True)
 
+    generated_files = generate_execmodel(translation_model, output_dir)
 
-    generate_execmodel(translation_model, output_dir)
+    # Cleanup leftover files from previous generations
+    for dirpath, dirnames, filenames in output_dir.walk():
+        for filename in filenames:
+            if (dirpath / filename) not in generated_files:
+                os.remove(dirpath / filename)
+
+    # Output the list of generated source files
+    print(" ".join(str(path) for path in generated_files if path.suffix == ".cpp"))

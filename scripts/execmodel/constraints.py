@@ -38,7 +38,7 @@ class Constraint:
 
     def __str__(self):
         if self.type in (ConstraintType.CONJUNCTION, ConstraintType.DISJUNCTION):
-            return f"{self.type.name}({', '.join(str(subexpression) for subexpression in self.parameter)})"
+            return f"{self.type.name}({', '.join(sorted(str(subexpression) for subexpression in self.parameter))})"
         else:
             return f"{self.type.name}({str(self.parameter)})"
     def __repr__(self):
@@ -48,6 +48,17 @@ class Constraint:
         return hash(self.type) ^ (hash(self.parameter) << 1)
     def __eq__(self, rhs: Constraint) -> bool:
         return self.type == rhs.type and self.parameter == rhs.parameter
+    def __lt__(self, rhs: Constraint) -> bool:
+        if self.type != rhs.type:
+            return self.type < rhs.type
+        elif self.type in (ConstraintType.CONJUNCTION, ConstraintType.DISJUNCTION):
+            if len(self.parameter) != len(rhs.parameter):
+                return len(self.parameter) < len(rhs.parameter)
+            for left, right in zip(sorted(self.parameter), sorted(rhs.parameter)):
+                if left != right:
+                    return left < right
+        else:
+            return self.parameter < rhs.parameter
 
     def serialize(self) -> dict[str, object]:
         if self.type in (ConstraintType.DISJUNCTION, ConstraintType.CONJUNCTION) and len(self.parameter) == 1:

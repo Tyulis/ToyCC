@@ -54,8 +54,9 @@ namespace toycc::ir {
 
         std::unordered_set<Location> locate(std::shared_ptr<Declaration> declaration) const {
             const auto& declaration_index = allocations.template get<declaration_tag>();
-            const auto& [begin, end] = declaration_index.equal_range(declaration);
-            std::unordered_set<Location> locations(begin, end);
+            std::unordered_set<Location> locations;
+            for (auto [begin, end] = declaration_index.equal_range(declaration); begin != end; begin++)
+                locations.insert(begin->location);
             return locations;
         }
 

@@ -3,15 +3,12 @@ from pathlib import Path
 from opcodes.x86_64 import *
 from execmodel.model import *
 
-LOCATION_HEADER = "location.h"
-MATCHER_HEADER = "matcher.h"
-
-MATCHER_DIRECTORY = "matcher"
-INSTRUCTION_DIRECTORY = "instruction"
-
 BOOL = {True: "true", False: "false"}
 
+generated_files = set()
+
 def write_file(content, path):
+    generated_files.add(path)
     if os.path.exists(path):
         with open(path, "r") as f:
             initial_content = f.read()
@@ -184,9 +181,9 @@ def generate_constraint(constraint: Constraint, arg_usage: dict[str, bool]) -> s
         case ConstraintType.CONSTANT:
             return "OperandMatch::OK" if constraint.parameter else "OperandMatch::KO"
         case ConstraintType.CONJUNCTION:
-            return "(" + " & ".join(generate_constraint(sub, arg_usage) for sub in constraint.parameter) + ")"
+            return "(" + " & ".join(generate_constraint(sub, arg_usage) for sub in sorted(constraint.parameter)) + ")"
         case ConstraintType.DISJUNCTION:
-            return "(" + " | ".join(generate_constraint(sub, arg_usage) for sub in constraint.parameter) + ")"
+            return "(" + " | ".join(generate_constraint(sub, arg_usage) for sub in sorted(constraint.parameter)) + ")"
         case ConstraintType.CATEGORY:
             arg_usage["operand"] = True
             match constraint.parameter:
@@ -516,9 +513,12 @@ def generate_emission(translation_model: TranslationModel, output_dir: Path):
     write_header(header_content, output_dir / "emission.h", ["arch/x86_64/allocation.h", "arch/x86_64/execmodel.h", output_dir / "translation_tag.h"])
     write_source(source_content, output_dir / "emission.cpp", [output_dir / "emission.h"] + group_headers)
 
-def generate_execmodel(translation_model: TranslationModel, output_dir: Path):
+
+# -------- Entry point
+def generate_execmodel(translation_model: TranslationModel, output_dir: Path) -> set[Path]:
     generate_locations(translation_model, output_dir)
     generate_translation_tags(translation_model, output_dir)
     generate_group_matcher(translation_model, output_dir)
     generate_translation_matcher(translation_model, output_dir)
     generate_emission(translation_model, output_dir)
+    return generated_files
