@@ -177,8 +177,14 @@
         // -------- JUMP_IF_TRUE
         {"ir"    : [{"tag": "EQ",           "left": "int", "right": "int", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
-         "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
-                    {"instruction": "JE",   "input": ["$1.target"]}]},
+         "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
+                    {"instruction": "JE",  "input": ["$1.target"]}]},
+
+        // -------- JUMP_IF_FALSE
+        {"ir"    : [{"tag": "EQ",            "left": "int", "right": "int", "output": "tempbool"},
+                    {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
+                    {"instruction": "JNE",  "input": ["$1.target"]}]},
 
         // -------- RETURN_VAL
         {"ir":       {"tag": "RETURN_VAL", "value": "constint"},

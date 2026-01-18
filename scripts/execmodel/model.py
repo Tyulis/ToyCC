@@ -37,9 +37,11 @@ class TranslationIRSpec:
         self.operands = operands
 
 class TranslationTargetSpec:
-    def __init__(self, form: InstructionForm, operands: list[tuple[int, str]]):
+    def __init__(self, form: InstructionForm, operands: list[tuple[int, str]], ir_operands: dict[str, Constraint|str], allocations: dict[str, Constraint|str]):
         self.form = form
         self.operands = operands
+        self.ir_operands = ir_operands
+        self.allocations = allocations
 
 class CustomTargetSpec:
     def __init__(self, header: str, function: str):
@@ -250,37 +252,7 @@ class TranslationModel:
             allocations[f"${name}"] = load_constraint_expression(constraint, self.operand_types)
         return allocations
 
-    def parse_translation_set(self, description: dict[str, object], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:
-        if "ir" not in description or "target" not in description:
-            raise TranslationModelError("Translation rules must have at least `ir` and `target` elements")
-
-        if not isinstance(description["ir"], list):
-            description["ir"] = [description["ir"]]
-
-        allocations = self.parse_allocations(description["allocate"]) if "allocate" in description else {}
-
-        if not isinstance(description["target"], list):
-            if "custom" in description["target"] and description["target"]["custom"]:
-                return self.parse_custom_target(description["ir"], description["target"], allocations.copy())
-            else:
-                description["target"] = [description["target"]]
-
-        target_forms = []
-        for target in description["target"]:
-            instruction = instruction_set[target["instruction"]]
-            target_forms.append(instruction.forms)
-
-        specs = []
-        for target_combination in itertools.product(*target_forms):
-            spec = self.parse_translation_rule(description["ir"], description["target"], target_combination, allocations.copy())
-            if spec is not None:
-                specs.append(spec)
-
-        if len(specs) == 0:
-            print(f"WARNING : Rule description {description} does not produce any valid translation")
-        return specs
-
-    def make_ir_operands(self, ir_descriptions: list[dict]):
+    def make_ir_operands(self, ir_descriptions: list[dict]) -> dict[str, Constraint]:
         ir_operands = {}
         for index, ir_desc in enumerate(ir_descriptions):
             ir_spec = self.ir[ir_desc["tag"]]
@@ -311,116 +283,202 @@ class TranslationModel:
                     raise TranslationModelError(f"Input `{operand_name}` not defined in IR spec for {ir_spec.tag}")
         return ir_operands
 
-    def parse_custom_target(self, ir_descriptions: list[dict], target_description: dict[str, object], allocations: dict[str, Constraint]) -> list[TranslationSpec]:
-        ir_operands = self.make_ir_operands(ir_descriptions)
-        target = CustomTargetSpec(target_description["header"], target_description["function"])
-        translation = self.make_translation_spec(ir_descriptions, ir_operands, target, allocations)
-        return [] if translation is None else [translation]
+    def parse_translation_set(self, description: dict[str, object], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:
+        if "ir" not in description or "target" not in description:
+            raise TranslationModelError("Translation rules must have at least `ir` and `target` elements")
 
-    def parse_translation_rule(self, ir_descriptions: list[dict], target_descriptions: list[dict], target_combination: list[InstructionForm], allocations: dict[str, Constraint]) -> TranslationSpec|None:
-        ir_operands = self.make_ir_operands(ir_descriptions)
+        if not isinstance(description["ir"], list):
+            description["ir"] = [description["ir"]]
 
-        translation_targets = []
-        for index, (target_desc, target_form) in enumerate(zip(target_descriptions, target_combination)):
-            if "input" in target_desc:
-                nof_required_operands = len(target_desc["input"])
+        ir_specs = [self.ir[ir_desc["tag"]] for ir_desc in description["ir"]]
+        ir_operands = self.make_ir_operands(description["ir"])
+        allocations = self.parse_allocations(description["allocate"]) if "allocate" in description else {}
+
+        if not isinstance(description["target"], list):
+            if "custom" in description["target"] and description["target"]["custom"]:
+                target = self.parse_custom_target(description["target"])
+                translation = self.make_translation_spec(ir_specs, ir_operands, target, allocations)
+                return [] if translation is None else [translation]
+            else:
+                description["target"] = [description["target"]]
+
+        target_sequence = []
+        for target_desc in description["target"]:
+            instruction = instruction_set[target_desc["instruction"]]
+            options = []
+            for target_form in instruction.forms:
+                target = self.parse_target(ir_specs, target_desc, target_form, list(ir_operands.keys()), list(allocations.keys()))
+                if target is not None:
+                    options.append(target)
+
+            if len(options) == 0:
+                raise TranslationModelError(f"Target description {description} does not produce any valid instruction")
+            target_sequence.append(options)
+
+        specs = []
+        for target_combination in itertools.product(*target_sequence):
+            combined_operands    = self.combine_operands(ir_operands, [target.ir_operands for target in target_combination])
+            combined_allocations = self.combine_operands(allocations, [target.allocations for target in target_combination])
+
+            spec = self.make_translation_spec(ir_specs, combined_operands, target_combination, combined_allocations)
+            if spec is not None:
+                specs.append(spec)
+
+        if len(specs) == 0:
+            raise TranslationModelError(f"Rule description {description} does not produce any valid translation")
+        return specs
+
+    def combine_operands(self, ir_operands: dict[str, Constraint], operands: list[dict[str, Constraint|str]]) -> dict[str, Constraint|str]:
+        names = tuple(operands[0].keys())
+
+        crossed = {name: set(target[name] for target in operands) for name in names}
+
+        references = {}
+        constraints = {}
+        for name in names:
+            operand_constraints = set(constraint for constraint in crossed[name] if isinstance(constraint, Constraint))
+            operand_references = set(constraint for constraint in {ir_operands[name]} | crossed[name] if isinstance(constraint, str))
+            if len(operand_references) > 1 or len(operand_references) > 0 and not all(is_true(constraint) for constraint in operand_constraints):
+                raise TranslationModelError(f"Operand `{name}` must be true or the same reference for all targets, found {conjunction}")
+
+            if len(operand_references) == 1:
+                reference = operand_references.pop()
+                references[name] = reference
+                if isinstance(ir_operands[name], Constraint):
+                    if reference in constraints:
+                        constraints[reference].add(ir_operands[name])
+                    else:
+                        constraints[reference] = {ir_operands[name]}
+            else:
+                operand_constraints.add(ir_operands[name])
+                if name in constraints:
+                    constraints[name] |= operand_constraints
+                else:
+                    constraints[name] = operand_constraints
+
+        for name in tuple(references.keys()):
+            actual_id = name
+            conjunction = constraints.get(actual_id, {CONSTRAINT_TRUE})
+            while actual_id in references:
+                actual_id = references[actual_id]
+                conjunction |= constraints.get(actual_id, {CONSTRAINT_TRUE})
+
+            constraints[actual_id] = conjunction
+            references[name] = actual_id
+
+        combined = {}
+        for name in names:
+            if name in references:
+                combined[name] = references[name]
+            else:
+                conjunction = constraints.get(name, {CONSTRAINT_TRUE})
+                combined[name] = to_simplified_constraint(Constraint(ConstraintType.CONJUNCTION, frozenset(conjunction)))
+        return combined
+
+
+    def parse_custom_target(self, target_description: dict[str, object]) -> CustomTargetSpec:
+        return CustomTargetSpec(target_description["header"], target_description["function"])
+
+    def parse_target(self, ir_specs: list[IRSpec], target_desc: dict[str, object], target_form: InstructionForm, ir_operands_ids: list[str], allocations_ids: list[str]) -> TranslationTargetSpec|None:
+        ir_operands = {name: CONSTRAINT_TRUE for name in ir_operands_ids}
+        allocations = {name: CONSTRAINT_TRUE for name in allocations_ids}
+
+        if "input" in target_desc:
+            nof_required_operands = len(target_desc["input"])
+            if "output" in target_desc:
+                nof_required_operands += 1
+            if len(target_form.operands) != nof_required_operands:
+                return None
+        elif "output" in target_desc:
+            if len(target_form.operands) != 1 or not target_form.operands[0].is_output:
+                return None
+        elif len(ir_specs) == 1:
+            nof_inputs = len([operand for operand in target_form.operands if operand.is_input])
+            nof_outputs = len([operand for operand in target_form.operands if operand.is_output])
+
+            if len(ir_specs[0].input) != nof_inputs:
+                return None
+            elif ir_specs[0].output and nof_outputs != 1:
+                return None
+            elif not ir_specs[0].output and nof_outputs != 0:
+                return None
+
+        input_index = 0
+        target_operands = []
+        for operand in target_form.operands:
+            input_id = None
+            output_id = None
+
+            if operand.is_output:
                 if "output" in target_desc:
-                    nof_required_operands += 1
-                if len(target_form.operands) != nof_required_operands:
-                    return None
-            elif "output" in target_desc:
-                if len(target_form.operands) != 1 or not target_form.operands[0].is_output:
-                    return None
-            elif len(ir_descriptions) == 1:
-                nof_inputs = len([operand for operand in target_form.operands if operand.is_input])
-                nof_outputs = len([operand for operand in target_form.operands if operand.is_output])
-                ir_spec = self.ir[ir_descriptions[0]["tag"]]
+                    output_id = target_desc["output"]
+                elif len(ir_specs) == 1:
+                    output_id = f"$0.output"
+                else:
+                    raise TranslationModelError(f"Output operand for target `{target_form}` can't be deduced")
 
-                if len(ir_spec.input) != nof_inputs:
-                    return None
-                elif ir_spec.output and nof_outputs != 1:
-                    return None
-                elif not ir_spec.output and nof_outputs != 0:
-                    return None
-
-            input_index = 0
-            target_operands = []
-            for operand in target_form.operands:
-                input_id = None
-                output_id = None
-
-                if operand.is_output:
-                    if "output" in target_desc:
-                        output_id = target_desc["output"]
-                    elif len(ir_descriptions) == 1:
-                        output_id = f"$0.output"
-                    else:
-                        raise TranslationModelError(f"Output operand for target `{target_form}` can't be deduced")
-
-                if operand.is_input:
-                    if "input" in target_desc:
-                        if input_index >= len(target_desc["input"]):
-                            raise TranslationModelError(f"Input operand `{input_index}` for target `{target_form}` can't be deduced'")
-                        input_id = target_desc["input"][input_index]
-                    elif len(ir_descriptions) == 1:
-                        ir_spec = self.ir[ir_descriptions[0]["tag"]]
-                        if input_index >= len(ir_spec.input):
-                            raise TranslationModelError(f"Input operand `{input_index}` for target `{target_form}` can't be deduced'")
-                        input_id = "$0." + ir_spec.input[input_index]
-                    else:
+            if operand.is_input:
+                if "input" in target_desc:
+                    if input_index >= len(target_desc["input"]):
                         raise TranslationModelError(f"Input operand `{input_index}` for target `{target_form}` can't be deduced'")
+                    input_id = target_desc["input"][input_index]
+                elif len(ir_specs) == 1:
+                    if input_index >= len(ir_specs[0].input):
+                        raise TranslationModelError(f"Input operand `{input_index}` for target `{target_form}` can't be deduced'")
+                    input_id = "$0." + ir_specs[0].input[input_index]
+                else:
+                    raise TranslationModelError(f"Input operand `{input_index}` for target `{target_form}` can't be deduced'")
 
-                    input_index += 1
+                input_index += 1
 
-                if not operand.is_input and not operand.is_output:
-                    raise TranslationModelError(f"Operand `{operand}` is not input nor output")
+            if not operand.is_input and not operand.is_output:
+                raise TranslationModelError(f"Operand `{operand}` is not input nor output")
 
-                if input_id is not None:
-                    if not input_id.startswith("$"):
-                        if len(ir_descriptions) == 1:
-                            input_id = "$0." + input_id
-                        else:
-                            raise TranslationModelError(f"Operand `{input_id}` for target `{target_form}` can't be deduced")
-                    if input_id not in ir_operands and input_id not in allocations:
-                        raise TranslationModelError(f"Name `{input_id}` for target `{target_form}` is undefined")
-                if output_id is not None:
-                    if not output_id.startswith("$"):
-                        if len(ir_descriptions) == 1:
-                            output_id = "$0." + output_id
-                        else:
-                            raise TranslationModelError(f"Operand `{output_id}` for target `{target_form}` can't be deduced")
-                    if output_id not in ir_operands and output_id not in allocations:
-                        raise TranslationModelError(f"Name `{output_id}` for target `{target_form}` is undefined")
+            if input_id is not None:
+                if not input_id.startswith("$"):
+                    if len(ir_specs) == 1:
+                        input_id = "$0." + input_id
+                    else:
+                        raise TranslationModelError(f"Operand `{input_id}` for target `{target_form}` can't be deduced")
+                if input_id not in ir_operands and input_id not in allocations:
+                    raise TranslationModelError(f"Name `{input_id}` for target `{target_form}` is undefined")
+            if output_id is not None:
+                if not output_id.startswith("$"):
+                    if len(ir_specs) == 1:
+                        output_id = "$0." + output_id
+                    else:
+                        raise TranslationModelError(f"Operand `{output_id}` for target `{target_form}` can't be deduced")
+                if output_id not in ir_operands and output_id not in allocations:
+                    raise TranslationModelError(f"Name `{output_id}` for target `{target_form}` is undefined")
 
-                main_id = input_id if input_id is not None else output_id
-                if main_id in ir_operands:
+            main_id = input_id if input_id is not None else output_id
+            if main_id in ir_operands:
+                base_constraint = ir_operands[main_id]
+                while isinstance(base_constraint, str):
+                    main_id = base_constraint
                     base_constraint = ir_operands[main_id]
-                    while isinstance(base_constraint, str):
-                        main_id = base_constraint
-                        base_constraint = ir_operands[main_id]
-                    conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type]}))
-                    ir_operands[main_id] = to_simplified_constraint(conjunction)
+                conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type]}))
+                ir_operands[main_id] = to_simplified_constraint(conjunction)
 
-                    ref, _, ir_name = main_id.partition(".")
-                    ir_index = int(ref.strip("$"))
-                    target_operands.append((ir_index, ir_name))
+                ref, _, ir_name = main_id.partition(".")
+                ir_index = int(ref.strip("$"))
+                target_operands.append((ir_index, ir_name))
 
-                elif main_id in allocations:
-                    base_constraint = allocations[main_id]
-                    conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type], self.allocation_constraint}))
-                    allocations[main_id] = to_simplified_constraint(conjunction)
-                    target_operands.append(("allocations", main_id))
+            elif main_id in allocations:
+                base_constraint = allocations[main_id]
+                conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type], self.allocation_constraint}))
+                allocations[main_id] = to_simplified_constraint(conjunction)
+                target_operands.append(("allocations", main_id))
 
-                if input_id is not None and output_id is not None:
-                    if input_id in ir_operands:
-                        ir_operands[output_id] = input_id
-                    elif input_id in allocations:
-                        allocations[output_id] = output_id
+            if input_id is not None and output_id is not None:
+                if input_id in ir_operands:
+                    ir_operands[output_id] = input_id
+                elif input_id in allocations:
+                    allocations[output_id] = output_id
 
-            translation_targets.append(TranslationTargetSpec(target_form, target_operands))
-        return self.make_translation_spec(ir_descriptions, ir_operands, translation_targets, allocations)
+        return TranslationTargetSpec(target_form, target_operands, ir_operands, allocations)
 
-    def make_translation_spec(self, ir_descriptions: list[dict], ir_operands: dict[str, Constraint], translation_targets: list[TranslationTargetSpec]|CustomTargetSpec, allocations: dict[str, Constraint]) -> TranslationSpec|None:
+    def make_translation_spec(self, ir_specs: list[IRSpec], ir_operands: dict[str, Constraint], translation_targets: list[TranslationTargetSpec]|CustomTargetSpec, allocations: dict[str, Constraint]) -> TranslationSpec|None:
         for operand_id, constraint in ir_operands.items():
             if isinstance(constraint, str):
                 ref, _, ir_name = constraint.partition(".")
@@ -434,10 +492,10 @@ class TranslationModel:
                 return None
 
         translation_ir = []
-        for index, ir_desc in enumerate(ir_descriptions):
+        for index, ir_spec in enumerate(ir_specs):
             operands = {operand_id.partition(".")[2]: constraint for operand_id, constraint in ir_operands.items()
                                                                  if int(operand_id.partition(".")[0].strip("$")) == index}
-            translation_ir.append(TranslationIRSpec(ir_desc["tag"], operands))
+            translation_ir.append(TranslationIRSpec(ir_spec.tag, operands))
 
         subgraph = self.make_subgraph(translation_ir)
         return TranslationSpec(translation_ir, translation_targets, allocations, subgraph)
