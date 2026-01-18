@@ -26,14 +26,15 @@ namespace toycc::ir {
 
     template <typename Location>
     using AllocationTable = multi_index_container<Allocation<Location>,
-        indexed_by<hashed_unique    <tag<location_tag>,    member<Allocation<Location>, Location,                     &Allocation<Location>::location>>,
+        indexed_by<hashed_non_unique<tag<location_tag>,    member<Allocation<Location>, Location,                     &Allocation<Location>::location>>,
                    hashed_non_unique<tag<declaration_tag>, member<Allocation<Location>, std::shared_ptr<Declaration>, &Allocation<Location>::declaration>>>>;
 
     template <typename Location>
     struct StackFrame {
         const Procedure& procedure;
+        const std::unordered_set<Location> nonunique_locations;
 
-        StackFrame(const Procedure& procedure) : procedure(procedure) {}
+        StackFrame(const Procedure& procedure, const std::unordered_set<Location>& nonunique_locations) : procedure(procedure), nonunique_locations(nonunique_locations) {}
 
         // Stack variables management
         std::unordered_map<std::shared_ptr<Declaration>, size_t> stack_offsets;
@@ -78,7 +79,8 @@ namespace toycc::ir {
             auto& location_index = allocations.template get<location_tag>();
 
             declaration_index.erase(declaration);
-            location_index.erase(location);
+            if (!nonunique_locations.contains(location))
+                location_index.erase(location);
 
             declaration_index.emplace(declaration, location);
         }
@@ -86,8 +88,15 @@ namespace toycc::ir {
         // Add another location for a variable. If there is already something at `location`, it is overwritten
         void copy(std::shared_ptr<Declaration> declaration, Location location) {
             auto& location_index = allocations.template get<location_tag>();
-            location_index.erase(location);
+            if (!nonunique_locations.contains(location))
+                location_index.erase(location);
             location_index.emplace(declaration, location);
+        }
+
+        // Remove all locations of this variable
+        void free(std::shared_ptr<Declaration> declaration) {
+            auto& declaration_index = allocations.template get<declaration_tag>();
+            declaration_index.erase(declaration);
         }
     };
 }

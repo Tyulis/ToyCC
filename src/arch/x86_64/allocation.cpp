@@ -1,3 +1,4 @@
+#include "config.h"
 #include "diagnostic.h"
 #include "ir/declaration.h"
 #include "ir/type.h"
@@ -8,7 +9,9 @@
 
 namespace toycc::arch::x86_64 {
     // -------- StackFrame
-    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>(procedure), name(procedure.declaration->name) {
+    static const std::unordered_set<Location> NONUNIQUE_LOCATIONS = {Location::constant, Location::memory, Location::stack};
+
+    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name) {
         auto& declaration_index = allocations.get<ir::declaration_tag>();
 
         size_t integer_parameter_index = 0;
@@ -44,17 +47,11 @@ namespace toycc::arch::x86_64 {
         return {};
     }
 
-    std::string StackFrame::str() const {
-        CodeOutput code;
-
-        code.statement("pushq %rbp");
-        code.statement("movq %rsp, %rbp");
-        if (current_offset > 0)
-            code.statement(std::format("subq ${}, %rsp", align_offset(current_offset, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
-
-        code << output;
-
-        return code.str();
+     bool StackFrame::is_free(Location location) const {
+         if (location == Location::constant || location == Location::memory || location == Location::stack)
+             return true;
+         else
+             return content(location).get() == nullptr;
     }
 
     // Create an intermediate declaration valid only within a code generation iteration. The variable is not inserted into the stack frame unless `offset` is called on it.
@@ -74,17 +71,53 @@ namespace toycc::arch::x86_64 {
         intermediates.clear();
     }
 
+    std::string StackFrame::str() const {
+        CodeOutput code;
+
+        code.statement("pushq %rbp");
+        code.statement("movq %rsp, %rbp");
+        if (current_offset > 0)
+            code.statement(std::format("subq ${}, %rsp", align_offset(current_offset, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
+
+        code << output;
+        return code.str();
+    }
+
     std::string StackFrame::dump() const {
         std::stringstream result;
         result << "Frame " << name << " {code = {\n";
         result << indent(output.str(), true, "    ");
         result << "    }, allocations = {";
-
-        for (const Allocation& allocation : allocations)
-            result << allocation.location << ": " << allocation.declaration->name << ", ";
+        result << dump_allocations();
         result << "}}";
         return result.str();
     }
+
+    void StackFrame::label(std::string name) {
+        output.label(name);
+    }
+
+    void StackFrame::statement(std::string code) {
+        if constexpr (toycc::config::with_comment_trace)
+            code = std::format("{}  # {}", code, dump_allocations());
+        output.statement(code);
+    }
+
+    void StackFrame::directive(std::string code) {
+        output.directive(code);
+    }
+
+    void StackFrame::comment(std::string code) {
+        output.comment(code);
+    }
+
+    std::string StackFrame::dump_allocations() const {
+        std::stringstream result;
+        for (const Allocation& allocation : allocations)
+            result << allocation.declaration->name << ": " << allocation.location << ", ";
+        return result.str();
+    }
+
 
     CodeOutput& operator<< (CodeOutput& output, const StackFrame& code) {
         output << code.str();

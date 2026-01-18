@@ -23,8 +23,11 @@ namespace toycc::arch::x86_64 {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "ADDRESSOF statements without output location are not implemented", output.location);
 
         const std::string output_code = emit_operand(frame, output, destination.value());
-        frame.output.statement(std::format("movq %rsp, {}", output_code));
-        frame.output.statement(std::format("addq ${}, {}", frame.offset(variable), output_code));
+        const size_t stack_offset = frame.offset(variable);
+
+        frame.statement(std::format("movq %rsp, {}", output_code));
+        if (stack_offset != 0)
+            frame.statement(std::format("addq ${}, {}", frame.offset(variable), output_code));
         move_operand(frame, output, destination.value());
     }
 }

@@ -1,4 +1,5 @@
 #include "arch/x86_64/output.h"
+#include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
     // -------- CodeOutput
@@ -12,6 +13,12 @@ namespace toycc::arch::x86_64 {
 
     void CodeOutput::directive(std::string code) {
         output << "\t" << code << "\n";
+    }
+
+    void CodeOutput::comment(std::string content) {
+        std::vector<std::string> lines = split(content, "\n");
+        for (const std::string& line : lines)
+            output << "\t" << "# " << line << "\n";
     }
 
     std::string CodeOutput::str() const {

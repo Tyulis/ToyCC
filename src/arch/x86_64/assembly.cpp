@@ -2,6 +2,7 @@
 #include <unordered_map>
 
 #include "diagnostic.h"
+#include "ir/declaration.h"
 #include "arch/x86_64/assembly.h"
 
 namespace toycc::arch::x86_64 {
@@ -126,8 +127,23 @@ namespace toycc::arch::x86_64 {
 
     std::string emit_operand(StackFrame& frame, const ir::Operand& operand, Location location) {
         std::stringstream code;
-        if (operand.is_dereference())
-            code << operand.indices[0].constant().integer() << "(";
+        if (operand.is_dereference()) {
+            ir::IntegerConstant offset = operand.indices[0].constant().integer();
+            if (offset != 0)
+                code << offset;
+            code << "(";
+
+            const std::unordered_set<Location> pointer_locations = frame.locate(operand.declaration());
+            if (pointer_locations.empty())
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Pointer `{}` has no location", operand.pointer().ir_code()), operand.location);
+
+            for (Location pointer_location : pointer_locations)
+                if (pointer_location != Location::memory && pointer_location != Location::stack)
+                    location = pointer_location;
+
+            if (location == Location::memory || location == Location::stack)
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Can't emit dereference operand with pointer `{}` in memory", operand.pointer().ir_code()), operand.location);
+        }
 
         if (operand.has_constant_base()) {
             const ir::Constant& base = operand.constant();

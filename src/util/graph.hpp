@@ -270,6 +270,20 @@ namespace toycc {
                 return {_edges.begin(), _edges.end()};
             }
 
+            // Get all edges connected to the given node
+            inline EdgeSet connected_edges(std::shared_ptr<Node> node) const {
+                const EntryEdgeIndex& entry_index = entry_edge_index();
+                const ExitEdgeIndex&  exit_index  = exit_edge_index();
+
+                auto [entry_begin, entry_end] = entry_index.equal_range(node);
+                auto [exit_begin,  exit_end]  = exit_index.equal_range(node);
+
+                EdgeSet result;
+                result.insert(entry_begin, entry_end);
+                result.insert(exit_begin, exit_end);
+                return result;
+            }
+
             // Get the set of nodes without outgoing edges
             inline NodeSet sources() const {
                 const ExitEdgeIndex& exit_index = exit_edge_index();

@@ -52,16 +52,16 @@ namespace toycc::ir {
         for (std::shared_ptr<DependencyNode> node : graph.nodes()) {
             const std::string node_name = node_names[node] = std::format("{}_{}", cluster_name, node_index++);
             if (node->is_statement())
-                dot << node_name << " [label=\"" << node->statement().ir_code() << "\" shape=box];\n";
+                dot << "    " << node_name << " [label=\"" << node->statement().ir_code() << "\" shape=box];\n";
             else if (node->is_value())
-                dot << node_name << " [label=\"" << node->declaration()->name << "\" shape=ellipse];\n";
+                dot << "    " << node_name << " [label=\"" << node->declaration()->name << "\" shape=ellipse];\n";
             else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
         }
 
         for (const DependencyGraph::Edge& edge : graph.edges())
-            dot << node_names[edge.entry] << " -> " << node_names[edge.exit] << " [label=\"" << dependency_repr(edge.attr) << "\"];\n";
+            dot << "    " << node_names[edge.entry] << " -> " << node_names[edge.exit] << " [label=\"" << dependency_repr(edge.attr) << "\"];\n";
 
-        dot << "}\n";
+        dot << "}";
         return dot.str();
     }
 
@@ -154,8 +154,10 @@ namespace toycc::ir {
         // FIXME : If there's a dereference, don't make any assumption on where that value comes from and make this depend on everything else
         if (statement.output.has_value()) {
             if (statement.output->is_dereference()) {
-                for (std::shared_ptr<Declaration> decl : defined_decls)
+                for (std::shared_ptr<Declaration> decl : defined_decls) {
+                    inputs [decl].type |= DependencyType::DEREFERENCE;
                     outputs[decl].type |= DependencyType::DEREFERENCE;
+                }
 
                 if (statement.output->has_variable_base()) {
                     Dependency& dependency = inputs[statement.output->declaration()];
@@ -253,34 +255,51 @@ namespace toycc::ir {
 
     // Make intermediate values of external variables into internal temporaries
     void BasicBlock::split_intermediate_values() {
-        for (std::shared_ptr<DependencyNode> node : dependencies.nodes()) {
-            if (!node->is_value())
-                continue;
+        for (std::shared_ptr<Declaration> local : locals()) {
+            DependencyGraph::NodeSet intermediates;
 
-            std::shared_ptr<Declaration> initial_declaration = node->declaration();
+            for (std::shared_ptr<DependencyNode> value_node : dependencies.find_nodes(local)) {
+                // Values live on entry and exit are not intermediates
+                if (dependencies.is_source(value_node) || dependencies.is_sink(value_node))
+                    continue;
 
-            // Live on entry or exit
-            if (dependencies.is_source(node) || dependencies.is_sink(node))
-                continue;
+                Flags<DependencyType> dependency_types;
+                for (DependencyGraph::Edge edge : dependencies.out_edges(value_node))
+                    dependency_types |= edge.attr.type;
 
-            Flags<DependencyType> dependency_types;
-            for (DependencyGraph::Edge edge : dependencies.out_edges(node))
-                dependency_types |= edge.attr.type;
-            if (dependency_types & DependencyType::LIVE_ON_EXIT)
-                continue;
+                // Also keep variables affected by dereferences and calls
+                if (dependency_types & (DependencyType::LIVE_ON_EXIT | DependencyType::CALL | DependencyType::DEREFERENCE))
+                    continue;
 
-            std::shared_ptr<Declaration> intermediate = declare_intermediate(initial_declaration->type, initial_declaration->location);
-            node->node = intermediate;
+                // At this point, this value node is an intermediate value : replace it with an intermediate declaration
+                std::shared_ptr<Declaration> intermediate = declare_intermediate(local->type, local->location);
+                value_node->node = intermediate;
 
-            for (std::shared_ptr<DependencyNode> statement_node : dependencies.connected_nodes(node)) {
-                if (!statement_node->is_statement())
-                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Value node connected to another value node", node->location());
+                auto replace_operands = [&](std::shared_ptr<DependencyNode> statement_node, const Dependency& dependency) {
+                    if (!statement_node->is_statement())
+                        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Value node connected to another value node", value_node->location());
+                    Statement& statement = statement_node->statement();
 
-                Statement& statement = statement_node->statement();
-                if (statement.output.has_value())
-                    replace_declaration(statement.output.value(), initial_declaration, intermediate);
-                for (Operand& input : statement.inputs)
-                    replace_declaration(input, initial_declaration, intermediate);
+                    switch (dependency.operand_group) {
+                        case OperandGroup::INDIRECT: return;  // INDIRECT dependency are there to account for side effects of dereferences and calls, they're not actual operands of the statement
+
+                        case OperandGroup::INPUT:
+                            for (Operand& input : statement.inputs)
+                                replace_declaration(input, local, intermediate);
+                        break;
+
+                        case OperandGroup::OUTPUT:
+                            if (!statement.output.has_value())
+                                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Found an OUTPUT edge to a statement without outputs", value_node->location());
+                        replace_declaration(statement.output.value(), local, intermediate);
+                    }
+                };
+
+                for (DependencyGraph::Edge edge : dependencies.in_edges(value_node))
+                    replace_operands(edge.entry, edge.attr);
+
+                for (DependencyGraph::Edge edge : dependencies.out_edges(value_node))
+                    replace_operands(edge.exit, edge.attr);
             }
         }
     }
@@ -323,7 +342,7 @@ namespace toycc::ir {
             if (node->is_statement())
                 dot << node_name << " [label=\"" << node->statement().ir_code() << "\" shape=box];\n";
             else if (node->is_value())
-                dot << node_name << " [label=\"" << node->declaration()->name << "\" shape=ellipse];\n";
+                dot << node_name << " [label=\"" << node->declaration()->ir_code() << "\" shape=ellipse];\n";
             else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
         }
 

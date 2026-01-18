@@ -87,12 +87,12 @@ namespace toycc::arch::x86_64 {
         if (locations.contains(expected_location))
             return {OperandMatch::OK, expected_location};
         else
-            return {OperandMatch::REQUIRES_TRANSFER, expected_location, frame.content(expected_location).get() == nullptr};
+            return {OperandMatch::REQUIRES_TRANSFER, expected_location, frame.is_free(expected_location)};
     }
 
     inline OperandMatch check_out_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
         const std::unordered_set<Location> locations = frame.locate(operand);
-        if (locations.contains(expected_location) || frame.content(expected_location).get() == nullptr)
+        if (locations.contains(expected_location) || frame.is_free(expected_location))
             return {OperandMatch::OK, expected_location};
         else
             return {OperandMatch::REQUIRES_TRANSFER, expected_location, false};

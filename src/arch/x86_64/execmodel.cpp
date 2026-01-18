@@ -1,3 +1,4 @@
+#include "diagnostic.h"
 #include "arch/x86_64/execmodel.h"
 #include "util/strings.h"
 #include "util/combinatorics.hpp"
@@ -20,6 +21,9 @@ namespace toycc::arch::x86_64 {
             if (nof_uses >= 2)
                 link_columns.push_back(column);
         }
+
+        if (link_columns.empty())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The subgraph doesn't have any link columns");
 
         // Check all permutations for a match
         for (Permutations<size_t> column_permutations(link_columns, link_columns.size()); !column_permutations.done(); column_permutations.next()) {
@@ -121,7 +125,7 @@ namespace toycc::arch::x86_64 {
     std::ostream& operator<< (std::ostream& stream, const GroupMatch& match) {
         stream << match.group << " {";
         for (std::shared_ptr<ir::DependencyNode> node : match.statements)
-            stream << "\n" << node->statement().ir_code();
+            stream << node->statement().ir_code() << ", ";
         stream << "}";
         return stream;
     }

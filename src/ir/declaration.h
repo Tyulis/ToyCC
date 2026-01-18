@@ -95,6 +95,7 @@ namespace toycc::ir {
         std::variant<std::shared_ptr<Declaration>, Constant, std::string> value;
         CodeLocation location;
         std::vector<Operand> indices;
+        std::shared_ptr<Type> dereference_type = nullptr;  // Pre-resolved dereference type, set in the postprocessing > dereference step because pointer types don't exist after it
 
         Operand(const Constant& constant, std::vector<Operand> indices = {});
         Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices = {});
@@ -118,6 +119,7 @@ namespace toycc::ir {
         Constant constant() const;
         Constant& constant();
         std::shared_ptr<Declaration> declaration() const;
+        Operand pointer() const;
 
         bool operator== (const Operand& operand) const;
 

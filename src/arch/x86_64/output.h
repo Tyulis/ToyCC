@@ -10,6 +10,7 @@ namespace toycc::arch::x86_64 {
             void label(std::string name);
             void statement(std::string code);
             void directive(std::string code);
+            void comment(std::string content);
 
             std::string str() const;
 

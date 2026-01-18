@@ -3,7 +3,7 @@ project(toycc VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
-set(CMAKE_CXX_FLAGS "-g -Wall -Wextra -Werror=switch -Werror=implicit-fallthrough")
+set(CMAKE_CXX_FLAGS "-g -Wall -Wextra -Werror=switch -Werror=implicit-fallthrough -DWITH_COMMENT_TRACE")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)  # For clangd
 
 if (NOT CMAKE_BUILD_TYPE)

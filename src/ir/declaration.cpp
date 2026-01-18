@@ -21,15 +21,21 @@ namespace toycc::ir {
             return "";
 
         std::stringstream repr;
-        if (storage & StorageClass::AUTO)          repr << "auto ";
-        if (storage & StorageClass::STATIC)        repr << "static ";
-        if (storage & StorageClass::EXTERN)        repr << "extern ";
-        if (storage & StorageClass::REGISTER)      repr << "register ";
-        if (storage & StorageClass::THREAD_LOCAL)  repr << "thread_local ";
-        if (storage & StorageClass::TYPEDEF)       repr << "typedef ";
-        if (storage & StorageClass::PARAMETER)     repr << "parameter ";
-        if (storage & StorageClass::TEMPORARY)     repr << "temporary ";
-        if (storage & StorageClass::GLOBAL)        repr << "global ";
+        for (StorageClass item : storage) {
+            switch (item) {
+                case StorageClass::AUTO:          repr << "auto ";          break;
+                case StorageClass::STATIC:        repr << "static ";        break;
+                case StorageClass::EXTERN:        repr << "extern ";        break;
+                case StorageClass::REGISTER:      repr << "register ";      break;
+                case StorageClass::THREAD_LOCAL:  repr << "thread_local ";  break;
+                case StorageClass::TYPEDEF:       repr << "typedef ";       break;
+                case StorageClass::PARAMETER:     repr << "parameter ";     break;
+                case StorageClass::TEMPORARY:     repr << "temporary ";     break;
+                case StorageClass::INTERMEDIATE:  repr << "intermediate ";  break;
+                case StorageClass::GLOBAL:        repr << "global ";        break;
+            }
+        }
+
         return repr.str();
     }
 
@@ -66,7 +72,7 @@ namespace toycc::ir {
     }
 
     std::string Declaration::ir_code() const {
-        return std::format("#decl {}{}{}", storage_classes_repr(storage), function_specifiers_repr(function_spec), Member::ir_code());
+        return std::format("{}{}{}", storage_classes_repr(storage), function_specifiers_repr(function_spec), Member::ir_code());
     }
 
 
@@ -206,6 +212,9 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Type> Operand::type() const {
+        if (!indices.empty() && dereference_type.get() != nullptr)
+            return dereference_type;
+
         std::shared_ptr<Type> type = base_type();
         for (auto it = indices.begin(); it != indices.end(); it++)
             type = type->dereference(location);
@@ -230,6 +239,11 @@ namespace toycc::ir {
     std::shared_ptr<Declaration> Operand::declaration() const {
         if (has_variable_base())  return std::get<std::shared_ptr<Declaration>>(value);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant operand", location);
+    }
+
+    // Get the operand without the dereferencing indices
+    Operand Operand::pointer() const {
+        return Operand {value, location, {}};
     }
 
     bool Operand::operator== (const Operand& rhs) const {

@@ -24,9 +24,12 @@ namespace toycc::arch::x86_64 {
 
             std::vector<GroupMatch> find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches);
             const TranslationMatch& select_translation(const std::vector<TranslationMatch>& matches);
+            void load_pointers(StackFrame& frame, TranslationMatch& match);
+            Location allocate_main_register(StackFrame& frame, TranslationMatch& match);
+            void flush_indirects(StackFrame& frame, const ir::DependencyGraph& graph, const TranslationMatch& match);
             void emit_transfers(StackFrame& frame, TranslationMatch& match);
             void transfer(StackFrame& frame, ir::Operand& operand, Location destination);
-            void clear_processed_statements(ir::DependencyGraph& graph, const GroupMatch& match);
+            void clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match);
             void clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const ir::DependencyGraph& graph);
 
             // -------- Symbol management -> arch/x86_64/symbols.cpp

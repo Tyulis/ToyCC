@@ -182,20 +182,23 @@
 
         // -------- RETURN_VAL
         {"ir":       {"tag": "RETURN_VAL", "value": "constint"},
-         "allocate": {"return_register": {"location": "a"}, "saved_stack": {"location": "bp", "size": 8}},
+         "allocate": {"return_register": {"location": "a"}, "bp": {"location": "bp", "size": 8}, "sp": {"location": "sp", "size": 8}},
          "target":  [{"instruction": "MOV", "input": ["value"], "output": "$return_register"},
-                     {"instruction": "POP", "output": "$saved_stack"},
+                     {"instruction": "MOV", "input": ["$bp"], "output": "$sp"},
+                     {"instruction": "POP", "output": "$bp"},
                      {"instruction": "RET", "input": []}]},
 
         {"ir":       {"tag": "RETURN_VAL", "value": "a"},
-         "allocate": {"saved_stack": {"location": "bp", "size": 8}},
-         "target":  [{"instruction": "POP", "output": "$saved_stack"},
+         "allocate": {"bp": {"location": "bp", "size": 8}, "sp": {"location": "sp", "size": 8}},
+         "target":  [{"instruction": "MOV", "input": ["$bp"], "output": "$sp"},
+                     {"instruction": "POP", "output": "$bp"},
                      {"instruction": "RET", "input": []}]},
 
         // -------- RETURN
         {"ir":       {"tag": "RETURN"},
-         "allocate": {"saved_stack": {"location": "bp", "size": 8}},
-         "target":  [{"instruction": "POP", "output": "$saved_stack"},
+         "allocate": {"bp": {"location": "bp", "size": 8}, "sp": {"location": "sp", "size": 8}},
+         "target":  [{"instruction": "MOV", "input": ["$bp"], "output": "$sp"},
+                     {"instruction": "POP", "output": "$bp"},
                      {"instruction": "RET", "input": []}]},
     ]
 }

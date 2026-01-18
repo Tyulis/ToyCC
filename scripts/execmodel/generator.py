@@ -75,8 +75,6 @@ def generate_locations(translation_model: TranslationModel, output_dir: Path):
 
 # -------- Graph matcher
 def generate_translation_tags(translation_model: TranslationModel, output_dir: Path):
-
-
     group_tags = "enum class TranslationGroupTag {\n"
     group_repr = "    switch (tag) {\n"
     translation_tags = "enum class TranslationTag {\n"
@@ -450,12 +448,12 @@ def generate_emission_translation(translation: Translation, translation_model: T
                     operand_moves += f"    move_operand(frame, {output_ref}, {operand_location});\n"
 
         if len(operand_arguments) == 0:
-            function_content += f'    frame.output.statement("{target.form.gas_name}");\n'
+            function_content += f'    frame.statement("{target.form.gas_name}");\n'
         else:
             uses_match = True
             operand_code = ", ".join(operand_arguments)
             asm_format = f"{target.form.gas_name} " + ", ".join("{}" for _ in operand_order)
-            function_content += f'    frame.output.statement(std::format("{asm_format}", {operand_code}));\n'
+            function_content += f'    frame.statement(std::format("{asm_format}", {operand_code}));\n'
         function_content += operand_moves
 
     prototype = f"template<> void emit_translation<TranslationTag::{translation.tag}> (StackFrame& frame, const TranslationMatch&{' match' if uses_match else ''})"
@@ -613,31 +611,18 @@ def generate_transfer_emission(translation_model: TranslationModel, output_dir: 
     header_content = "using namespace toycc::arch::x86_64;\n\n"
     source_content = "using namespace toycc::arch::x86_64;\n\n"
 
-    prototype = "void emit_transfer(StackFrame& frame, ir::Operand& operand, Location destination, const TransferMatch& match)"
+    prototype = "void emit_transfer(StackFrame& frame, const ir::Operand& source_operand, const ir::Operand& dest_operand, const TransferMatch& match, Location source, Location destination)"
     header_content += f"{prototype};\n"
 
     source_content += f"\n{prototype} {{\n"
-    source_content += "    std::string mnemonic;"
+    source_content += "    std::string mnemonic;\n"
 
     source_content += "    switch (match.transfer) {\n"
     for transfer in translation_model.transfers:
         source_content += f'        case TransferTag::{transfer.tag}:  mnemonic = "{transfer.form.gas_name}";  break;\n'
     source_content +=  '        default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown transfer tag");\n'
     source_content += "    }\n"
-
-
-    source_content += '    Location source = match.source_location.value_or(*frame.locate(operand).begin());\n'
-    source_content += '    ir::Operand source_operand = operand;\n'
-    source_content += '    if (operand.is_constant() || operand.is_dereference()) {\n'
-    source_content += '        std::shared_ptr<ir::Declaration> temporary = frame.declare_intermediate(operand.type(), operand.location);\n'
-    source_content += '        frame.copy(temporary, destination);\n'
-    source_content += '        operand = temporary;\n'
-    source_content += '    } else if (operand.is_label()) {\n'
-    source_content += '        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Transferring labels is not supported", operand.location);\n'
-    source_content += '    } else if (operand.is_variable()) {\n'
-    source_content += '        frame.copy(operand.declaration(), destination);\n'
-    source_content += '    } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);\n'
-    source_content += '    frame.output.statement(std::format("{} {}, {}", mnemonic, emit_operand(frame, source_operand, source), emit_operand(frame, operand, destination)));\n'
+    source_content += '    frame.statement(std::format("{} {}, {}", mnemonic, emit_operand(frame, source_operand, source), emit_operand(frame, dest_operand, destination)));\n'
     source_content += '}\n'
 
     write_header(header_content, output_dir / "transfer_emission.h", ["ir/declaration.h", "arch/x86_64/execmodel.h", "arch/x86_64/allocation.h", output_dir / "location.h"])

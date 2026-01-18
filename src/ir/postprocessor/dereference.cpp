@@ -28,6 +28,7 @@ namespace toycc::ir {
         if (original.indices.empty())
             return original;
 
+        std::shared_ptr<Type> dereference_type = original.type();
         Operand result = original;
 
         do {
@@ -40,6 +41,7 @@ namespace toycc::ir {
                 result = dereference_first_index(result, scope);
         } while (result.indices.size() > 1);
 
+        result.dereference_type = dereference_type;
         return result;
     }
 
