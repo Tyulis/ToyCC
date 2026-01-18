@@ -41,8 +41,13 @@ class TranslationTargetSpec:
         self.form = form
         self.operands = operands
 
+class CustomTargetSpec:
+    def __init__(self, header: str, function: str):
+        self.header:   str = header
+        self.function: str = function
+
 class TranslationSpec:
-    def __init__(self, ir: list[TranslationIRSpec], target: list[TranslationTargetSpec], allocations: dict[str, Constraint], subgraph: tuple[tuple[int]]):
+    def __init__(self, ir: list[TranslationIRSpec], target: list[TranslationTargetSpec]|CustomTargetSpec, allocations: dict[str, Constraint], subgraph: tuple[tuple[int]]):
         self.ir = ir
         self.target = target
         self.allocations = allocations
@@ -157,8 +162,8 @@ class TranslationModel:
         for name, expression in description["operand_types"].items():
             self.operand_types[name] = load_constraint_expression(expression, self.constraint_context())
 
-        self.no_reuse  = load_constraint_expression(description["no_reuse"], self.constraint_context())
-        self.no_output = load_constraint_expression(description["no_output"], self.constraint_context())
+        allowed_outputs = set(self.locations) - set(description["no_output"])
+        self.output_constraint = Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.LOCATION, location) for location in allowed_outputs))
 
         allowed_allocations = set(self.locations) - set(description["no_allocation"])
         self.allocation_constraint = Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.LOCATION, location) for location in allowed_allocations))
@@ -239,19 +244,26 @@ class TranslationModel:
 
         return {group.tag(): group for group in groups}
 
+    def parse_allocations(self, allocate_description: dict[str, object]) -> dict[str, Constraint]:
+        allocations = {}
+        for name, constraint in allocate_description.items():
+            allocations[f"${name}"] = load_constraint_expression(constraint, self.operand_types)
+        return allocations
+
     def parse_translation_set(self, description: dict[str, object], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:
         if "ir" not in description or "target" not in description:
             raise TranslationModelError("Translation rules must have at least `ir` and `target` elements")
 
         if not isinstance(description["ir"], list):
             description["ir"] = [description["ir"]]
-        if not isinstance(description["target"], list):
-            description["target"] = [description["target"]]
 
-        allocations = {}
-        if "allocate" in description:
-            for name, constraint in description["allocate"].items():
-                allocations[f"${name}"] = load_constraint_expression(constraint, self.operand_types)
+        allocations = self.parse_allocations(description["allocate"]) if "allocate" in description else {}
+
+        if not isinstance(description["target"], list):
+            if "custom" in description["target"] and description["target"]["custom"]:
+                return self.parse_custom_target(description["ir"], description["target"], allocations.copy())
+            else:
+                description["target"] = [description["target"]]
 
         target_forms = []
         for target in description["target"]:
@@ -260,7 +272,7 @@ class TranslationModel:
 
         specs = []
         for target_combination in itertools.product(*target_forms):
-            spec = self.make_translation_spec(description["ir"], description["target"], target_combination, allocations.copy())
+            spec = self.parse_translation_rule(description["ir"], description["target"], target_combination, allocations.copy())
             if spec is not None:
                 specs.append(spec)
 
@@ -268,16 +280,17 @@ class TranslationModel:
             print(f"WARNING : Rule description {description} does not produce any valid translation")
         return specs
 
-    def make_translation_spec(self, ir_descriptions: list[dict], target_descriptions: list[dict], target_combination: list[InstructionForm], allocations: dict[str, Constraint]) -> TranslationSpec|None:
+    def make_ir_operands(self, ir_descriptions: list[dict]):
         ir_operands = {}
         for index, ir_desc in enumerate(ir_descriptions):
             ir_spec = self.ir[ir_desc["tag"]]
 
             if ir_spec.output:
                 if "output" in ir_desc:
-                    ir_operands[f"${index}.output"] = self.get_type(ir_desc["output"])
+                    conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({self.get_type(ir_desc["output"]), self.output_constraint}))
+                    ir_operands[f"${index}.output"] = to_simplified_constraint(conjunction)
                 else:
-                    ir_operands[f"${index}.output"] = CONSTRAINT_TRUE
+                    ir_operands[f"${index}.output"] = self.output_constraint
 
             for operand_name in ir_spec.input:
                 if operand_name in ir_desc:
@@ -296,6 +309,16 @@ class TranslationModel:
                         raise TranslationModelError(f"IR statement `{ir_spec.tag}` doesn't have an output")
                 elif operand_name not in ir_spec.input:
                     raise TranslationModelError(f"Input `{operand_name}` not defined in IR spec for {ir_spec.tag}")
+        return ir_operands
+
+    def parse_custom_target(self, ir_descriptions: list[dict], target_description: dict[str, object], allocations: dict[str, Constraint]) -> list[TranslationSpec]:
+        ir_operands = self.make_ir_operands(ir_descriptions)
+        target = CustomTargetSpec(target_description["header"], target_description["function"])
+        translation = self.make_translation_spec(ir_descriptions, ir_operands, target, allocations)
+        return [] if translation is None else [translation]
+
+    def parse_translation_rule(self, ir_descriptions: list[dict], target_descriptions: list[dict], target_combination: list[InstructionForm], allocations: dict[str, Constraint]) -> TranslationSpec|None:
+        ir_operands = self.make_ir_operands(ir_descriptions)
 
         translation_targets = []
         for index, (target_desc, target_form) in enumerate(zip(target_descriptions, target_combination)):
@@ -395,7 +418,9 @@ class TranslationModel:
                         allocations[output_id] = output_id
 
             translation_targets.append(TranslationTargetSpec(target_form, target_operands))
+        return self.make_translation_spec(ir_descriptions, ir_operands, translation_targets, allocations)
 
+    def make_translation_spec(self, ir_descriptions: list[dict], ir_operands: dict[str, Constraint], translation_targets: list[TranslationTargetSpec]|CustomTargetSpec, allocations: dict[str, Constraint]) -> TranslationSpec|None:
         for operand_id, constraint in ir_operands.items():
             if isinstance(constraint, str):
                 ref, _, ir_name = constraint.partition(".")

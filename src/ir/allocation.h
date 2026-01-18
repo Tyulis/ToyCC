@@ -9,6 +9,7 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 
+#include "ir/flow.h"
 #include "ir/declaration.h"
 
 namespace toycc::ir {
@@ -30,6 +31,10 @@ namespace toycc::ir {
 
     template <typename Location>
     struct StackFrame {
+        const Procedure& procedure;
+
+        StackFrame(const Procedure& procedure) : procedure(procedure) {}
+
         // Stack variables management
         std::unordered_map<std::shared_ptr<Declaration>, size_t> stack_offsets;
         size_t current_offset = 0;

@@ -74,7 +74,7 @@ namespace toycc::arch::x86_64 {
     }
 
     // -------- IR operand overload
-    static inline std::string location_code(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location location) {
+    std::string location_code(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location location) {
         switch (location) {
             case Location::constant:
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Constants should be handled elsewhere");

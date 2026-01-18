@@ -8,7 +8,7 @@
 
 namespace toycc::arch::x86_64 {
     // -------- StackFrame
-    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>(), name(procedure.declaration->name) {
+    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>(procedure), name(procedure.declaration->name) {
         auto& declaration_index = allocations.get<ir::declaration_tag>();
 
         size_t integer_parameter_index = 0;

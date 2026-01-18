@@ -467,21 +467,28 @@ def generate_emission_translation(translation: Translation, translation_model: T
 
     return header_content, source_content
 
-def generate_emission_group(group: TranslationGroup, translation_model: TranslationModel, output_dir: Path) -> Path:
+def generate_emission_group(group: TranslationGroup, translation_model: TranslationModel, output_dir: Path) -> Path|None:
     header_path = output_dir / f"{group.tag()}.h"
     source_path = output_dir / f"{group.tag()}.cpp"
 
     header_content = "using namespace toycc::arch::x86_64;\n\n"
     source_content = "using namespace toycc::arch::x86_64;\n\n"
 
+    nof_translations = 0
     for translation in group.translations:
+        if isinstance(translation.target, CustomTargetSpec):
+            continue
         translation_header, translation_source = generate_emission_translation(translation, translation_model)
         header_content += translation_header
         source_content += translation_source + "\n"
+        nof_translations += 1
 
-    write_header(header_content, header_path, ["gen/execmodel/x86_64/emission.h"])
-    write_source(source_content, source_path, ["arch/x86_64/assembly.h", header_path], ["format"])
-    return header_path
+    if nof_translations == 0:
+        return None
+    else:
+        write_header(header_content, header_path, ["gen/execmodel/x86_64/emission.h"])
+        write_source(source_content, source_path, ["arch/x86_64/assembly.h", header_path], ["format"])
+        return header_path
 
 def generate_emission(translation_model: TranslationModel, output_dir: Path):
     emission_dir = output_dir / "emission"
@@ -489,7 +496,9 @@ def generate_emission(translation_model: TranslationModel, output_dir: Path):
 
     group_headers = []
     for group in translation_model.translations.values():
-        group_headers.append(generate_emission_group(group, translation_model, emission_dir))
+        header = generate_emission_group(group, translation_model, emission_dir)
+        if header is not None:
+            group_headers.append(header)
 
     header_content = "using namespace toycc::arch::x86_64;\n\n"
     source_content = "using namespace toycc::arch::x86_64;\n\n"
@@ -503,15 +512,20 @@ def generate_emission(translation_model: TranslationModel, output_dir: Path):
     source_content += f"{prototype} {{\n"
     source_content += f"    switch (match.translation) {{\n"
 
+    custom_headers = set()
     for group in translation_model.translations.values():
         for translation in group.translations:
-            source_content += f"        case TranslationTag::{translation.tag}:  return emit_translation<TranslationTag::{translation.tag}> (frame, match);\n"
+            if isinstance(translation.target, CustomTargetSpec):
+                custom_headers.add(translation.target.header)
+                source_content += f"        case TranslationTag::{translation.tag}:  return {translation.target.function} (frame, match);\n"
+            else:
+                source_content += f"        case TranslationTag::{translation.tag}:  return emit_translation<TranslationTag::{translation.tag}> (frame, match);\n"
 
     source_content += "    }\n"
     source_content += "}\n"
 
     write_header(header_content, output_dir / "emission.h", ["arch/x86_64/allocation.h", "arch/x86_64/execmodel.h", output_dir / "translation_tag.h"])
-    write_source(source_content, output_dir / "emission.cpp", [output_dir / "emission.h"] + group_headers)
+    write_source(source_content, output_dir / "emission.cpp", [output_dir / "emission.h"] + group_headers + sorted(custom_headers))
 
 
 # -------- Transfer tags

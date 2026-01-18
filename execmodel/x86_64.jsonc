@@ -13,6 +13,7 @@
     "operand_types": {
         "-1"           : {"category": "constant", "type": "INTEGER", "value": -1},
         "constint"     : {"category": "constant", "type": "INTEGER"},
+        "var"          : {"category": "variable"},
         "int"          : {"type": "INTEGER"},
         "bool"         : {"type": "BOOL"},
         "tempbool"     : {"type": "BOOL", "storage": "INTERMEDIATE"},
@@ -104,8 +105,7 @@
         "{er}"         : false
     },
 
-    "no_reuse":      {"anyof": "m"},
-    "no_output":     {"category": ["label", "constant"]},
+    "no_output":     ["constant", "sp", "bp"],
     "no_allocation": ["constant", "stack", "memory"],
 
     "transfers": ["MOV"],
@@ -115,8 +115,8 @@
         "BLOCK":          {"input": [], "output": false, "block": true, "translate": false},
         "FUNCTION":       {"input": [], "output": false, "block": true, "translate": false},
 
-        "CALL_FUNCTION":  {"input": "any", "output": true,  "translate": "custom"},
-        "CALL_PROCEDURE": {"input": "any", "output": false, "translate": "custom"},
+        "CALL_FUNCTION":  {"input": "any", "output": true},
+        "CALL_PROCEDURE": {"input": "any", "output": false},
 
         "JUMP":           {"input": ["target"],              "output": false},
         "JUMP_IF_TRUE":   {"input": ["target", "predicate"], "output": false},
@@ -166,10 +166,13 @@
         {"ir": {"tag": "SUB"},                                "target": {"instruction": "SUB"}},
 
         // -------- COPY
-        {"ir": {"tag": "COPY"},                              "target": {"instruction": "MOV"}},
+        {"ir": {"tag": "COPY"},                        "target": {"instruction": "MOV"}},
+
+        // -------- ADDRESSOF
+        {"ir": {"tag": "ADDRESSOF", "operand": "var", "output": "var"}, "target": {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_addressof"}},
 
         // -------- Unconditional JUMP
-        {"ir": {"tag": "JUMP", "target": "label"},           "target": {"instruction": "JMP"}},
+        {"ir": {"tag": "JUMP", "target": "label"},     "target": {"instruction": "JMP"}},
 
         // -------- JUMP_IF_TRUE
         {"ir"    : [{"tag": "EQ",           "left": "int", "right": "int", "output": "tempbool"},
