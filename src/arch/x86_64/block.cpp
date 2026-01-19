@@ -236,30 +236,40 @@ namespace toycc::arch::x86_64 {
 
     // Before a dereference or call, flush all indirect operands to their respective memory locations
     void CodeGenerator::flush_indirects(StackFrame& frame, const ir::DependencyGraph& graph, const TranslationMatch& match) {
+        std::unordered_set<std::shared_ptr<ir::Declaration>> indirects;
+        std::unordered_set<std::shared_ptr<ir::Declaration>> reads;
         for (std::shared_ptr<ir::DependencyNode> statement : match.group_match.statements) {
             for (ir::DependencyGraph::Edge edge : graph.connected_edges(statement)) {
-                if (edge.attr.operand_group == ir::OperandGroup::INDIRECT && (edge.attr.type & (ir::DependencyType::DEREFERENCE | ir::DependencyType::CALL | ir::DependencyType::LIVE_ON_EXIT))) {
-                    std::shared_ptr<ir::DependencyNode> value = (edge.entry == statement ? edge.exit : edge.entry);
-                    std::shared_ptr<ir::Declaration> variable = value->declaration();
-                    const std::unordered_set<Location> locations = frame.locate(variable);
+                std::shared_ptr<ir::DependencyNode> value = (edge.entry == statement ? edge.exit : edge.entry);
+                std::shared_ptr<ir::Declaration> variable = value->declaration();
 
-                    Location destination = Location::stack;
-                    if (locations.contains(Location::memory) && !locations.contains(Location::stack))
-                        destination = Location::memory;
+                if (edge.attr.operand_group == ir::OperandGroup::INDIRECT && (edge.attr.type & (ir::DependencyType::DEREFERENCE | ir::DependencyType::CALL | ir::DependencyType::LIVE_ON_EXIT)))
+                    indirects.insert(variable);
 
-                    // Move the variable to memory if necessary
-                    if (!locations.contains(destination)) {
-                        if (variable->storage & ir::StorageClass::GLOBAL)
-                            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing indirect variables is not implemented", statement->statement().location);
-
-                        ir::Operand operand(variable, statement->statement().location);
-                        transfer(frame, operand, Location::stack);
-                        frame.move(variable, Location::stack);
-                    }
-
-                    frame.move(variable, destination);  // Remove its possible other locations
-                }
+                if (edge.attr.type & ir::DependencyType::READ)
+                    reads.insert(variable);
             }
+        }
+
+        for (std::shared_ptr<ir::Declaration> variable : indirects) {
+            const std::unordered_set<Location> locations = frame.locate(variable);
+
+            Location destination = Location::stack;
+            if (locations.contains(Location::memory) && !locations.contains(Location::stack))
+                destination = Location::memory;
+
+            // Move the variable to memory if necessary
+            if (!locations.contains(destination)) {
+                if (variable->storage & ir::StorageClass::GLOBAL)
+                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing indirect variables is not implemented", variable->location);
+
+                ir::Operand operand(variable, variable->location);
+                transfer(frame, operand, Location::stack);
+                frame.copy(variable, Location::stack);
+            }
+
+            if (!reads.contains(variable))
+                frame.move(variable, destination);  // Remove its possible other locations if it's not needed as an input
         }
     }
 
@@ -316,6 +326,12 @@ namespace toycc::arch::x86_64 {
             comment << "TRANSFER " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")";
             frame.comment(comment.str());
         }
+
+        if (toycc::config::with_translation_trace) {
+            std::cerr << "        Transfer " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")" << "\n";
+            std::cerr << indent(dump(match.value()), true, "            ") << "\n";
+        }
+
 
         toycc::execmodel::x86_64::emit_transfer(frame, source_operand, operand, match.value(), source, destination);
     }

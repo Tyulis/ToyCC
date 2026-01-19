@@ -75,7 +75,7 @@ namespace toycc::arch::x86_64 {
     }
 
     inline OperandMatch check_type(const ir::Operand& operand, ir::TypeCategory expected_category) {
-        return (operand.type()->category == expected_category) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.type()->dequalify()->category == expected_category) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_in_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
