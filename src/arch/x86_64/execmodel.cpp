@@ -1,4 +1,4 @@
-#include "diagnostic.h"
+#include "config.h"
 #include "arch/x86_64/execmodel.h"
 #include "util/strings.h"
 #include "util/combinatorics.hpp"
@@ -93,6 +93,9 @@ namespace toycc::arch::x86_64 {
     }
 
     void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match) {
+        if (toycc::config::with_translation_trace)
+            std::cerr << indent(dump(match), true, "        ") << "\n";
+
         if (!match.matches() && !match.nof_transfers().has_value())
             return;
 

@@ -7,6 +7,7 @@
 
 #include <boost/program_options.hpp>
 
+#include "config.h"
 #include "linker.h"
 #include "parser.h"
 #include "assembler.h"
@@ -48,13 +49,17 @@ int main(int argc, char** argv) {
                                   ("codegen,S",      "Output the generated assembly code")
                                   ("compile,c",      "Compile to an object file");
 
+    boost::program_options::options_description debug_options("Debug options");
+    debug_options.add_options()("translation-trace", "Log all translation model steps")
+                               ("comment-trace",     "Add comments with the translation process in the assembly code output");
+
     boost::program_options::options_description generic_options("Generic options");
     generic_options.add_options()("help,h",        "Show this help message")
                                  ("output,o",      boost::program_options::value<std::string>(), "Output file name")
                                  ("source-file,f", boost::program_options::value<std::string>(), "Source files");
 
     boost::program_options::options_description all_options;
-    all_options.add(generic_options).add(sequence_options);
+    all_options.add(generic_options).add(sequence_options).add(debug_options);
 
     boost::program_options::positional_options_description positional;
     positional.add("source-file", 1);
@@ -75,6 +80,11 @@ int main(int argc, char** argv) {
         std::cout << all_options << std::endl;
         return 1;
     }
+
+    if (options.count("translation-trace"))
+        toycc::config::with_translation_trace = true;
+    if (options.count("comment-trace"))
+        toycc::config::with_comment_trace = true;
 
     SequenceStep target_step = SequenceStep::LINK;
     if (options.count("preprocess"))

@@ -385,7 +385,7 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
     header_content += f"{prototype};\n"
 
     source_content += f"{prototype} {{\n"
-    source_content += f"    std::vector<TranslationMatch> matches;"
+    source_content += f"    std::vector<TranslationMatch> matches;\n"
     source_content += f"    auto add_match = [&](std::optional<TranslationMatch> match) {{if (match.has_value())  matches.push_back(match.value());}};\n"
     source_content += f"    for (const GroupMatch& group_match : group_matches) {{\n"
     source_content += f"        switch (group_match.group) {{\n"

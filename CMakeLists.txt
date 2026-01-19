@@ -58,6 +58,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/include DESTINATION ${CMAKE_CURRENT_BINARY
 # Compile the app
 add_executable(${PROJECT_NAME}
 	src/assembler.cpp
+	src/config.cpp
 	src/diagnostic.cpp
 	src/linker.cpp
 	src/main.cpp

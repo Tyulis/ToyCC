@@ -9,6 +9,7 @@
 #include "gen/execmodel/x86_64/emission.h"
 #include "gen/execmodel/x86_64/transfer_matcher.h"
 #include "gen/execmodel/x86_64/transfer_emission.h"
+#include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, const std::unordered_set<std::shared_ptr<ir::Declaration>>&) {
@@ -16,7 +17,26 @@ namespace toycc::arch::x86_64 {
         ir::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);
 
+        if (toycc::config::with_translation_trace) {
+            std::cerr << "New basic block :\n";
+            std::cerr << "    Dependency graph :\n";
+            std::cerr << indent(ir::dot_graph(block->dependencies, "block"), true, "        ") << "\n";
+            std::cerr << "    Dependency matrix :\n";
+            std::cerr << indent(dump(matrix), true, "        ") << "\n";
+            std::cerr << "    Group matches :\n";
+            for (const GroupMatch& match : group_matches)
+                std::cerr << "        " << match << "\n";
+        }
+
         while (!graph.empty()) {
+            if (toycc::config::with_translation_trace) {
+                std::cerr << "    New iteration :\n";
+                std::cerr << "        Dependency graph :\n";
+                std::cerr << indent(ir::dot_graph(graph, "remainder"), true, "            ") << "\n";
+                std::cerr << "        Stack frame :\n";
+                std::cerr << indent(frame.dump(), true, "            ") << "\n";
+            }
+
             try {
                 code_generation_iteration(frame, graph, group_matches);
                 clear_obsolete_matches(group_matches, graph);
@@ -41,7 +61,7 @@ namespace toycc::arch::x86_64 {
             Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
 
         TranslationMatch selected_match = select_translation(translation_matches);
-        if constexpr (toycc::config::with_comment_trace)
+        if (toycc::config::with_comment_trace)
             frame.comment(dump(selected_match));
 
         try {
@@ -81,6 +101,12 @@ namespace toycc::arch::x86_64 {
                 entry_matches.push_back(match);
         }
 
+        if (toycc::config::with_translation_trace) {
+            std::cerr << "        Entry matches :\n";
+            for (const GroupMatch& match : entry_matches)
+                std::cerr << "            " << match << "\n";
+        }
+
         return entry_matches;
     }
 
@@ -111,6 +137,11 @@ namespace toycc::arch::x86_64 {
             for (const TranslationMatch& match : matches)
                 diagnostic.add_note(DiagnosticLevel::NOTE, dump(match));
             throw diagnostic;
+        }
+
+        if (toycc::config::with_translation_trace) {
+            std::cerr << "        Selected translation :\n";
+            std::cerr << indent(dump(matches.at(selected_index.value())), true, "            ") << "\n";
         }
 
         return matches.at(selected_index.value());
@@ -280,7 +311,7 @@ namespace toycc::arch::x86_64 {
             frame.copy(operand.declaration(), destination);
         } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
 
-        if constexpr (toycc::config::with_comment_trace) {
+        if (toycc::config::with_comment_trace) {
             std::stringstream comment;
             comment << "TRANSFER " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")";
             frame.comment(comment.str());
