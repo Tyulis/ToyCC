@@ -146,15 +146,24 @@ namespace toycc::arch::x86_64 {
         if (input_node.get() == nullptr)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The input variable is not found in the dependency graph", input_operand.location);
 
-        size_t remaining_liveness = 0;
+        ssize_t remaining_liveness = 0;
         for (const ir::DependencyGraph::Edge& edge : graph.out_edges(input_node))
             if (!group_statements.contains(edge.exit) || (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT))
                 remaining_liveness += 1;
 
-        const std::unordered_set<Location> locations = frame.locate(input_variable);
-        if (locations.size() > remaining_liveness)
-            return OperandMatch::OK;
+
+
+        std::optional<Location> preferred_location;
+        for (Location location : frame.locate(input_variable)) {
+            remaining_liveness -= 1;
+            if (location != Location::constant && location != Location::memory && location != Location::stack)
+                preferred_location = location;
+        }
+
+        // Still live / only on the stack so can't overwrite
+        if (remaining_liveness > 0 || !preferred_location.has_value())
+            return {OperandMatch::REQUIRES_TRANSFER, preferred_location};
         else
-            return OperandMatch::REQUIRES_TRANSFER;
+            return {OperandMatch::OK, preferred_location};
     }
 }
