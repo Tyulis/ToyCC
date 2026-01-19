@@ -28,7 +28,6 @@ namespace toycc::ir {
         if (original.indices.empty())
             return original;
 
-        std::shared_ptr<Type> dereference_type = original.type();
         Operand result = original;
 
         do {
@@ -41,7 +40,6 @@ namespace toycc::ir {
                 result = dereference_first_index(result, scope);
         } while (result.indices.size() > 1);
 
-        result.dereference_type = dereference_type;
         return result;
     }
 
@@ -78,16 +76,17 @@ namespace toycc::ir {
             // Now the lvalue is *(offset_pointer+0)
             std::vector<Operand> indices = {Constant {IntegerConstant(0), original.location, offset_type}};
             std::copy(original.indices.begin() + 1, original.indices.end(), std::back_inserter(indices));
-            return {offset_pointer, original.location, indices};
+            return {offset_pointer, original.location, indices, referenced_type};
         } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Labels are not supported as array indices", original.location);
 
+        result.dereference_type = referenced_type;
         return result;
     }
 
     Operand PostProcessor::dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope) {
         std::shared_ptr<Type> referenced_type = operand.base_type()->dereference(operand.location);
         std::shared_ptr<Declaration> pointee = declare_temporary(scope, referenced_type, operand.location);
-        const Operand reference = Operand {operand.value, operand.location, {operand.indices[0]}};
+        const Operand reference = Operand {operand.value, operand.location, {operand.indices[0]}, referenced_type};
         scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::COPY, reference, pointee));
         return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}};
     }
