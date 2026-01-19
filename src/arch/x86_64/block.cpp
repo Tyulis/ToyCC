@@ -17,7 +17,7 @@ namespace toycc::arch::x86_64 {
         ir::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);
 
-        if (toycc::config::with_translation_trace) {
+        if (toycc::config::debug::with_translation_trace) {
             std::cerr << "New basic block :\n";
             std::cerr << "    Dependency graph :\n";
             std::cerr << indent(ir::dot_graph(block->dependencies, "block"), true, "        ") << "\n";
@@ -29,7 +29,7 @@ namespace toycc::arch::x86_64 {
         }
 
         while (!graph.empty()) {
-            if (toycc::config::with_translation_trace) {
+            if (toycc::config::debug::with_translation_trace) {
                 std::cerr << "    New iteration :\n";
                 std::cerr << "        Dependency graph :\n";
                 std::cerr << indent(ir::dot_graph(graph, "remainder"), true, "            ") << "\n";
@@ -61,7 +61,7 @@ namespace toycc::arch::x86_64 {
             Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
 
         TranslationMatch selected_match = select_translation(translation_matches);
-        if (toycc::config::with_comment_trace)
+        if (toycc::config::debug::with_comment_trace)
             frame.comment(dump(selected_match));
 
         try {
@@ -101,7 +101,7 @@ namespace toycc::arch::x86_64 {
                 entry_matches.push_back(match);
         }
 
-        if (toycc::config::with_translation_trace) {
+        if (toycc::config::debug::with_translation_trace) {
             std::cerr << "        Entry matches :\n";
             for (const GroupMatch& match : entry_matches)
                 std::cerr << "            " << match << "\n";
@@ -139,7 +139,7 @@ namespace toycc::arch::x86_64 {
             throw diagnostic;
         }
 
-        if (toycc::config::with_translation_trace) {
+        if (toycc::config::debug::with_translation_trace) {
             std::cerr << "        Selected translation :\n";
             std::cerr << indent(dump(matches.at(selected_index.value())), true, "            ") << "\n";
         }
@@ -321,13 +321,13 @@ namespace toycc::arch::x86_64 {
             frame.copy(operand.declaration(), destination);
         } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
 
-        if (toycc::config::with_comment_trace) {
+        if (toycc::config::debug::with_comment_trace) {
             std::stringstream comment;
             comment << "TRANSFER " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")";
             frame.comment(comment.str());
         }
 
-        if (toycc::config::with_translation_trace) {
+        if (toycc::config::debug::with_translation_trace) {
             std::cerr << "        Transfer " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")" << "\n";
             std::cerr << indent(dump(match.value()), true, "            ") << "\n";
         }

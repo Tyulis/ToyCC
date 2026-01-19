@@ -88,6 +88,10 @@ namespace toycc::ir {
         std::shared_ptr<Declaration> pointee = declare_temporary(scope, referenced_type, operand.location);
         const Operand reference = Operand {operand.value, operand.location, {operand.indices[0]}, referenced_type};
         scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::COPY, reference, pointee));
-        return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}};
+
+        std::shared_ptr<Type> pointee_referenced_type = nullptr;
+        if (pointee->type->category == TypeCategory::POINTER)
+            pointee_referenced_type = pointee->type->dereference(operand.location);
+        return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}, pointee_referenced_type};
     }
 }

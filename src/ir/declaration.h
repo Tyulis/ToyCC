@@ -105,8 +105,6 @@ namespace toycc::ir {
         Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices = {});
         Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices, std::shared_ptr<Type> dereference_type);
 
-        void breaker() const;
-
         bool is_label() const;
         bool is_constant() const;
         bool is_variable() const;

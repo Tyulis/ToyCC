@@ -125,7 +125,7 @@ namespace toycc::arch::x86_64 {
     }
 
     void StackFrame::statement(std::string code) {
-        if (toycc::config::with_comment_trace)
+        if (toycc::config::debug::with_comment_trace)
             code = std::format("{}  # {}", code, dump_allocations());
         output.statement(code);
     }

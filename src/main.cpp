@@ -1,5 +1,6 @@
 #include <boost/program_options/errors.hpp>
 #include <boost/program_options/positional_options.hpp>
+#include <boost/program_options/variables_map.hpp>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -36,6 +37,20 @@ enum class SequenceStep : unsigned int {
 
 constexpr static std::string DEFAULT_OBJECT_FILE_NAME = "a.out";
 
+void read_config(const boost::program_options::variables_map& options) {
+    // Optimization options
+    if (options.count("fsplit-intermediates"))
+        toycc::config::optimization::split_intermediates = true;
+    if (options.count("fno-split-intermediates"))
+        toycc::config::optimization::split_intermediates = false;
+
+    // Debug options
+    if (options.count("translation-trace"))
+        toycc::config::debug::with_translation_trace = true;
+    if (options.count("comment-trace"))
+        toycc::config::debug::with_comment_trace = true;
+}
+
 int main(int argc, char** argv) {
     toycc::arch::DATAMODEL = &toycc::arch::x86_64::DATAMODEL;  // Only x86_64 for now
 
@@ -53,13 +68,17 @@ int main(int argc, char** argv) {
     debug_options.add_options()("translation-trace", "Log all translation model steps")
                                ("comment-trace",     "Add comments with the translation process in the assembly code output");
 
+    boost::program_options::options_description optimization_options("Optimization options");
+    optimization_options.add_options()("fsplit-intermediates",    "Split intermediate values in basic blocks")
+                                      ("fno-split-intermediates", "Don't split intermediate values in basic blocks");
+
     boost::program_options::options_description generic_options("Generic options");
     generic_options.add_options()("help,h",        "Show this help message")
                                  ("output,o",      boost::program_options::value<std::string>(), "Output file name")
                                  ("source-file,f", boost::program_options::value<std::string>(), "Source files");
 
     boost::program_options::options_description all_options;
-    all_options.add(generic_options).add(sequence_options).add(debug_options);
+    all_options.add(generic_options).add(sequence_options).add(optimization_options).add(debug_options);
 
     boost::program_options::positional_options_description positional;
     positional.add("source-file", 1);
@@ -81,10 +100,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (options.count("translation-trace"))
-        toycc::config::with_translation_trace = true;
-    if (options.count("comment-trace"))
-        toycc::config::with_comment_trace = true;
+    read_config(options);
 
     SequenceStep target_step = SequenceStep::LINK;
     if (options.count("preprocess"))

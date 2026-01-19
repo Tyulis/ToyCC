@@ -1,6 +1,7 @@
 #include <sstream>
 #include <variant>
 
+#include "config.h"
 #include "diagnostic.h"
 #include "ir/flow.h"
 #include "ir/declaration.h"
@@ -615,7 +616,9 @@ namespace toycc::ir {
                 if (reachable.get() != block.get())
                     not_live_on_exit = unordered_set_difference(not_live_on_exit, live_on_entry[reachable]);
             block->not_live_on_exit(not_live_on_exit);
-            block->split_intermediate_values();
+
+            if (toycc::config::optimization::split_intermediates)
+                block->split_intermediate_values();
         }
     }
 

@@ -169,20 +169,15 @@ namespace toycc::ir {
     }
 
     // -------- Operand
-    Operand::Operand(const Constant& constant, std::vector<Operand> indices) : value(constant), location(constant.location), indices(indices) {breaker();}
-    Operand::Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices) : value(constant), location(location), indices(indices) {breaker();}
-    Operand::Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices) : value(declaration), location(declaration->location), indices(indices) {breaker();}
-    Operand::Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices) : value(declaration), location(location), indices(indices) {breaker();}
-    Operand::Operand(std::string label, CodeLocation location, std::vector<Operand> indices) : value(label), location(location), indices(indices) {breaker();}
+    Operand::Operand(const Constant& constant, std::vector<Operand> indices) : value(constant), location(constant.location), indices(indices) {}
+    Operand::Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices) : value(constant), location(location), indices(indices) {}
+    Operand::Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices) : value(declaration), location(declaration->location), indices(indices) {}
+    Operand::Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices) : value(declaration), location(location), indices(indices) {}
+    Operand::Operand(std::string label, CodeLocation location, std::vector<Operand> indices) : value(label), location(location), indices(indices) {}
     Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices)
-            : value(value), location(location), indices(indices) {breaker();}
+            : value(value), location(location), indices(indices) {}
     Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices, std::shared_ptr<Type> dereference_type)
-            : value(value), location(location), indices(indices), dereference_type(dereference_type) {breaker();}
-
-    void Operand::breaker() const {
-        if (has_variable_base() && declaration()->name == "pp")
-            std::cerr << "PP";
-    }
+            : value(value), location(location), indices(indices), dereference_type(dereference_type) {}
 
     bool Operand::is_label() const {
         return has_label_base() && !is_dereference();
