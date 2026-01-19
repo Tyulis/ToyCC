@@ -13,6 +13,9 @@
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, const std::unordered_set<std::shared_ptr<ir::Declaration>>&) {
+        if (block->label.has_value() && block->label->type != ir::LabelType::FUNCTION)
+            frame.label(block->label->name);
+
         ir::DependencyGraph graph = block->dependencies;
         ir::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);

@@ -6,7 +6,7 @@ TOYCC_ROOT=$(pwd)
 mkdir -p build/
 cd build/
 cmake ..
-make -j$(nproc)
+make -j$(nproc) toycc
 cd ${TOYCC_ROOT}
 
 # Run the test suite
@@ -57,7 +57,7 @@ for test_source in $(find ${TESTSUITE_DIR} -iname '*.c') ; do
             if ! ${CMD} >> ${TEST_LOG} 2>&1 || ! [ -f ${test_compiled} ] ; then
                 echo "TEST CASE $(basename ${test_source}) : KO (compilation error)" | tee -a ${TEST_SUMMARY}
                 NOF_TESTS_KO=$(($NOF_TESTS_KO + 1))
-            elif ! ${test_compiled} >> ${TEST_LOG} 2>&1 ; then
+            elif ! timeout 5 ${test_compiled} >> ${TEST_LOG} 2>&1 ; then
                 echo "TEST CASE $(basename ${test_source}) : KO (incorrect behaviour)" | tee -a ${TEST_SUMMARY}
                 NOF_TESTS_KO=$(($NOF_TESTS_KO + 1))
             else
