@@ -88,8 +88,16 @@ namespace toycc::ir {
         // Add another location for a variable. If there is already something at `location`, it is overwritten
         void copy(std::shared_ptr<Declaration> declaration, Location location) {
             auto& location_index = allocations.template get<location_tag>();
-            if (!nonunique_locations.contains(location))
+            if (!nonunique_locations.contains(location)) {
                 location_index.erase(location);
+            } else {
+                // Don't reinsert the allocation if it already exists with the same variable and location
+                auto& declaration_index = allocations.template get<declaration_tag>();
+                for (auto [it, end] = declaration_index.equal_range(declaration); it != end; it++)
+                    if (it->location == location)
+                        return;
+            }
+
             location_index.emplace(declaration, location);
         }
 

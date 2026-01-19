@@ -4,6 +4,7 @@
 #include "arch/x86_64/custom_targets.h"
 
 namespace toycc::arch::x86_64 {
+    // Necessary because a generated translation model would unnecessarily transfer the operand to the stack
     void emit_addressof(StackFrame& frame, const TranslationMatch& match) {
         const ir::Statement& statement = match.group_match.statements[0]->statement();
         const ir::Operand& operand = statement.inputs[0];
@@ -22,12 +23,7 @@ namespace toycc::arch::x86_64 {
         if (!destination.has_value())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "ADDRESSOF statements without output location are not implemented", output.location);
 
-        const std::string output_code = emit_operand(frame, output, destination.value());
-        const size_t stack_offset = frame.offset(variable);
-
-        frame.statement(std::format("movq %rsp, {}", output_code));
-        if (stack_offset != 0)
-            frame.statement(std::format("addq ${}, {}", frame.offset(variable), output_code));
+        frame.statement(std::format("leaq {}, {}", emit_operand(frame, operand, Location::stack), emit_operand(frame, output, destination.value())));
         move_operand(frame, output, destination.value());
     }
 }

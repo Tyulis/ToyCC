@@ -174,7 +174,7 @@ namespace toycc::semantic {
             case TypeCategory::INTEGER:
             case TypeCategory::FLOAT: {
                 std::shared_ptr<Declaration> destination = destination_generator();
-                emit(Statement::make_binary_operation(location, StatementTag::EQ, source, make_constant_zero(source_type->category, location), destination));
+                emit(Statement::make_binary_operation(location, StatementTag::NE, source, make_constant_zero(source_type->category, location), destination));
                 return destination;
             }
 

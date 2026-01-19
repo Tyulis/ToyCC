@@ -166,25 +166,33 @@
         {"ir": {"tag": "SUB"},                                "target": {"instruction": "SUB"}},
 
         // -------- COPY
-        {"ir": {"tag": "COPY"},                        "target": {"instruction": "MOV"}},
+        {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},
 
         // -------- ADDRESSOF
         {"ir": {"tag": "ADDRESSOF", "operand": "var", "output": "var"}, "target": {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_addressof"}},
 
         // -------- Unconditional JUMP
-        {"ir": {"tag": "JUMP", "target": "label"},     "target": {"instruction": "JMP"}},
+        {"ir": {"tag": "JUMP", "target": "label"}, "target": {"instruction": "JMP"}},
 
         // -------- JUMP_IF_TRUE
         {"ir"    : [{"tag": "EQ",           "left": "int", "right": "int", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
                     {"instruction": "JE",  "input": ["$1.target"]}]},
+        {"ir"    : [{"tag": "NE",           "left": "int", "right": "int", "output": "tempbool"},
+                    {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
+                    {"instruction": "JNE",  "input": ["$1.target"]}]},
 
         // -------- JUMP_IF_FALSE
         {"ir"    : [{"tag": "EQ",            "left": "int", "right": "int", "output": "tempbool"},
                     {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
                     {"instruction": "JNE",  "input": ["$1.target"]}]},
+        {"ir"    : [{"tag": "NE",            "left": "int", "right": "int", "output": "tempbool"},
+                    {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
+                    {"instruction": "JE",  "input": ["$1.target"]}]},
 
         // -------- RETURN_VAL
         {"ir":       {"tag": "RETURN_VAL", "value": "constint"},
