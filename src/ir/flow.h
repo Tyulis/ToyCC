@@ -55,6 +55,8 @@ namespace toycc::ir {
         arma::imat matrix;  // Matrix with n for statement.inputs[n-1], -n for statement.outputs[n-1], 0 when unlinked
     };
     DependencyMatrix to_dependency_matrix(const DependencyGraph& graph);
+    std::ostream& operator<< (std::ostream& stream, const DependencyMatrix& graph);
+    std::string dump(const DependencyMatrix& graph);
 
     enum class BasicBlockType {
         ENTRY, INNER, EXIT,

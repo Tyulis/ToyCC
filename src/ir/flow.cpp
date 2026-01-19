@@ -6,6 +6,7 @@
 #include "ir/declaration.h"
 #include "ir/type_expressions.h"
 #include "util/graph.hpp"
+#include "util/strings.h"
 
 namespace toycc::ir {
     static std::string dependency_type_repr(DependencyType type) {
@@ -80,15 +81,47 @@ namespace toycc::ir {
         result.matrix = arma::imat(result.statements.size(), result.values.size(), arma::fill::zeros);
         for (const auto& [row, statement_node] : std::ranges::enumerate_view(result.statements)) {
             for (const DependencyGraph::Edge& input : graph.in_edges(statement_node))
-                if (input.attr.operand_group == OperandGroup::INPUT || input.attr.type & DependencyType::READ)
+                if (input.attr.operand_group == OperandGroup::INPUT && (input.attr.type & DependencyType::READ))
                     result.matrix(row, value_indices[input.entry]) = 1 + input.attr.operand_index;
 
             for (const DependencyGraph::Edge& output : graph.out_edges(statement_node))
-                if (output.attr.operand_group == OperandGroup::OUTPUT || output.attr.type & DependencyType::WRITE)
-                    result.matrix(row, value_indices[output.entry]) = -(1 + output.attr.operand_index);
+                if (output.attr.operand_group == OperandGroup::OUTPUT && (output.attr.type & DependencyType::WRITE))
+                    result.matrix(row, value_indices[output.exit]) = -(1 + output.attr.operand_index);
         }
 
         return result;
+    }
+
+    std::ostream& operator<< (std::ostream& stream, const DependencyMatrix& graph) {
+        size_t statement_width = 0;
+        for (std::shared_ptr<DependencyNode> statement : graph.statements)
+            statement_width = std::max(statement_width, statement->statement().ir_code().size());
+        statement_width += 1;
+
+        stream << justify_right("", statement_width);
+        std::vector<size_t> column_widths;
+        for (const auto& [index, value] : std::ranges::enumerate_view(graph.values)) {
+            const std::string name = value->declaration()->name;
+            const size_t column_width = std::max(size_t(2), name.size()) + 1;
+            column_widths.push_back(column_width);
+            stream << center(name, column_width);
+        }
+        stream << "\n";
+
+        for (size_t row = 0; row < graph.matrix.n_rows; row++) {
+            stream << justify_right(graph.statements[row]->statement().ir_code(), statement_width);
+            for (size_t col = 0; col < graph.matrix.n_cols; col++)
+                stream << center(std::to_string(graph.matrix(row, col)), column_widths[col]);
+            stream << "\n";
+        }
+
+        return stream;
+    }
+
+    std::string dump(const DependencyMatrix& graph) {
+        std::stringstream stream;
+        stream << graph;
+        return stream.str();
     }
 
     // -------- DependencyNode

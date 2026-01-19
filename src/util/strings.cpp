@@ -245,4 +245,37 @@ namespace toycc {
         to_lower_inplace(result);
         return result;
     }
+
+    std::string& justify_right_inplace(std::string& str, size_t length, char padding) {
+        const ssize_t padding_length = static_cast<ssize_t>(length) - static_cast<ssize_t>(str.length());
+        if (padding_length > 0)
+            str.insert(str.end(), padding_length, padding);
+        return str;
+    }
+
+    std::string justify_right(const std::string& str, size_t length, char padding) {
+        std::string result = str;
+        justify_right_inplace(result, length, padding);
+        return result;
+    }
+
+    std::string& center_inplace(std::string& str, size_t length, char padding) {
+        const ssize_t padding_length = static_cast<ssize_t>(length) - static_cast<ssize_t>(str.length());
+        if (padding_length <= 0)
+            return str;
+
+        const ssize_t left_padding_length = padding_length / 2;
+        const ssize_t right_padding_length = padding_length - left_padding_length;
+        if (left_padding_length > 0)
+            str.insert(str.begin(), left_padding_length, padding);
+        if (right_padding_length > 0)
+            str.insert(str.end(), right_padding_length, padding);
+        return str;
+    }
+
+    std::string center(const std::string& str, size_t length, char padding) {
+        std::string result = str;
+        center_inplace(result, length, padding);
+        return result;
+    }
 }

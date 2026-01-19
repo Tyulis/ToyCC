@@ -36,4 +36,10 @@ namespace toycc {
 
     std::string& to_lower_inplace(std::string& str);
     std::string to_lower(const std::string& str);
+
+    std::string& justify_right_inplace(std::string& str, size_t length, char padding=' ');
+    std::string justify_right(const std::string& str, size_t length, char padding=' ');
+
+    std::string& center_inplace(std::string& str, size_t length, char padding=' ');
+    std::string center(const std::string& str, size_t length, char padding=' ');
 }
