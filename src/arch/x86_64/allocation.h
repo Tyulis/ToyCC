@@ -23,6 +23,8 @@ namespace toycc::arch::x86_64 {
 
             std::shared_ptr<ir::Declaration> declare_intermediate(std::shared_ptr<ir::Type> type, CodeLocation code_location);
             void flush_intermediates();
+            void load_parameters();
+            void load_entry_variables(std::shared_ptr<ir::BasicBlock> block);
 
             void label(std::string name);
             void statement(std::string code);

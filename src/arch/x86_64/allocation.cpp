@@ -71,6 +71,33 @@ namespace toycc::arch::x86_64 {
         intermediates.clear();
     }
 
+    // Load the locations of the function parameters upon entry in the procedure
+    void StackFrame::load_parameters() {
+        size_t integer_index = 0;
+
+        for (std::shared_ptr<ir::Declaration> parameter : procedure.parameters) {
+            switch (parameter->type->category) {
+                case ir::TypeCategory::BOOL:
+                case ir::TypeCategory::INTEGER:
+                    if (integer_index < INTEGER_REGISTER_ARGUMENTS.size())
+                        copy(parameter, INTEGER_REGISTER_ARGUMENTS[integer_index++]);
+                    else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Functions with more than {} integer parameters are not implemented", INTEGER_REGISTER_ARGUMENTS.size()), parameter->location);
+                    break;
+
+                default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Parameter loading for `{}` is not implemented", parameter->ir_code()), parameter->location);
+            }
+        }
+    }
+
+    // FIXME : For now, assume the variables that are live on entry of the block are on the stack
+    void StackFrame::load_entry_variables(std::shared_ptr<ir::BasicBlock> block) {
+        for (std::shared_ptr<ir::Declaration> live : block->live_on_entry()) {
+            if (live->storage & ir::StorageClass::GLOBAL)
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variables live on entry are not implemented");
+            copy(live, Location::stack);
+        }
+    }
+
     std::string StackFrame::str() const {
         CodeOutput code;
 
