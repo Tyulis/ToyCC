@@ -11,6 +11,7 @@
                                         "stack"]},
 
     "operand_types": {
+        "0"            : {"category": "constant", "type": "INTEGER", "value":  0},
         "-1"           : {"category": "constant", "type": "INTEGER", "value": -1},
         "constint"     : {"category": "constant", "type": "INTEGER"},
         "var"          : {"category": "variable"},
@@ -175,6 +176,17 @@
         {"ir": {"tag": "JUMP", "target": "label"}, "target": {"instruction": "JMP"}},
 
         // -------- JUMP_IF_TRUE
+        // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit test x, x when x is in registers, it's shorter
+        {"ir"    : [{"tag": "EQ",           "left": "int", "right": "0", "output": "tempbool"},
+                    {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "CMP", "input": ["$0.left", "$0.left"]},
+                    {"instruction": "JE",  "input": ["$1.target"]}]},
+        {"ir"    : [{"tag": "NE",           "left": "int", "right": "0", "output": "tempbool"},
+                    {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
+                    {"instruction": "JNE",  "input": ["$1.target"]}]},
+
+        // Actual comparisons
         {"ir"    : [{"tag": "EQ",           "left": "int", "right": "int", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
@@ -185,6 +197,17 @@
                     {"instruction": "JNE",  "input": ["$1.target"]}]},
 
         // -------- JUMP_IF_FALSE
+        // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit test x, x
+        {"ir"    : [{"tag": "EQ",            "left": "int", "right": "0", "output": "tempbool"},
+                    {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
+                    {"instruction": "JNE",  "input": ["$1.target"]}]},
+        {"ir"    : [{"tag": "NE",            "left": "int", "right": "0", "output": "tempbool"},
+                    {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
+         "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
+                    {"instruction": "JE",  "input": ["$1.target"]}]},
+
+        // Actual comparisons
         {"ir"    : [{"tag": "EQ",            "left": "int", "right": "int", "output": "tempbool"},
                     {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},

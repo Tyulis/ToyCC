@@ -11,6 +11,7 @@
 
 #include "ir/flow.h"
 #include "ir/declaration.h"
+#include "util/alignment.hpp"
 
 namespace toycc::ir {
     using namespace boost::multi_index;
@@ -45,9 +46,9 @@ namespace toycc::ir {
         size_t offset(std::shared_ptr<Declaration> declaration) {
             auto it = stack_offsets.find(declaration);
             if (it == stack_offsets.end()) {
-                const size_t result = current_offset;
+                const size_t result = align_offset(current_offset, declaration->type->size({}));
                 stack_offsets[declaration] = result;
-                current_offset += declaration->type->size(declaration->location);
+                current_offset = result + declaration->type->size(declaration->location);
                 return result;
             } else {
                 return it->second;

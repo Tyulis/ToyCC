@@ -101,6 +101,10 @@ namespace toycc::arch::x86_64 {
     std::string StackFrame::str() const {
         CodeOutput code;
 
+        if (toycc::config::debug::with_comment_trace)
+            for (const auto& [variable, offset] : stack_offsets)
+                code.comment(std::format("-{}(%rbp) : {}", offset, variable->name));
+
         code.statement("pushq %rbp");
         code.statement("movq %rsp, %rbp");
         if (current_offset > 0)
