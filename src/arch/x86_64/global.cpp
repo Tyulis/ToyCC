@@ -1,6 +1,7 @@
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/allocation.h"
+#include "ir/flow.h"
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_translation_unit(CodeOutput& output, const ir::TranslationUnit& unit) {
@@ -23,37 +24,59 @@ namespace toycc::arch::x86_64 {
 
         // Then the actual code
         StackFrame frame(procedure);
+
+        ir::FlowGraph remaining_blocks = procedure.blocks;
         std::shared_ptr<ir::BasicBlock> current_block = procedure.entry_block;
-        std::unordered_set<std::shared_ptr<ir::BasicBlock>> visited;
         while (current_block != procedure.exit_block) {
             generate_basic_block(frame, current_block, globals);
-            visited.insert(current_block);
-            ir::FlowGraph::EdgeSet transitions = procedure.blocks.out_edges(current_block);
+            const ir::FlowGraph::EdgeSet transitions = remaining_blocks.out_edges(current_block);
+            remaining_blocks.pop_node(current_block);
+
+            // Only the exit block remains -> exit
+            if (remaining_blocks.nof_nodes() <= 1)
+                break;
 
             // Always prioritize fallthrough
             std::shared_ptr<ir::BasicBlock> fallthrough = nullptr;
             std::shared_ptr<ir::BasicBlock> non_fallthrough = nullptr;
-            bool goes_to_exit = false;
 
             for (const ir::FlowGraph::Edge& transition : transitions) {
-                if (visited.contains(transition.exit))
-                    continue;
-
-                if (transition.exit == procedure.exit_block)
-                    goes_to_exit = true;
-
                 if (transition.attr == ir::FlowType::FALLTHROUGH) {
                     fallthrough = transition.exit;
                     break;
-                } else {
+                } else if (transition.exit != procedure.exit_block) {
                     non_fallthrough = transition.exit;
                 }
             }
 
-            if      (fallthrough.get()     != nullptr)  current_block = fallthrough;
-            else if (non_fallthrough.get() != nullptr)  current_block = non_fallthrough;
-            else if (goes_to_exit)                      break;
-            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Found a dead end local block");
+            // This block links to yet non-generated blocks -> proceed with those
+            if (fallthrough.get() != nullptr) {
+                current_block = fallthrough;
+                continue;
+            } else if (non_fallthrough.get() != nullptr) {
+                current_block = non_fallthrough;
+                continue;
+            }
+
+            // No link to other blocks : find a source node regarding fallthrough.
+            // Fallthrough links always make a directed acyclic graph so there's always one
+            for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes()) {
+                if (block == procedure.exit_block)
+                    continue;
+
+                bool has_fallthrough_entry = false;
+                for (const ir::FlowGraph::Edge& entry_transition : remaining_blocks.in_edges(block)) {
+                    if (entry_transition.attr == ir::FlowType::FALLTHROUGH) {
+                        has_fallthrough_entry = true;
+                        break;
+                    }
+                }
+
+                if (!has_fallthrough_entry) {
+                    current_block = block;
+                    break;
+                }
+            }
         }
 
         output << frame;

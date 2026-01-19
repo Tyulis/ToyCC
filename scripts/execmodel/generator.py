@@ -415,7 +415,7 @@ def generate_emission_translation(translation: Translation, translation_model: T
 
         operand_arguments = []
         operand_moves = ""
-        operand_order = inputs + outputs
+        operand_order = tuple(reversed(inputs)) + tuple(reversed(outputs))
         for operand_index in operand_order:
             operand = target.form.operands[operand_index]
             if target.operands[operand_index][0] == "allocations":

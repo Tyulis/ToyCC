@@ -260,6 +260,11 @@ namespace toycc {
                 return find_edge(Edge {entry, exit, {}});
             }
 
+            // Get the number of nodes in the graph
+            inline size_t nof_nodes() const {
+                return _nodes.size();
+            }
+
             // Get the set of all nodes in the graph
             inline NodeSet nodes() const {
                 return _nodes;
