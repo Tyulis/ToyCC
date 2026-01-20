@@ -252,6 +252,12 @@ class TranslationModel:
             allocations[f"${name}"] = load_constraint_expression(constraint, self.operand_types)
         return allocations
 
+    def parse_operand_constraint(self, description: str|dict[str, object]) -> Constraint:
+        if isinstance(description, str):
+            return self.get_type(description)
+        else:
+            return load_constraint_expression(description, self.constraint_context())
+
     def make_ir_operands(self, ir_descriptions: list[dict]) -> dict[str, Constraint]:
         ir_operands = {}
         for index, ir_desc in enumerate(ir_descriptions):
@@ -259,7 +265,7 @@ class TranslationModel:
 
             if ir_spec.output:
                 if "output" in ir_desc:
-                    conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({self.get_type(ir_desc["output"]), self.output_constraint}))
+                    conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({self.parse_operand_constraint(ir_desc["output"]), self.output_constraint}))
                     ir_operands[f"${index}.output"] = to_simplified_constraint(conjunction)
                 else:
                     ir_operands[f"${index}.output"] = self.output_constraint
@@ -269,7 +275,7 @@ class TranslationModel:
                     if ir_desc[operand_name].startswith("$"):
                         ir_operands[f"${index}.{operand_name}"] = ir_desc[operand_name]
                     else:
-                        ir_operands[f"${index}.{operand_name}"] = self.get_type(ir_desc[operand_name])
+                        ir_operands[f"${index}.{operand_name}"] = self.parse_operand_constraint(ir_desc[operand_name])
                 else:
                     ir_operands[f"${index}.{operand_name}"] = CONSTRAINT_TRUE
 
