@@ -118,6 +118,15 @@ namespace toycc::arch::x86_64 {
         return (operand.is_variable() && (operand.declaration()->storage & storage)) ? OperandMatch::OK : OperandMatch::KO;
     }
 
+    inline OperandMatch check_signed(const ir::Operand& operand, bool expect_signed) {
+        std::shared_ptr<ir::Type> base_type = operand.type()->dequalify();
+        if (base_type->category != ir::TypeCategory::INTEGER)
+            return OperandMatch::KO;
+
+        std::shared_ptr<ir::IntegerType> integer_type = std::static_pointer_cast<ir::IntegerType> (base_type);
+        return (integer_type->is_signed == expect_signed ? OperandMatch::OK : OperandMatch::KO);
+    }
+
     inline OperandMatch check_overwrite(const StackFrame& frame, const ir::DependencyGraph& graph, const ir::Operand& input_operand, const ir::Operand& output_operand, const GroupMatch& group_match) {
         if (input_operand.is_constant() || input_operand.is_label())
             return OperandMatch::REQUIRES_TRANSFER;  // Can't overwrite a constant

@@ -16,6 +16,7 @@ class ConstraintType (enum.IntEnum):
     VALUE_LE = 8
     VALUE_GE = 9
     STORAGE = 10
+    SIGNED = 11
 
 CONSTRAINT_TYPE_NAME = {
     ConstraintType.CONSTANT:    "constant",
@@ -29,6 +30,7 @@ CONSTRAINT_TYPE_NAME = {
     ConstraintType.VALUE_LE:    "value_le",
     ConstraintType.VALUE_GE:    "value_ge",
     ConstraintType.STORAGE:     "storage",
+    ConstraintType.SIGNED:      "signed",
 }
 
 class Constraint:
@@ -152,6 +154,9 @@ def parse_constraint_storage(storages: str|list[str], context: ConstraintContext
         return Constraint(ConstraintType.STORAGE, storages)
     return Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.STORAGE, storage) for storage in storages))
 
+def parse_constraint_signed(signed: bool, context: ConstraintContext) -> Constraint:
+    return Constraint(ConstraintType.CONJUNCTION, frozenset({Constraint(ConstraintType.TYPE, "INTEGER"), Constraint(ConstraintType.SIGNED, signed)}))
+
 def parse_constraint_expression(expression, context: ConstraintContext) -> Constraint:
     if isinstance(expression, bool):
         return Constraint(ConstraintType.CONSTANT, expression)
@@ -167,6 +172,7 @@ def parse_constraint_expression(expression, context: ConstraintContext) -> Const
                          "value_bits": parse_constraint_value_bits,
                          "anyof"     : parse_constraint_anyof,
                          "storage"   : parse_constraint_storage,
+                         "signed"    : parse_constraint_signed,
         }[operator](value, context)
         conjunction.add(subexpression)
 
@@ -196,7 +202,7 @@ def simplify_pairwise_and(left: Constraint, right: Constraint) -> Constraint|Non
                 return CONSTRAINT_FALSE
         case (ConstraintType.CONJUNCTION, _) | (ConstraintType.DISJUNCTION, _):
             raise TranslationModelError("Constraints must be in disjunctive normal form before simplifying them")
-        case (ConstraintType.CATEGORY, ConstraintType.CATEGORY) | (ConstraintType.TYPE, ConstraintType.TYPE) | (ConstraintType.LOCATION, ConstraintType.LOCATION) | (ConstraintType.SIZE, ConstraintType.SIZE) | (ConstraintType.VALUE_EQ, ConstraintType.VALUE_EQ) | (ConstraintType.STORAGE, ConstraintType.STORAGE):
+        case (ConstraintType.CATEGORY, ConstraintType.CATEGORY) | (ConstraintType.TYPE, ConstraintType.TYPE) | (ConstraintType.LOCATION, ConstraintType.LOCATION) | (ConstraintType.SIZE, ConstraintType.SIZE) | (ConstraintType.VALUE_EQ, ConstraintType.VALUE_EQ) | (ConstraintType.STORAGE, ConstraintType.STORAGE) | (ConstraintType.SIGNED, ConstraintType.SIGNED):
             if left.parameter == right.parameter:
                 return left
             else:
@@ -262,6 +268,11 @@ def simplify_pairwise_or(left: Constraint, right: Constraint) -> Constraint|None
                 return None
         case (ConstraintType.VALUE_GE, ConstraintType.VALUE_GE):
             return Constraint(ConstraintType.VALUE_GE, min(left.parameter, right.parameter))
+        case (ConstraintType.SIGNED, ConstraintType.SIGNED):
+            if left.parameter == right.parameter:
+                return left
+            else:
+                return CONSTRAINT_TRUE
         case _:
             return None
 

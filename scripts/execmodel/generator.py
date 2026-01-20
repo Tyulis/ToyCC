@@ -217,6 +217,9 @@ def generate_constraint(constraint: Constraint, is_output: bool, arg_usage: dict
         case ConstraintType.STORAGE:
             arg_usage["operand"] = True
             return f"check_storage(operand, ir::StorageClass::{constraint.parameter})"
+        case ConstraintType.SIGNED:
+            arg_usage["operand"] = True
+            return f"check_signed(operand, {constraint.parameter})"
 
 def generate_operand_constraint(operand: Constraint, is_output: bool, arg_usage: dict[str, bool]) -> str:
     denormalized = denormalize(operand)
