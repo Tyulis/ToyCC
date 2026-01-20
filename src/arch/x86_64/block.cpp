@@ -228,8 +228,7 @@ namespace toycc::arch::x86_64 {
                 if (content->storage & ir::StorageClass::GLOBAL)
                     throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Spilling global variables to memory is not implemented");
 
-                ir::Operand operand(content, content->location);
-                transfer(frame, operand, Location::stack);
+                transfer(frame, content, Location::stack);
                 return reg;
             }
         }
@@ -266,8 +265,7 @@ namespace toycc::arch::x86_64 {
                 if (variable->storage & ir::StorageClass::GLOBAL)
                     throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing indirect variables is not implemented", variable->location);
 
-                ir::Operand operand(variable, variable->location);
-                transfer(frame, operand, Location::stack);
+                transfer(frame, variable, Location::stack);
                 frame.copy(variable, Location::stack);
             }
 
@@ -288,8 +286,7 @@ namespace toycc::arch::x86_64 {
                 if (!input_match.free)
                     throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Transfers to occupied locations are not implemented");
 
-                ir::Operand& input = statement.inputs[input_index];
-                transfer(frame, input, input_match.location.value());
+                transfer(frame, statement.inputs[input_index], input_match.location.value());
             }
 
             if (statement_match.output.has_value() && statement_match.output->match == OperandMatch::REQUIRES_TRANSFER)
@@ -302,6 +299,11 @@ namespace toycc::arch::x86_64 {
                 continue;
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Intermediate allocation transfers are not implemented");
         }
+    }
+
+    void CodeGenerator::transfer(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location destination) {
+        ir::Operand operand(variable, variable->location);
+        transfer(frame, operand, destination);
     }
 
     void CodeGenerator::transfer(StackFrame& frame, ir::Operand& operand, Location destination) {
@@ -341,7 +343,21 @@ namespace toycc::arch::x86_64 {
 
     void CodeGenerator::clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match) {
         for (std::shared_ptr<ir::DependencyNode> statement : match.statements) {
-            ir::DependencyGraph::NodeSet connected_values = graph.connected_nodes(statement);
+            const ir::DependencyGraph::NodeSet connected_values = graph.connected_nodes(statement);
+            const ir::DependencyGraph::NodeSet sinks = graph.sinks();
+
+            // Flush outputs that are live on exit to the stack
+            for (const ir::DependencyGraph::Edge& edge : graph.out_edges(statement)) {
+                if (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT) {
+                    std::shared_ptr<ir::Declaration> variable = edge.exit->declaration();
+                    if (variable->storage & ir::StorageClass::GLOBAL)
+                        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing global variable outputs is not supported", statement->statement().location);
+
+                    if (!frame.locate(variable).contains(Location::stack))
+                        transfer(frame, edge.exit->declaration(), Location::stack);
+                }
+            }
+
             graph.pop_node(statement);
 
             // Only free values that are completely disconnected.

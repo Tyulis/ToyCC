@@ -28,6 +28,7 @@ namespace toycc::arch::x86_64 {
             Location allocate_main_register(StackFrame& frame, TranslationMatch& match);
             void flush_indirects(StackFrame& frame, const ir::DependencyGraph& graph, const TranslationMatch& match);
             void emit_transfers(StackFrame& frame, TranslationMatch& match);
+            void transfer(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location destination);
             void transfer(StackFrame& frame, ir::Operand& operand, Location destination);
             void clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match);
             void clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const ir::DependencyGraph& graph);

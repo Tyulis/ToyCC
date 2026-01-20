@@ -253,7 +253,7 @@ namespace toycc::ir {
                     dependencies.add_edge(exit_edge);
             }
 
-            for (DependencyGraph::Edge edge : dependencies.in_edges(exit_statement)) {
+            for (DependencyGraph::Edge edge : dependencies.connected_edges(exit_statement)) {
                 edge.attr.type |= DependencyType::LIVE_ON_EXIT;
                 dependencies.add_edge(edge);
             }
