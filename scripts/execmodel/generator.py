@@ -264,48 +264,71 @@ def generate_operand_ref(statement_index: int, input_index: int|None) -> str:
     else:
         return f"group_match.statements[{statement_index}]->statement().inputs[{input_index}]"
 
+def generate_statement_match(translation: TranslationSpec, statement_index: int, input_order: list[str], translation_model: TranslationModel, operand_conditions: dict[str, str]) -> str:
+    statement = translation.ir[statement_index]
+    ir_spec = translation_model.ir[statement.tag]
+
+    inputs = []
+    outputs = []
+
+    for name, operand in statement.operands.items():
+        overwritten_by = []
+        if name == "output":
+            operand_list = outputs
+            input_index = None
+            operand_ref = generate_operand_ref(statement_index, None)
+        else:
+            operand_list = inputs
+            input_index = input_order.index(name)
+            operand_ref = generate_operand_ref(statement_index, input_index)
+
+            for overwrite_statement_index, overwrite_statement in enumerate(translation.ir):
+                for overwrite_operand_name, overwrite_operand in overwrite_statement.operands.items():
+                    if overwrite_operand_name == "output" and not isinstance(overwrite_operand, Constraint) and overwrite_operand[0] == statement_index and overwrite_operand[1] == name:
+                        overwritten_by.append(overwrite_statement_index)
+                        break
+
+        operand_condition_name = f"condition_{translation.tag}_{statement_index}_{name}"
+        if operand_condition_name not in operand_conditions:
+            operand_conditions[operand_condition_name] = generate_operand_condition(operand_condition_name, operand, name == "output", overwritten_by)
+        operand_match = f"{operand_condition_name}(frame, graph, group_match, {operand_ref}"
+        if len(overwritten_by) > 0:
+            operand_match += ", " + ", ".join(generate_operand_ref(overwrite_statement_index, None) for overwrite_statement_index in overwritten_by)
+        operand_match += f")"
+        if input_index is not None:
+            operand_match += f".with_index({input_index})"
+        operand_list.append(operand_match)
+
+    return "StatementMatch {.input = {" + ", ".join(inputs) + "}, .output = {" + ", ".join(outputs) + "}}"
+
+def generate_statement_matcher(translation: TranslationSpec, statement_index: int, translation_model: TranslationModel, operand_conditions: dict[str, str]) -> str:
+    statement = translation.ir[statement_index]
+    ir_spec = translation_model.ir[statement.tag]
+
+    code = ""
+    if ir_spec.commutative:
+        input_orders = itertools.permutations(ir_spec.input)
+        code += f"    std::vector<StatementMatch> statement_{statement_index}_options;\n"
+        for input_order in input_orders:
+            code += f"    statement_{statement_index}_options.push_back({generate_statement_match(translation, statement_index, input_order, translation_model, operand_conditions)});\n"
+        code += f"    statements.push_back(select_statement_match(statement_{statement_index}_options));\n"
+    else:
+        code += f"    statements.push_back({generate_statement_match(translation, statement_index, ir_spec.input, translation_model, operand_conditions)});\n"
+
+    return code
+
 def generate_translation_matcher_function(translation: TranslationSpec, translation_model: TranslationModel) -> str:
-    operand_conditions = []
-    statements_code = ""
+    operand_conditions = {}
+
     uses_frame = False
     uses_graph = False
+    statements_code = "    std::vector<StatementMatch> statements;\n"
     for statement_index, statement in enumerate(translation.ir):
-        ir_spec = translation_model.ir[statement.tag]
-        inputs = []
-        outputs = []
+        statements_code += generate_statement_matcher(translation, statement_index, translation_model, operand_conditions)
 
-        for name, operand in statement.operands.items():
-            overwritten_by = []
-            if name == "output":
-                operand_list = outputs
-                operand_ref = generate_operand_ref(statement_index, None)
-            else:
-                operand_list = inputs
-                input_index = ir_spec.input.index(name)
-                operand_ref = generate_operand_ref(statement_index, input_index)
-
-                for overwrite_statement_index, overwrite_statement in enumerate(translation.ir):
-                    for overwrite_operand_name, overwrite_operand in overwrite_statement.operands.items():
-                        if overwrite_operand_name == "output" and not isinstance(overwrite_operand, Constraint) and overwrite_operand[0] == statement_index and overwrite_operand[1] == name:
-                            overwritten_by.append(overwrite_statement_index)
-                            break
-
-            operand_condition_name = f"condition_{translation.tag}_{statement_index}_{name}"
-            operand_conditions.append(generate_operand_condition(operand_condition_name, operand, name == "output", overwritten_by))
-            operand_match = f"{operand_condition_name}(frame, graph, group_match, {operand_ref}"
-            if len(overwritten_by) > 0:
-                operand_match += ", " + ", ".join(generate_operand_ref(overwrite_statement_index, None) for overwrite_statement_index in overwritten_by)
-            operand_match += ")"
-            operand_list.append(operand_match)
-
-        if len(inputs) > 0 or len(outputs) > 0:
+        if len(statement.operands) > 0:
             uses_frame = True
             uses_graph = True
-
-        statements_code += "            StatementMatch {\n"
-        statements_code += "                .input = {" + ", ".join(inputs) + "},\n"
-        statements_code += "                .output = {" + ", ".join(outputs) + "},\n"
-        statements_code += "            },\n"
 
     allocation_set_code = ""
     allocation_code = ""
@@ -326,22 +349,22 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
     graph_arg = " graph" if uses_graph else ""
 
     source_content = ""
+    source_content += "\n".join(operand_conditions.values()) + "\n"
     source_content += allocation_set_code
     source_content += f"template<> TranslationMatch match_translation<TranslationTag::{translation.tag}> "
     source_content += f"(const StackFrame&{frame_arg}, const ir::DependencyGraph&{graph_arg}, const GroupMatch& group_match) {{\n"
     source_content +=       allocation_code
-    source_content += f"    return {{.translation = TranslationTag::{translation.tag}, .group_match = group_match, .statements = {{\n"
-    source_content +=               statements_code
-    source_content +=  "        },\n"
+    source_content +=       statements_code
+    source_content += f"    return {{.translation = TranslationTag::{translation.tag}, .group_match = group_match, .statements = statements,\n"
     if allocation_match_code == "":
-        source_content += "        .allocations = {}"
+        source_content += "        .allocations = {}\n"
     else:
         source_content += "        .allocations = {\n"
         source_content +=              allocation_match_code
         source_content += "        },\n"
     source_content +=  "    };\n"
     source_content += "}\n\n"
-    return "\n".join(operand_conditions) + "\n" + source_content
+    return source_content
 
 def generate_translation_group(group: TranslationGroup, translation_model: TranslationModel, output_dir: Path):
     header_content = "using namespace toycc::arch::x86_64;\n\n"
@@ -439,7 +462,7 @@ def generate_emission_translation(translation: Translation, translation_model: T
 
                 if operand.is_input:
                     input_index = ir_spec.input.index(operand_name)
-                    operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[{input_index}]"
+                    operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[*match.statements[{statement_index}].input[{input_index}].input_index]"
                     operand_location = f"*match.statements[{statement_index}].input[{input_index}].location"
                 else:
                     operand_ref = output_ref

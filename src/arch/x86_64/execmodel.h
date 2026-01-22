@@ -35,13 +35,20 @@ namespace toycc::arch::x86_64 {
         enum MatchResult {OK, REQUIRES_TRANSFER, KO};
 
         MatchResult match;
-        std::optional<Location> location;  // OK -> location to use ; REQUIRES_TRANSFER -> where it should go
-        bool free = false;  // Whether the REQUIRES_TRANSFER location is currently free
+        std::optional<size_t> input_index;  // For commutative instructions, index of the input operand that matched
+        std::optional<Location> location;   // OK -> location to use ; REQUIRES_TRANSFER -> where it should go
+        bool free = false;                  // Whether the REQUIRES_TRANSFER location is currently free
 
         inline OperandMatch() = default;
         inline OperandMatch(MatchResult result) : match(result) {}
         inline OperandMatch(MatchResult result, Location location, bool free = true) : match(result), location(location), free(free) {}
         inline OperandMatch(MatchResult result, std::optional<Location> location, bool free = true) : match(result), location(location), free(free) {}
+
+        inline OperandMatch with_index(size_t index) const {
+            OperandMatch copy = *this;
+            copy.input_index = index;
+            return copy;
+        }
     };
 
     struct StatementMatch {
@@ -133,5 +140,6 @@ namespace toycc::arch::x86_64 {
     std::string dump(const StatementMatch& match);
     std::string dump(const TranslationMatch& match);
 
+    StatementMatch select_statement_match(const std::vector<StatementMatch> matches);
     void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match);
 }

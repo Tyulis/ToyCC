@@ -286,7 +286,7 @@ namespace toycc::arch::x86_64 {
                 if (!input_match.free)
                     throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Transfers to occupied locations are not implemented");
 
-                transfer(frame, statement.inputs[input_index], input_match.location.value());
+                transfer(frame, statement.inputs[*statement_match.input[input_index].input_index], input_match.location.value());
             }
 
             if (statement_match.output.has_value() && statement_match.output->match == OperandMatch::REQUIRES_TRANSFER)

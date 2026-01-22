@@ -135,33 +135,31 @@
         "INT_TO_FLOAT":   {"input": ["operand"],             "output": true},
         "FLOAT_TO_INT":   {"input": ["operand"],             "output": true},
 
-        "MUL":            {"input": ["left", "right"],       "output": true},
+        "MUL":            {"input": ["left", "right"],       "output": true, "commutative": true},
         "DIV":            {"input": ["left", "right"],       "output": true},
         "MOD":            {"input": ["left", "right"],       "output": true},
-        "ADD":            {"input": ["left", "right"],       "output": true},
+        "ADD":            {"input": ["left", "right"],       "output": true, "commutative": true},
         "SUB":            {"input": ["left", "right"],       "output": true},
         "LT":             {"input": ["left", "right"],       "output": true},
         "LE":             {"input": ["left", "right"],       "output": true},
         "GE":             {"input": ["left", "right"],       "output": true},
         "GT":             {"input": ["left", "right"],       "output": true},
-        "EQ":             {"input": ["left", "right"],       "output": true},
-        "NE":             {"input": ["left", "right"],       "output": true},
-        "BITWISE_AND":    {"input": ["left", "right"],       "output": true},
-        "BITWISE_XOR":    {"input": ["left", "right"],       "output": true},
-        "BITWISE_OR":     {"input": ["left", "right"],       "output": true},
+        "EQ":             {"input": ["left", "right"],       "output": true, "commutative": true},
+        "NE":             {"input": ["left", "right"],       "output": true, "commutative": true},
+        "BITWISE_AND":    {"input": ["left", "right"],       "output": true, "commutative": true},
+        "BITWISE_XOR":    {"input": ["left", "right"],       "output": true, "commutative": true},
+        "BITWISE_OR":     {"input": ["left", "right"],       "output": true, "commutative": true},
         "LSHIFT":         {"input": ["left", "right"],       "output": true},
         "RSHIFT":         {"input": ["left", "right"],       "output": true},
-        "LOGICAL_AND":    {"input": ["left", "right"],       "output": true},
-        "LOGICAL_OR":     {"input": ["left", "right"],       "output": true}
+        "LOGICAL_AND":    {"input": ["left", "right"],       "output": true, "commutative": true},
+        "LOGICAL_OR":     {"input": ["left", "right"],       "output": true, "commutative": true}
     },
 
     "translations": [
         // -------- ADD
-        {"ir": {"tag": "ADD", "left": "rdm",  "right": "1" },  "target": {"instruction": "INC", "input": ["left"]}},
-        {"ir": {"tag": "ADD", "left": "1",    "right": "rdm"}, "target": {"instruction": "INC", "input": ["right"]}},
+        {"ir": {"tag": "ADD", "left": "rdm",  "right":  "1"},  "target": {"instruction": "INC", "input": ["left"]}},
         {"ir": {"tag": "ADD", "left": "rdm",  "right": "-1"},  "target": {"instruction": "DEC", "input": ["left"]}},
-        {"ir": {"tag": "ADD", "left": "-1",   "right": "rdm"}, "target": {"instruction": "DEC", "input": ["right"]}},
-        {"ir": {"tag": "ADD"},                               "target": {"instruction": "ADD"}},
+        {"ir": {"tag": "ADD"},                                 "target": {"instruction": "ADD"}},
 
         // -------- SUB
         {"ir": {"tag": "SUB", "left": "rdm",  "right":  "1"}, "target": {"instruction": "DEC", "input": ["left"]}},

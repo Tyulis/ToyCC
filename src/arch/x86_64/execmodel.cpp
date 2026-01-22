@@ -92,6 +92,28 @@ namespace toycc::arch::x86_64 {
         return matches;
     }
 
+    StatementMatch select_statement_match(const std::vector<StatementMatch> matches) {
+        if (matches[0].matches())
+            return matches[0];
+
+        StatementMatch selected_match = matches[0];
+        for (auto it = matches.begin() + 1; it != matches.end(); it++) {
+            const StatementMatch& current_match = *it;
+            if (current_match.matches())
+                return current_match;
+
+            std::optional<size_t> current_nof_transfers = current_match.nof_transfers();
+            std::optional<size_t> selected_nof_transfers = selected_match.nof_transfers();
+
+            if (current_nof_transfers.has_value() && !selected_nof_transfers.has_value())
+                selected_match = current_match;
+            else if (current_nof_transfers.has_value() && selected_nof_transfers.has_value() && current_nof_transfers.value() < selected_nof_transfers.value())
+                selected_match = current_match;
+        }
+
+        return selected_match;
+    }
+
     void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match) {
         if (toycc::config::debug::with_translation_trace)
             std::cerr << indent(dump(match), true, "        ") << "\n";
@@ -140,6 +162,9 @@ namespace toycc::arch::x86_64 {
     }
 
     std::ostream& operator<< (std::ostream& stream, const OperandMatch& match) {
+        if (match.input_index.has_value())
+            stream << match.input_index.value() << ":";
+
         switch (match.match) {
             case OperandMatch::OK:                 stream << "OK";  break;
             case OperandMatch::REQUIRES_TRANSFER:  stream << "REQUIRES_TRANSFER";  break;

@@ -21,6 +21,7 @@ class IRSpec:
         self.output = False
         self.block = False
         self.translate = True
+        self.commutative = False
 
         if "input" in description:
             self.input = description["input"]
@@ -30,6 +31,8 @@ class IRSpec:
             self.block = description["block"]
         if "translate" in description:
             self.translate = description["translate"]
+        if "commutative" in description:
+            self.commutative = description["commutative"]
 
 class TranslationIRSpec:
     def __init__(self, tag: str, operands: dict[str, Constraint]):
