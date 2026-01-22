@@ -162,6 +162,8 @@ class TranslationModel:
     def __init__(self, description: dict[str, object], instruction_set: dict[str, Instruction]):
         self.locations = description["locations"]
         self.category_locations = {name: set(locations) for name, locations in description["category_locations"].items()}
+        self.register_locations = description["register_locations"]
+        self.register_sizes = description["register_sizes"]
 
         self.operand_types = {}
         for name, expression in description["operand_types"].items():
@@ -252,7 +254,7 @@ class TranslationModel:
     def parse_allocations(self, allocate_description: dict[str, object]) -> dict[str, Constraint]:
         allocations = {}
         for name, constraint in allocate_description.items():
-            allocations[f"${name}"] = load_constraint_expression(constraint, self.operand_types)
+            allocations[f"${name}"] = load_constraint_expression(constraint, self.constraint_context())
         return allocations
 
     def parse_operand_constraint(self, description: str|dict[str, object]) -> Constraint:
@@ -260,6 +262,13 @@ class TranslationModel:
             return self.get_type(description)
         else:
             return load_constraint_expression(description, self.constraint_context())
+
+    def resolve_operand(self, ir_operands: dict[str, Constraint|str], operand_id: str) -> tuple[str, Constraint]:
+        constraint = ir_operands[operand_id]
+        while isinstance(constraint, str):
+            operand_id = constraint
+            constraint = ir_operands[operand_id]
+        return operand_id, constraint
 
     def make_ir_operands(self, ir_descriptions: list[dict]) -> dict[str, Constraint]:
         ir_operands = {}
@@ -484,6 +493,60 @@ class TranslationModel:
                     ir_operands[output_id] = input_id
                 elif input_id in allocations:
                     allocations[output_id] = output_id
+
+        implicit_input_locations  = {self.register_locations[register] for register in target_form.implicit_inputs}
+        implicit_output_locations = {self.register_locations[register] for register in target_form.implicit_outputs}
+
+        for register in target_form.implicit_inputs | target_form.implicit_outputs:
+            location = self.register_locations[register]
+            size     = self.register_sizes[register]
+
+            if register in target_desc["implicit"]:
+                main_id = target_desc["implicit"][register]
+            elif location in target_desc["implicit"]:
+                main_id = target_desc["implicit"][location]
+            else:
+                raise TranslationModelError(f"Implicit operand `{register}` is missing from the target description")
+
+            is_inout = False
+            if not isinstance(main_id, str):
+                if not "output" in main_id or len(main_id) != 2:
+                    raise TranslationModelError(f"Multiple references for implicit operands is only allowed for one operand and `output`")
+                is_inout = True
+                main_id = main_id[0] if main_id[1] == "output" else main_id[1]
+
+            if main_id not in ir_operands and main_id not in allocations:
+                if "$" + main_id in allocations:
+                    main_id = "$" + main_id
+                elif len(ir_specs) == 1 and "$0." + main_id in ir_operands:
+                    main_id = "$0." + main_id
+                else:
+                    raise TranslationModelError(f"Name `{main_id}` for implicit operand `{register}` is undefined")
+
+            constraint = {Constraint(ConstraintType.LOCATION, location), Constraint(ConstraintType.SIZE, size)}
+            if main_id in ir_operands:
+                base_constraint = ir_operands[main_id]
+                while isinstance(base_constraint, str):
+                    main_id = base_constraint
+                    base_constraint = ir_operands[main_id]
+                constraint.add(base_constraint)
+                conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset(constraint))
+                ir_operands[main_id] = to_simplified_constraint(conjunction)
+            elif main_id in allocations:
+                constraint.add(allocations[main_id])
+                conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset(constraint))
+                allocations[main_id] = to_simplified_constraint(conjunction)
+
+            if is_inout:
+                if len(ir_specs) == 1:
+                    output_id = "$0.output"
+                else:
+                    raise NotImplementedError(f"Deduced output operands among multiple statements")
+
+                if main_id in ir_operands:
+                    ir_operands[output_id] = main_id
+                elif main_id in allocations:
+                    allocations[output_id] = main_id
 
         return TranslationTargetSpec(target_form, target_operands, ir_operands, allocations)
 
