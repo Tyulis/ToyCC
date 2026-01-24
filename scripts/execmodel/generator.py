@@ -461,9 +461,13 @@ def generate_emission_translation(translation: Translation, translation_model: T
                     output_location = f"*match.statements[{statement_index}].output->location"
 
                 if operand.is_input:
-                    input_index = ir_spec.input.index(operand_name)
-                    operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[*match.statements[{statement_index}].input[{input_index}].input_index]"
-                    operand_location = f"*match.statements[{statement_index}].input[{input_index}].location"
+                    if operand_name == "output":
+                        operand_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
+                        operand_location = f"*match.statements[{statement_index}].output->location"
+                    else:
+                        input_index = ir_spec.input.index(operand_name)
+                        operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[*match.statements[{statement_index}].input[{input_index}].input_index]"
+                        operand_location = f"*match.statements[{statement_index}].input[{input_index}].location"
                 else:
                     operand_ref = output_ref
                     operand_location = output_location
@@ -472,6 +476,13 @@ def generate_emission_translation(translation: Translation, translation_model: T
 
                 if operand.is_output:
                     operand_moves += f"    move_operand(frame, {output_ref}, {operand_location});\n"
+
+        for implicit_output, (statement_index, operand_name) in target.implicit_outputs.items():
+            if statement_index != "allocations":
+                output_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
+                output_location = f"*match.statements[{statement_index}].output->location"
+
+                operand_moves += f"    move_operand(frame, {output_ref}, Location::{translation_model.register_locations[implicit_output]});\n"
 
         if len(operand_arguments) == 0:
             function_content += f'    frame.statement("{target.form.gas_name}");\n'

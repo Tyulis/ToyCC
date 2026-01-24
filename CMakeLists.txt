@@ -21,10 +21,6 @@ find_package(ANTLR REQUIRED)
 add_subdirectory(lib/subprocess)
 add_subdirectory(lib/antlr4/runtime/Cpp)
 
-file(MAKE_DIRECTORY
-     ${CMAKE_CURRENT_SOURCE_DIR}/gen/parser
-     ${CMAKE_CURRENT_SOURCE_DIR}/gen/arch/x86_64)
-
 # Generate the parser
 set(PARSER_SRC ${CMAKE_CURRENT_BINARY_DIR}/gen/parser)
 set(CLEXER_G4 ${CMAKE_CURRENT_SOURCE_DIR}/grammar/CLexer.g4)
