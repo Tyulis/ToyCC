@@ -173,10 +173,21 @@
         {"ir": {"tag": "SUB"},                                "target": {"instruction": "SUB"}},
 
         // -------- MUL
+        // Signed integer multiplication
         {"ir"      : {"tag": "MUL", "left": "sint", "right": "sint"}, "allocate": {"mulhi": {"anyof": "sint"}},
          "target"  : {"instruction": "IMUL", "input": ["right"], "implicit": {"a": ["left", "output"], "d": "$mulhi"}}},
         {"ir": {"tag": "MUL", "left": "sint", "right": "sint"}, "target": {"instruction": "IMUL", "input": ["left", "right"]}},
         {"ir": {"tag": "MUL", "left": "sint", "right": "sint", "output": "sint"}, "target": {"instruction": "IMUL", "input": ["left", "right"], "output": "output"}},
+
+        // -------- DIV
+        // Signed integer division
+        {"ir"    : {"tag": "DIV", "left": "sint", "right": "sint"}, "allocate": {"remainder": {"anyof": "sint"}},
+         "target": {"instruction": "IDIV", "input": ["right"], "implicit": {"a": ["left", "output"], "d": "$remainder"}}},
+
+        // -------- MOD
+        // Signed integer division
+        {"ir"    : {"tag": "MOD", "left": "sint", "right": "sint"},
+         "target": {"instruction": "IDIV", "input": ["right"], "implicit": {"a": "left", "d": "output"}}},
 
         // -------- COPY
         {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},

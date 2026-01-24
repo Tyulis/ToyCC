@@ -40,11 +40,12 @@ class TranslationIRSpec:
         self.operands = operands
 
 class TranslationTargetSpec:
-    def __init__(self, form: InstructionForm, operands: list[tuple[int, str]], ir_operands: dict[str, Constraint|str], allocations: dict[str, Constraint|str]):
+    def __init__(self, form: InstructionForm, operands: list[tuple[int, str]], ir_operands: dict[str, Constraint|str], allocations: dict[str, Constraint|str], allocation_use: dict[str, bool]):
         self.form = form
         self.operands = operands
         self.ir_operands = ir_operands
         self.allocations = allocations
+        self.allocation_use = allocation_use
 
 class CustomTargetSpec:
     def __init__(self, header: str, function: str):
@@ -188,6 +189,7 @@ class TranslationModel:
         else:
             raise TranslationModelError(f"Operand type `{name}` is undefined")
 
+    # -------- Transfers
     def parse_transfers(self, description: list[str], instruction_set: dict[str, Instruction]) -> list[TransferSpec]:
         transfers = []
         for instruction in description:
@@ -234,6 +236,7 @@ class TranslationModel:
         else:
             return TransferSpec(form, source, destination)
 
+    # -------- Translations
     def parse_translations(self, description: list[dict], instruction_set: dict[str, Instruction]) -> dict[str, TranslationGroup]:
         groups = []
         for translation_desc in description:
@@ -335,6 +338,9 @@ class TranslationModel:
 
         specs = []
         for target_combination in itertools.product(*target_sequence):
+            if not self.uses_all_allocations(allocations, target_combination):
+                continue
+
             combined_operands    = self.combine_operands(ir_operands, [target.ir_operands for target in target_combination])
             combined_allocations = self.combine_operands(allocations, [target.allocations for target in target_combination])
 
@@ -345,6 +351,12 @@ class TranslationModel:
         if len(specs) == 0:
             raise TranslationModelError(f"Rule description {description} does not produce any valid translation")
         return specs
+
+    def uses_all_allocations(self, allocations: dict[str, Constraint], target_combination: list[TranslationTargetSpec]) -> bool:
+        for name in allocations:
+            if not any(target.allocation_use[name] for target in target_combination):
+                return False
+        return True
 
     def combine_operands(self, ir_operands: dict[str, Constraint], operands: list[dict[str, Constraint|str]]) -> dict[str, Constraint|str]:
         names = tuple(operands[0].keys())
@@ -400,6 +412,7 @@ class TranslationModel:
     def parse_target(self, ir_specs: list[IRSpec], target_desc: dict[str, object], target_form: InstructionForm, ir_operands_ids: list[str], allocations_ids: list[str]) -> TranslationTargetSpec|None:
         ir_operands = {name: CONSTRAINT_TRUE for name in ir_operands_ids}
         allocations = {name: CONSTRAINT_TRUE for name in allocations_ids}
+        allocation_use = {name: False for name in allocations_ids}
 
         if "input" in target_desc:
             nof_required_operands = len(target_desc["input"])
@@ -486,6 +499,7 @@ class TranslationModel:
                 base_constraint = allocations[main_id]
                 conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type], self.allocation_constraint}))
                 allocations[main_id] = to_simplified_constraint(conjunction)
+                allocation_use[main_id] = True
                 target_operands.append(("allocations", main_id))
 
             if input_id is not None and output_id is not None:
@@ -493,6 +507,7 @@ class TranslationModel:
                     ir_operands[output_id] = input_id
                 elif input_id in allocations:
                     allocations[output_id] = output_id
+                    allocation_use[output_id] = True
 
         implicit_input_locations  = {self.register_locations[register] for register in target_form.implicit_inputs}
         implicit_output_locations = {self.register_locations[register] for register in target_form.implicit_outputs}
@@ -536,6 +551,7 @@ class TranslationModel:
                 constraint.add(allocations[main_id])
                 conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset(constraint))
                 allocations[main_id] = to_simplified_constraint(conjunction)
+                allocation_use[main_id] = True
 
             if is_inout:
                 if len(ir_specs) == 1:
@@ -547,8 +563,9 @@ class TranslationModel:
                     ir_operands[output_id] = main_id
                 elif main_id in allocations:
                     allocations[output_id] = main_id
+                    allocation_use[output_id] = True
 
-        return TranslationTargetSpec(target_form, target_operands, ir_operands, allocations)
+        return TranslationTargetSpec(target_form, target_operands, ir_operands, allocations, allocation_use)
 
     def make_translation_spec(self, ir_specs: list[IRSpec], ir_operands: dict[str, Constraint], translation_targets: list[TranslationTargetSpec]|CustomTargetSpec, allocations: dict[str, Constraint]) -> TranslationSpec|None:
         for operand_id, constraint in ir_operands.items():
