@@ -6,60 +6,29 @@
 #include "ir/declaration.h"
 #include "arch/x86_64/execmodel.h"
 #include "arch/x86_64/allocation.h"
+#include "util/sets.hpp"
 
 namespace toycc::arch::x86_64 {
     inline OperandMatch operator& (const OperandMatch& left, const OperandMatch& right) {
-        if (left.match == OperandMatch::KO)
-            return left;
-        else if (right.match == OperandMatch::KO)
-            return right;
-        else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value() && left.free)
-            return left;
-        else if (right.match == OperandMatch::REQUIRES_TRANSFER && right.location.has_value() && right.free)
-            return right;
-        else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value())
-            return left;
-        else if (right.match == OperandMatch::REQUIRES_TRANSFER && right.location.has_value())
-            return right;
-        else if (left.match == OperandMatch::REQUIRES_TRANSFER)
-            return left;
-        else if (right.match == OperandMatch::REQUIRES_TRANSFER)
-            return right;
-        else if (left.location.has_value())
-            return left;
-        else if (right.location.has_value())
-            return right;
+        if (left.match == OperandMatch::KO || right.match == OperandMatch::KO)
+            return OperandMatch::KO;
+        else if (left.match == OperandMatch::REQUIRES_TRANSFER || right.match == OperandMatch::REQUIRES_TRANSFER)
+            return {OperandMatch::REQUIRES_TRANSFER, unordered_set_intersection(left.locations, right.locations)};
         else
-            return left;
+            return {OperandMatch::OK, unordered_set_intersection(left.locations, right.locations)};
     }
 
     inline OperandMatch operator| (const OperandMatch& left, const OperandMatch& right) {
-        if (left.match == OperandMatch::OK && left.location.has_value())
-            return left;
-        else if (right.match == OperandMatch::OK && right.location.has_value())
-            return right;
-        else if (left.match == OperandMatch::OK)
-            return left;
-        else if (right.match == OperandMatch::OK)
-            return right;
-        else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value() && left.free)
-            return left;
-        else if (right.match == OperandMatch::REQUIRES_TRANSFER && right.location.has_value() && right.free)
-            return right;
-        else if (left.match == OperandMatch::REQUIRES_TRANSFER && left.location.has_value())
-            return left;
-        else if (right.match == OperandMatch::REQUIRES_TRANSFER && right.location.has_value())
-            return right;
-        else if (left.match == OperandMatch::REQUIRES_TRANSFER)
-            return left;
-        else if (right.match == OperandMatch::REQUIRES_TRANSFER)
-            return right;
+        if (left.match == OperandMatch::OK || right.match == OperandMatch::OK)
+            return {OperandMatch::OK, unordered_set_union(left.locations, right.locations)};
+        else if (left.match == OperandMatch::REQUIRES_TRANSFER || right.match == OperandMatch::REQUIRES_TRANSFER)
+            return {OperandMatch::REQUIRES_TRANSFER, unordered_set_union(left.locations, right.locations)};
         else
-            return left;
+            return OperandMatch::KO;
     }
 
     inline OperandMatch is_constant(const ir::Operand& operand) {
-        return operand.is_constant() ? OperandMatch {OperandMatch::OK, Location::constant} : OperandMatch::KO;
+        return operand.is_constant() ? OperandMatch {OperandMatch::OK, {Location::constant}} : OperandMatch::KO;
     }
 
     inline OperandMatch is_variable(const ir::Operand& operand) {
@@ -67,11 +36,11 @@ namespace toycc::arch::x86_64 {
     }
 
     inline OperandMatch is_label(const ir::Operand& operand) {
-        return operand.is_label() ? OperandMatch {OperandMatch::OK, Location::constant} : OperandMatch::KO;
+        return operand.is_label() ? OperandMatch {OperandMatch::OK, {Location::constant}} : OperandMatch::KO;
     }
 
     inline OperandMatch is_dereference(const ir::Operand& operand) {
-        return operand.is_dereference() ? OperandMatch {OperandMatch::OK, Location::memory} : OperandMatch::KO;
+        return operand.is_dereference() ? OperandMatch {OperandMatch::OK, {Location::memory}} : OperandMatch::KO;
     }
 
     inline OperandMatch check_type(const ir::Operand& operand, ir::TypeCategory expected_category) {
@@ -81,21 +50,20 @@ namespace toycc::arch::x86_64 {
     inline OperandMatch check_in_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
         const std::unordered_set<Location> locations = frame.locate(operand);
         if (locations.empty())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Input operand {} has no location", operand.ir_code()), operand.location)
-                   .add_note(DiagnosticLevel::NOTE, frame.dump());
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Input operand {} has no location", operand.ir_code()), operand.location);
 
         if (locations.contains(expected_location))
-            return {OperandMatch::OK, expected_location};
+            return {OperandMatch::OK, {expected_location}};
         else
-            return {OperandMatch::REQUIRES_TRANSFER, expected_location, frame.is_free(expected_location)};
+            return {OperandMatch::REQUIRES_TRANSFER, {expected_location}};
     }
 
     inline OperandMatch check_out_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
         const std::unordered_set<Location> locations = frame.locate(operand);
         if (locations.contains(expected_location) || frame.is_free(expected_location))
-            return {OperandMatch::OK, expected_location};
+            return {OperandMatch::OK, {expected_location}};
         else
-            return {OperandMatch::REQUIRES_TRANSFER, expected_location, false};
+            return {OperandMatch::REQUIRES_TRANSFER, {expected_location}};
     }
 
     inline OperandMatch check_size(const ir::Operand& operand, size_t expected_size) {
@@ -162,15 +130,15 @@ namespace toycc::arch::x86_64 {
 
 
 
-        std::optional<Location> preferred_location;
+        std::unordered_set<Location> preferred_location;
         for (Location location : frame.locate(input_variable)) {
             remaining_liveness -= 1;
             if (location != Location::constant && location != Location::memory && location != Location::stack)
-                preferred_location = location;
+                preferred_location.insert(location);
         }
 
         // Still live / only on the stack so can't overwrite
-        if (remaining_liveness > 0 || !preferred_location.has_value())
+        if (remaining_liveness > 0 || preferred_location.empty())
             return {OperandMatch::REQUIRES_TRANSFER, preferred_location};
         else
             return {OperandMatch::OK, preferred_location};

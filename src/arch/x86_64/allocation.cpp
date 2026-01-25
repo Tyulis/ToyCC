@@ -47,11 +47,25 @@ namespace toycc::arch::x86_64 {
         return {};
     }
 
+    std::unordered_set<std::shared_ptr<ir::Declaration>> StackFrame::allocated_variables() const {
+        std::unordered_set<std::shared_ptr<ir::Declaration>> result;
+        for (const Allocation& allocation : allocations)
+            result.insert(allocation.declaration);
+        return result;
+    }
+
      bool StackFrame::is_free(Location location) const {
          if (location == Location::constant || location == Location::memory || location == Location::stack)
              return true;
          else
              return content(location).get() == nullptr;
+    }
+
+    bool StackFrame::any_free(const std::unordered_set<Location>& locations) const {
+        for (Location location : locations)
+            if (is_free(location))
+                return true;
+        return false;
     }
 
     // Create an intermediate declaration valid only within a code generation iteration. The variable is not inserted into the stack frame unless `offset` is called on it.

@@ -11,6 +11,8 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 
+#include "util/sets.hpp"
+
 namespace toycc {
     using namespace boost::multi_index;
 
@@ -18,20 +20,7 @@ namespace toycc {
         InvalidStructure(std::string message) : std::runtime_error(message) {}
     };
 
-    enum class Color {
-        WHITE, GREY, BLACK,
-    };
-
     // struct Node{};
-
-    template <typename T>
-    inline std::unordered_set<T> unordered_set_difference(const std::unordered_set<T>& left, const std::unordered_set<T>& right) {
-        std::unordered_set<T> result;
-        for (const T& element : left)
-            if (!right.contains(element))
-                result.insert(element);
-        return result;
-    }
 
     template <typename Node, typename EdgeAttribute = std::monostate> requires(std::is_default_constructible_v<EdgeAttribute>)
     class Graph {

@@ -19,7 +19,10 @@ namespace toycc::arch::x86_64 {
 
             std::unordered_set<Location> locate(const ir::Operand& operand) const;
             std::optional<Location> allocate(const std::unordered_set<Location>& locations) const;
+            std::unordered_set<std::shared_ptr<ir::Declaration>> allocated_variables() const;
+
             bool is_free(Location location) const;
+            bool any_free(const std::unordered_set<Location>& locations) const;
 
             std::shared_ptr<ir::Declaration> declare_intermediate(std::shared_ptr<ir::Type> type, CodeLocation code_location);
             void flush_intermediates();

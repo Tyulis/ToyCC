@@ -19,7 +19,7 @@ namespace toycc::arch::x86_64 {
         if (variable->storage & ir::StorageClass::GLOBAL)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Taking the address of a global variable is not implemented", operand.location);
 
-        std::optional<Location> destination = match.statements[0].output.value().location;
+        std::optional<Location> destination = *match.statements[0].output.value().locations.begin();
         if (!destination.has_value())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "ADDRESSOF statements without output location are not implemented", output.location);
 

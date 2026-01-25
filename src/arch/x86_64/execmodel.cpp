@@ -14,6 +14,16 @@ namespace toycc::arch::x86_64 {
         return stream.str();
     }
 
+    std::string dump(const arma::fmat& matrix) {
+        std::stringstream stream;
+        stream << matrix;
+        return stream.str();
+    }
+
+    void print_mat(const arma::fmat& matrix) {
+        matrix.print();
+    }
+
     // Return the indices of the inner values, or an empty optional if this combination doesn't match
     static std::optional<std::vector<size_t>> match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
         // Find which values are links between the selected statements (= which values have more than two edges in the statement combination)
@@ -171,15 +181,27 @@ namespace toycc::arch::x86_64 {
             case OperandMatch::KO:                 stream << "KO";  break;
         }
 
-        if (match.location.has_value())
-            stream << "(" << match.location.value() << ")";
+        if (!match.locations.empty()) {
+            stream << "(";
+            for (const auto& [index, location] : std::ranges::enumerate_view(match.locations)) {
+                if (index > 0)  stream << ", ";
+                stream << location;
+            }
+            stream << ")";
+        }
         return stream;
     }
 
     std::ostream& operator<< (std::ostream& stream, const TransferMatch& match) {
         stream << match.transfer;
-        if (match.source_location.has_value())
-            stream << " from " << match.source_location.value();
+        if (!match.source_locations.empty()) {
+            stream << " from (";
+            for (const auto& [index, location] : std::ranges::enumerate_view(match.source_locations)) {
+                if (index > 0)  stream << ", ";
+                stream << location;
+            }
+            stream << ")";
+        }
         return stream;
     }
 

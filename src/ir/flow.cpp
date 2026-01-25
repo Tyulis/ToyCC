@@ -6,6 +6,7 @@
 #include "ir/flow.h"
 #include "ir/declaration.h"
 #include "ir/type_expressions.h"
+#include "util/sets.hpp"
 #include "util/graph.hpp"
 #include "util/strings.h"
 

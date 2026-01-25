@@ -75,6 +75,7 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/global.cpp
 	src/arch/x86_64/output.cpp
 	src/arch/x86_64/symbols.cpp
+	src/arch/x86_64/transfer.cpp
 
 	src/ir/declaration.cpp
 	src/ir/flow.cpp

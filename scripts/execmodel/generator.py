@@ -62,14 +62,16 @@ def generate_locations(translation_model: TranslationModel, output_dir: Path):
     source_content = ""
 
     header_content += location_enum + "\n"
+    header_content +=  "extern const std::unordered_set<Location> ALL_LOCATIONS;\n"
     header_content += f"{location_repr_prototype};\n"
 
+    source_content +=  "const std::unordered_set<Location> ALL_LOCATIONS = {" + ", ".join(f"Location::{location}" for location in translation_model.locations) + "};\n";
     source_content += f"{location_repr_prototype} {{\n"
     source_content += location_repr
     source_content += '    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown location");\n'
     source_content += "}\n"
 
-    write_header(header_content, output_dir / "location.h", [], ["iostream"])
+    write_header(header_content, output_dir / "location.h", [], ["iostream", "unordered_set"])
     write_source(source_content, output_dir / "location.cpp", ["diagnostic.h", output_dir / "location.h"], ["iostream"])
 
 
@@ -331,7 +333,6 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
             uses_graph = True
 
     allocation_set_code = ""
-    allocation_code = ""
     allocation_match_code = ""
     for index, name in enumerate(translation.allocation_order):
         constraint = translation.allocations[name]
@@ -339,10 +340,8 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
         locations_code = ", ".join(f"Location::{location}" for location in locations)
 
         set_name = f"ALLOC_{translation.tag}_{name.strip('$')}_{index}_SET"
-        location_name = f"alloc_{name.strip('$')}_{index}_location"
         allocation_set_code += f"static const std::unordered_set<Location> {set_name} = {{{locations_code}}};\n"
-        allocation_code     += f"    const std::optional<Location> {location_name} = frame.allocate({set_name});\n"
-        allocation_match_code += f"            OperandMatch {{({location_name}.has_value() ? OperandMatch::OK : OperandMatch::REQUIRES_TRANSFER), {location_name}}},\n"
+        allocation_match_code += f"            OperandMatch {{(frame.any_free({set_name}) ? OperandMatch::OK : OperandMatch::REQUIRES_TRANSFER), {set_name}}},\n"
         uses_frame = True
 
     frame_arg = " frame" if uses_frame else ""
@@ -353,7 +352,6 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
     source_content += allocation_set_code
     source_content += f"template<> TranslationMatch match_translation<TranslationTag::{translation.tag}> "
     source_content += f"(const StackFrame&{frame_arg}, const ir::DependencyGraph&{graph_arg}, const GroupMatch& group_match) {{\n"
-    source_content +=       allocation_code
     source_content +=       statements_code
     source_content += f"    return {{.translation = TranslationTag::{translation.tag}, .group_match = group_match, .statements = statements,\n"
     if allocation_match_code == "":
@@ -447,7 +445,7 @@ def generate_emission_translation(translation: Translation, translation_model: T
             if target.operands[operand_index][0] == "allocations":
                 _, allocation_name = target.operands[operand_index]
                 allocation_index = translation.allocation_order.index(allocation_name)
-                operand_location = f"*match.allocations[{allocation_index}].location"
+                operand_location = f"*match.allocations[{allocation_index}].locations.begin()"
                 operand_sizes = constraint_sizes(translation.allocations[allocation_name])
                 if operand_sizes is None or len(operand_sizes) != 1:
                     raise TranslationModelError(f"There must be exactly one valid size for an intermediate allocation, found {operand_sizes}")
@@ -458,16 +456,16 @@ def generate_emission_translation(translation: Translation, translation_model: T
 
                 if operand.is_output:
                     output_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
-                    output_location = f"*match.statements[{statement_index}].output->location"
+                    output_location = f"*match.statements[{statement_index}].output->locations.begin()"
 
                 if operand.is_input:
                     if operand_name == "output":
                         operand_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
-                        operand_location = f"*match.statements[{statement_index}].output->location"
+                        operand_location = f"*match.statements[{statement_index}].output->locations.begin()"
                     else:
                         input_index = ir_spec.input.index(operand_name)
                         operand_ref = f"match.group_match.statements[{statement_index}]->statement().inputs[*match.statements[{statement_index}].input[{input_index}].input_index]"
-                        operand_location = f"*match.statements[{statement_index}].input[{input_index}].location"
+                        operand_location = f"*match.statements[{statement_index}].input[{input_index}].locations.begin()"
                 else:
                     operand_ref = output_ref
                     operand_location = output_location
@@ -480,7 +478,7 @@ def generate_emission_translation(translation: Translation, translation_model: T
         for implicit_output, (statement_index, operand_name) in target.implicit_outputs.items():
             if statement_index != "allocations":
                 output_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
-                output_location = f"*match.statements[{statement_index}].output->location"
+                output_location = f"*match.statements[{statement_index}].output->location.begin()"
 
                 operand_moves += f"    move_operand(frame, {output_ref}, Location::{translation_model.register_locations[implicit_output]});\n"
 
@@ -613,7 +611,7 @@ def generate_transfer_matcher_function(translation_model: TranslationModel, tran
     source_content += f"template<> std::optional<TransferMatch> match_transfer<TransferTag::{transfer.tag}> (const StackFrame&{frame_arg}, const ir::Operand&{operand_arg}, Location destination) {{\n"
     source_content += f"    if (!{set_name}.contains(destination))  return {{}};\n"
     source_content += f"    OperandMatch match = {expression};\n"
-    source_content += f"    if (match.match == OperandMatch::OK)  return TransferMatch {{.transfer = TransferTag::{transfer.tag}, .source_location = match.location}};\n"
+    source_content += f"    if (match.match == OperandMatch::OK)  return TransferMatch {{.transfer = TransferTag::{transfer.tag}, .source_locations = match.locations}};\n"
     source_content += f"    else                                  return {{}};\n"
     source_content +=  "}\n"
     return source_content
