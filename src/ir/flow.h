@@ -56,7 +56,6 @@ namespace toycc::ir {
     };
     DependencyMatrix to_dependency_matrix(const DependencyGraph& graph);
     std::ostream& operator<< (std::ostream& stream, const DependencyMatrix& graph);
-    std::string dump(const DependencyMatrix& graph);
 
     enum class BasicBlockType {
         ENTRY, INNER, EXIT,

@@ -66,8 +66,7 @@ namespace toycc::arch::x86_64 {
             frame.comment(dump(selected_match));
 
         try {
-            emit_transfers(frame, selected_match);
-            flush_indirects(frame, graph, selected_match);
+            emit_transfers(frame, graph, selected_match);
             toycc::execmodel::x86_64::emit_code(frame, selected_match);
             clear_processed_statements(frame, graph, selected_match.group_match);
             frame.flush_intermediates();

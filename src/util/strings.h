@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <sstream>
 
 namespace toycc {
     constexpr std::string WHITESPACE = " \r\n\t\v";
@@ -42,4 +43,11 @@ namespace toycc {
 
     std::string& center_inplace(std::string& str, size_t length, char padding=' ');
     std::string center(const std::string& str, size_t length, char padding=' ');
+
+    template <typename T> requires requires (std::ostream& stream, const T& value) { {stream << value} -> std::convertible_to<std::ostream&>; }
+    std::string dump(const T& value) {
+        std::stringstream stream;
+        stream << value;
+        return stream.str();
+    }
 }

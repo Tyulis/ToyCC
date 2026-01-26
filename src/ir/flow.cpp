@@ -102,7 +102,7 @@ namespace toycc::ir {
 
         stream << justify_right("", statement_width);
         std::vector<size_t> column_widths;
-        for (const auto& [index, value] : std::ranges::enumerate_view(graph.values)) {
+        for (std::shared_ptr<DependencyNode> value : graph.values) {
             const std::string name = value->declaration()->name;
             const size_t column_width = std::max(size_t(2), name.size()) + 1;
             column_widths.push_back(column_width);
@@ -118,12 +118,6 @@ namespace toycc::ir {
         }
 
         return stream;
-    }
-
-    std::string dump(const DependencyMatrix& graph) {
-        std::stringstream stream;
-        stream << graph;
-        return stream.str();
     }
 
     // -------- DependencyNode

@@ -140,12 +140,6 @@ namespace toycc::arch::x86_64 {
     std::ostream& operator<< (std::ostream& stream, const StatementMatch& match);
     std::ostream& operator<< (std::ostream& stream, const TranslationMatch& match);
 
-    std::string dump(const GroupMatch& match);
-    std::string dump(const OperandMatch& match);
-    std::string dump(const TransferMatch& match);
-    std::string dump(const StatementMatch& match);
-    std::string dump(const TranslationMatch& match);
-
     StatementMatch select_statement_match(const std::vector<StatementMatch> matches);
     void update_translation_match(std::optional<TranslationMatch>& result, TranslationMatch&& match);
 }

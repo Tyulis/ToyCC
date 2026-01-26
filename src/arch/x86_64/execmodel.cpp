@@ -8,22 +8,6 @@ namespace toycc::arch::x86_64 {
     const std::unordered_set<Location> CALLEE_SAVED = {Location::b, Location::r12, Location::r13, Location::r14, Location::r15};
     // FIXME : XMM LOCs not implemented
 
-    std::string dump(const arma::imat& matrix) {
-        std::stringstream stream;
-        stream << matrix;
-        return stream.str();
-    }
-
-    std::string dump(const arma::fmat& matrix) {
-        std::stringstream stream;
-        stream << matrix;
-        return stream.str();
-    }
-
-    void print_mat(const arma::fmat& matrix) {
-        matrix.print();
-    }
-
     // Return the indices of the inner values, or an empty optional if this combination doesn't match
     static std::optional<std::vector<size_t>> match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
         // Find which values are links between the selected statements (= which values have more than two edges in the statement combination)
@@ -237,35 +221,5 @@ namespace toycc::arch::x86_64 {
             stream << allocation << ", ";
         stream << "}";
         return stream;
-    }
-
-    std::string dump(const GroupMatch& match) {
-        std::stringstream stream;
-        stream << match;
-        return stream.str();
-    }
-
-    std::string dump(const OperandMatch& match) {
-        std::stringstream stream;
-        stream << match;
-        return stream.str();
-    }
-
-    std::string dump(const TransferMatch& match) {
-        std::stringstream stream;
-        stream << match;
-        return stream.str();
-    }
-
-    std::string dump(const StatementMatch& match) {
-        std::stringstream stream;
-        stream << match;
-        return stream.str();
-    }
-
-    std::string dump(const TranslationMatch& match) {
-        std::stringstream stream;
-        stream << match;
-        return stream.str();
     }
 }

@@ -20,6 +20,16 @@ namespace toycc::arch::x86_64 {
         }
     };
 
+    std::ostream& operator<< (std::ostream& stream, const StatementOperandIdentifier& id) {
+        if (id.is_pointer)
+            stream << "ptr ";
+        if (id.is_input)
+            stream << "input[" << id.index << "]";
+        else
+            stream << "output";
+        return stream;
+    }
+
     struct TranslationOperandIdentifier {
         struct Statement {
             size_t index;
@@ -45,17 +55,49 @@ namespace toycc::arch::x86_64 {
         }
     };
 
+    std::ostream& operator<< (std::ostream& stream, const TranslationOperandIdentifier& id) {
+        if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id)) {
+            stream << "allocation[" << std::get<TranslationOperandIdentifier::Allocation>(id.id).index << "]";
+        } else {
+            const TranslationOperandIdentifier::Statement& statement = std::get<TranslationOperandIdentifier::Statement>(id.id);
+            stream << "statement[" << statement.index << "]." << statement.id;
+        }
+        return stream;
+    }
+
     struct AllocatedValue {
+        bool is_flush;
         std::shared_ptr<ir::Declaration> variable = nullptr;
         std::vector<TranslationOperandIdentifier> operands;
 
         bool operator== (const AllocatedValue& rhs) const {
+            if (is_flush != rhs.is_flush)
+                return false;
             if (variable == nullptr)
                 return operands == rhs.operands;
             else
                 return variable.get() == rhs.variable.get();
         }
     };
+
+    std::ostream& operator<< (std::ostream& stream, const AllocatedValue& value) {
+        if (value.is_flush)
+            stream << "flush ";
+        if (value.variable.get() != nullptr)
+            stream << value.variable->name;
+
+        if (value.operands.size() > 0) {
+            stream << "{";
+            for (const auto& [index, id] : std::ranges::enumerate_view(value.operands)) {
+                if (index > 0)
+                    stream << ", ";
+                stream << id;
+            }
+            stream << "}";
+        }
+
+        return stream;
+    }
 
     struct SpecificLocation {
         Location location;
@@ -103,6 +145,20 @@ namespace toycc::arch::x86_64 {
 
         const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
         return get_operand(match.group_match.statements[statement_id.index]->statement(), statement_id.id);
+    }
+
+    static void set_operand(ir::Statement& statement, const StatementOperandIdentifier& id, ir::Operand operand) {
+        ir::Operand& target = (id.is_input ? statement.inputs[id.index] : statement.output.value());
+        if (id.is_pointer)
+            operand.indices = target.indices;
+        target = operand;
+    }
+
+    static void set_operand(TranslationMatch& match, const TranslationOperandIdentifier& id, const ir::Operand& operand) {
+        if (std::holds_alternative<TranslationOperandIdentifier::Statement>(id.id)) {
+            const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
+            set_operand(match.group_match.statements[statement_id.index]->statement(), statement_id.id, operand);
+        }
     }
 }
 
@@ -203,6 +259,20 @@ namespace toycc::arch::x86_64 {
             weights.fill(INFINITY);  // Dummy row and column 0 for the Hungarian algorithm
         }
 
+        bool contains(const AllocatedValue& value) {
+            for (auto& [existing_value, row] : value_rows)
+                if (value == existing_value)
+                    return true;
+            return false;
+        }
+
+        bool contains(const SpecificLocation& value) {
+            for (auto& [existing_location, col] : location_cols)
+                if (value == existing_location)
+                    return true;
+            return false;
+        }
+
         size_t get_row(const AllocatedValue& value) {
             for (auto& [existing_value, row] : value_rows) {
                 if (value == existing_value) {
@@ -232,6 +302,64 @@ namespace toycc::arch::x86_64 {
             return col;
         }
     };
+
+    std::ostream& operator<< (std::ostream& stream, const WeightsMatrix& weights) {
+        size_t value_width = 0;
+        for (const auto& [value, row] : weights.value_rows)
+            value_width = std::max(value_width, dump(value).size());
+        value_width += 1;
+
+        std::vector<std::string> column_titles(weights.weights.n_cols);
+        column_titles[0] = "null";
+        for (const auto& [location, col] : weights.location_cols)
+            column_titles[col] = dump(location.location);
+
+
+        std::vector<size_t> column_widths;
+        stream << justify_right("", value_width);
+        for (const std::string& title : column_titles) {
+            const size_t column_width = std::max(size_t(10), title.size()) + 1;
+            column_widths.push_back(column_width);
+            stream << center(title, column_width);
+        }
+        stream << "\n";
+
+        for (size_t row = 0; row < weights.weights.n_rows; row++) {
+            if (row == 0) {
+                stream << justify_right("null", value_width);
+            } else {
+                for (const auto& [value, value_row] : weights.value_rows) {
+                    if (value_row == row) {
+                        stream << justify_right(dump(value), value_width);
+                        break;
+                    }
+                }
+            }
+
+            for (const auto& [col, width] : std::ranges::enumerate_view(column_widths))
+                stream << center(std::to_string(weights.weights(row, col)), width);
+            stream << "\n";
+        }
+
+        return stream;
+    }
+
+    static void find_indirects(std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects, std::unordered_set<std::shared_ptr<ir::Declaration>>& reads,
+                               const ir::DependencyGraph& graph, const TranslationMatch& match)
+    {
+        for (std::shared_ptr<ir::DependencyNode> statement : match.group_match.statements) {
+            for (ir::DependencyGraph::Edge edge : graph.connected_edges(statement)) {
+                std::shared_ptr<ir::DependencyNode> value = (edge.entry == statement ? edge.exit : edge.entry);
+                std::shared_ptr<ir::Declaration> variable = value->declaration();
+
+                if (edge.attr.operand_group == ir::OperandGroup::INDIRECT && (edge.attr.type & (ir::DependencyType::DEREFERENCE | ir::DependencyType::CALL | ir::DependencyType::LIVE_ON_EXIT)))
+                    indirects.insert(variable);
+
+                if (edge.attr.type & ir::DependencyType::READ)
+                    reads.insert(variable);
+            }
+        }
+    }
 
     static void add_operand_weights(WeightsMatrix& weights, const StackFrame& frame, const AllocatedValue& value, const ir::Operand& operand, const std::unordered_set<Location>& allowed_locations) {
         std::unordered_set<Location> current_locations = frame.locate(operand);
@@ -276,14 +404,14 @@ namespace toycc::arch::x86_64 {
                 const OperandMatch& operand_match = statement_match.input[input_index];
                 const ir::Operand& operand = statement.inputs[input_index];
 
-                AllocatedValue value = {.variable = (operand.is_variable() ? operand.declaration() : nullptr),
+                AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                                                                      .id = {.is_input = true, .is_pointer = false, .index = input_index}}}}};
                 add_operand_weights(weights, frame, value, operand, operand_match.locations);
 
                 if (operand.is_dereference()) {
                     ir::Operand pointer = operand.pointer();
-                    AllocatedValue pointer_value = {.variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
+                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
                                                     .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                                                                                  .id = {.is_input = true, .is_pointer = true, .index = input_index}}}}};
                     add_operand_weights(weights, frame, pointer_value, pointer, POINTER_LOCATIONS);
@@ -293,46 +421,97 @@ namespace toycc::arch::x86_64 {
 
         for (size_t allocation_index = 0; allocation_index < match.allocations.size(); allocation_index++) {
             const OperandMatch& allocation_match = match.allocations[allocation_index];
-            AllocatedValue value = {.variable = nullptr, .operands = {{.id = TranslationOperandIdentifier::Allocation {.index = allocation_index}}}};
+            AllocatedValue value = {.is_flush = false, .variable = nullptr, .operands = {{.id = TranslationOperandIdentifier::Allocation {.index = allocation_index}}}};
             add_allocation_weights(weights, value, allocation_match.locations);
         }
     }
 
-    static void set_variable_weights(WeightsMatrix& weights, const StackFrame& frame) {
-        for (std::shared_ptr<ir::Declaration> variable : frame.allocated_variables()) {
-            AllocatedValue value = {.variable = variable, .operands = {}};
-            size_t value_row = weights.get_row(value);
+    // Before a dereference or call, flush all indirect operands to their respective memory locations
+    void set_indirect_flushes(WeightsMatrix& weights, const StackFrame& frame, const std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects) {
+        for (std::shared_ptr<ir::Declaration> variable : indirects) {
+            const std::unordered_set<Location> locations = frame.locate(variable);
 
-            const std::unordered_set<Location> current_locations = frame.locate(variable);
+            Location destination = Location::stack;
+            if (locations.contains(Location::memory) && !locations.contains(Location::stack))
+                destination = Location::memory;
 
-            bool is_on_stack = false;
-            for (Location current_location : current_locations) {
-                if (current_location == Location::stack)
-                    is_on_stack = true;
+            // Move the variable to memory if necessary
+            if (!locations.contains(destination)) {
+                if (variable->storage & ir::StorageClass::GLOBAL)
+                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing indirect global variables is not implemented", variable->location);
 
-                SpecificLocation specific_location(current_location, value);
+                AllocatedValue value = {.is_flush = true, .variable = variable, .operands = {}};
+                SpecificLocation specific_location(destination, value);
+                size_t value_row = weights.get_row(value);
                 size_t location_col = weights.get_column(specific_location);
-                weights.weights(value_row, location_col) = 0;  // It's already there, so no transfer cost
-            }
+                weights.weights.row(value_row).fill(INFINITY);
 
-            // Add a possible spill to the stack
-            if (!is_on_stack) {
-                SpecificLocation stack_location(Location::stack, value);
-                size_t location_col = weights.get_column(stack_location);
+                std::unordered_set<Location> current_locations = frame.locate(variable);
+                if (current_locations.empty())
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Indirect dependency variable {} has no location", variable->name));
 
+                LocationType destination_location_type = LOCATION_TYPES.at(destination);
                 float min_weight = INFINITY;
                 for (Location current_location : current_locations) {
                     LocationType current_location_type = LOCATION_TYPES.at(current_location);
-                    min_weight = std::min(TRANSFER_COSTS(std::to_underlying(current_location_type), std::to_underlying(LocationType::MEMORY)), min_weight);
+                    min_weight = std::min(TRANSFER_COSTS(std::to_underlying(current_location_type), std::to_underlying(destination_location_type)), min_weight);
                 }
                 weights.weights(value_row, location_col) = min_weight;
             }
         }
     }
 
-    static WeightsMatrix build_weights_matrix(const StackFrame& frame, const TranslationMatch& match) {
+    static void set_variable_weights(WeightsMatrix& weights, const StackFrame& frame) {
+        for (std::shared_ptr<ir::Declaration> variable : frame.allocated_variables()) {
+            AllocatedValue value = {.is_flush = false, .variable = variable, .operands = {}};
+            const std::unordered_set<Location> current_locations = frame.locate(variable);
+
+            if (weights.contains(value)) {
+                const size_t value_row = weights.get_row(value);
+                for (Location current_location : current_locations) {
+                    SpecificLocation specific_location(current_location, value);
+
+                    // If it is an operand, don't add a forbidden location, just set the allowed ones to zero
+                    if (!weights.contains(specific_location))
+                        continue;
+
+                    const size_t location_col = weights.get_column(specific_location);
+                    if (std::isfinite(weights.weights(value_row, location_col)))
+                        weights.weights(value_row, location_col) = 0;
+                }
+            } else {
+                // Not an operand -> set existing locations
+                bool is_on_stack = false;
+                const size_t value_row = weights.get_row(value);
+                for (Location current_location : current_locations) {
+                    if (current_location == Location::stack)
+                        is_on_stack = true;
+
+                    SpecificLocation specific_location(current_location, value);
+                    size_t location_col = weights.get_column(specific_location);
+                    weights.weights(value_row, location_col) = 0;  // It's already there, so no transfer cost
+                }
+
+                // Add a possible spill to the stack of non-operand values
+                if (!is_on_stack) {
+                    SpecificLocation stack_location(Location::stack, value);
+                    size_t location_col = weights.get_column(stack_location);
+
+                    float min_weight = INFINITY;
+                    for (Location current_location : current_locations) {
+                        LocationType current_location_type = LOCATION_TYPES.at(current_location);
+                        min_weight = std::min(TRANSFER_COSTS(std::to_underlying(current_location_type), std::to_underlying(LocationType::MEMORY)), min_weight);
+                    }
+                    weights.weights(value_row, location_col) = min_weight;
+                }
+            }
+        }
+    }
+
+    static WeightsMatrix build_weights_matrix(const StackFrame& frame, const TranslationMatch& match, const std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects) {
         WeightsMatrix weights;
         set_operand_weights(weights, frame, match);
+        set_indirect_flushes(weights, frame, indirects);
         set_variable_weights(weights, frame);
         return weights;
     }
@@ -418,9 +597,21 @@ namespace toycc::arch::x86_64 {
         return allocation;
     }
 
-    void CodeGenerator::emit_transfers(StackFrame& frame, TranslationMatch& match) {
-        WeightsMatrix weights = build_weights_matrix(frame, match);
+    void CodeGenerator::emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match) {
+        std::unordered_set<std::shared_ptr<ir::Declaration>> indirects;
+        std::unordered_set<std::shared_ptr<ir::Declaration>> reads;
+        find_indirects(indirects, reads, graph, match);
+
+        WeightsMatrix weights = build_weights_matrix(frame, match, indirects);
         std::vector<std::pair<AllocatedValue, SpecificLocation>> allocation_map = find_matching(weights);
+
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        Location weights matrix :\n";
+            std::cerr << indent(dump(weights), true, "            ");
+            std::cerr << "        Location matching :\n";
+            for (const auto& [value, specific_location] : allocation_map)
+                std::cerr << "            " << value << " -> " << specific_location.location << "\n";
+        }
 
         for (const auto& [value, specific_location] : allocation_map) {
             if (value.variable.get() != nullptr) {
@@ -433,10 +624,18 @@ namespace toycc::arch::x86_64 {
                     if (std::holds_alternative<TranslationOperandIdentifier::Statement>(id.id)) {
                         ir::Operand operand = get_operand(match, id);
                         transfer(frame, operand, specific_location.location);
+                        set_operand(match, id, operand);
                     }
                 }
             }
+
+            // For indirect flushes that are not required as inputs, remove possible other locations
+            if (value.is_flush && indirects.contains(value.variable) && !reads.contains(value.variable))
+                frame.move(value.variable, specific_location.location);
         }
+
+        for (std::shared_ptr<ir::Declaration> variable : unordered_set_difference(indirects, reads))
+            frame.move(variable, Location::stack);
 
         if (!match.matches())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "There are still non-matching operands in the translation match after transfers");
@@ -484,43 +683,5 @@ namespace toycc::arch::x86_64 {
 
 
         toycc::execmodel::x86_64::emit_transfer(frame, source_operand, operand, match.value(), source, destination);
-    }
-
-    // Before a dereference or call, flush all indirect operands to their respective memory locations
-    void CodeGenerator::flush_indirects(StackFrame& frame, const ir::DependencyGraph& graph, const TranslationMatch& match) {
-        std::unordered_set<std::shared_ptr<ir::Declaration>> indirects;
-        std::unordered_set<std::shared_ptr<ir::Declaration>> reads;
-        for (std::shared_ptr<ir::DependencyNode> statement : match.group_match.statements) {
-            for (ir::DependencyGraph::Edge edge : graph.connected_edges(statement)) {
-                std::shared_ptr<ir::DependencyNode> value = (edge.entry == statement ? edge.exit : edge.entry);
-                std::shared_ptr<ir::Declaration> variable = value->declaration();
-
-                if (edge.attr.operand_group == ir::OperandGroup::INDIRECT && (edge.attr.type & (ir::DependencyType::DEREFERENCE | ir::DependencyType::CALL | ir::DependencyType::LIVE_ON_EXIT)))
-                    indirects.insert(variable);
-
-                if (edge.attr.type & ir::DependencyType::READ)
-                    reads.insert(variable);
-            }
-        }
-
-        for (std::shared_ptr<ir::Declaration> variable : indirects) {
-            const std::unordered_set<Location> locations = frame.locate(variable);
-
-            Location destination = Location::stack;
-            if (locations.contains(Location::memory) && !locations.contains(Location::stack))
-                destination = Location::memory;
-
-            // Move the variable to memory if necessary
-            if (!locations.contains(destination)) {
-                if (variable->storage & ir::StorageClass::GLOBAL)
-                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing indirect variables is not implemented", variable->location);
-
-                transfer(frame, variable, Location::stack);
-                frame.copy(variable, Location::stack);
-            }
-
-            if (!reads.contains(variable))
-                frame.move(variable, destination);  // Remove its possible other locations if it's not needed as an input
-        }
     }
 }

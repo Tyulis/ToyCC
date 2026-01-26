@@ -69,7 +69,7 @@ def generate_locations(translation_model: TranslationModel, output_dir: Path):
     source_content += f"{location_repr_prototype} {{\n"
     source_content += location_repr
     source_content += '    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown location");\n'
-    source_content += "}\n"
+    source_content += "}\n\n"
 
     write_header(header_content, output_dir / "location.h", [], ["iostream", "unordered_set"])
     write_source(source_content, output_dir / "location.cpp", ["diagnostic.h", output_dir / "location.h"], ["iostream"])
@@ -611,8 +611,10 @@ def generate_transfer_matcher_function(translation_model: TranslationModel, tran
     source_content += f"template<> std::optional<TransferMatch> match_transfer<TransferTag::{transfer.tag}> (const StackFrame&{frame_arg}, const ir::Operand&{operand_arg}, Location destination) {{\n"
     source_content += f"    if (!{set_name}.contains(destination))  return {{}};\n"
     source_content += f"    OperandMatch match = {expression};\n"
-    source_content += f"    if (match.match == OperandMatch::OK)  return TransferMatch {{.transfer = TransferTag::{transfer.tag}, .source_locations = match.locations}};\n"
-    source_content += f"    else                                  return {{}};\n"
+    source_content += f"    if (match.match == OperandMatch::OK)\n"
+    source_content += f"        return TransferMatch {{.transfer = TransferTag::{transfer.tag}, .source_locations = unordered_set_intersection(frame.locate(operand), match.locations)}};\n"
+    source_content += f"    else\n"
+    source_content += f"        return {{}};\n"
     source_content +=  "}\n"
     return source_content
 
@@ -638,7 +640,7 @@ def generate_transfer_matcher(translation_model: TranslationModel, output_dir: P
     source_content +=  "}\n"
 
     write_header(header_content, output_dir / "transfer_matcher.h", ["ir/declaration.h", "arch/x86_64/execmodel.h", "arch/x86_64/allocation.h", output_dir / "location.h"])
-    write_source(source_content, output_dir / "transfer_matcher.cpp", ["arch/x86_64/constraints.hpp", output_dir / "transfer_matcher.h"], ["unordered_set"])
+    write_source(source_content, output_dir / "transfer_matcher.cpp", ["util/sets.hpp", "arch/x86_64/constraints.hpp", output_dir / "transfer_matcher.h"], ["unordered_set"])
 
 
 # -------- Transfer emission
