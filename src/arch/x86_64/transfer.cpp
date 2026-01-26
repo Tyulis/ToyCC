@@ -150,8 +150,9 @@ namespace toycc::arch::x86_64 {
     static void set_operand(ir::Statement& statement, const StatementOperandIdentifier& id, ir::Operand operand) {
         ir::Operand& target = (id.is_input ? statement.inputs[id.index] : statement.output.value());
         if (id.is_pointer)
-            operand.indices = target.indices;
-        target = operand;
+            target.value = operand.value;
+        else
+            target = operand;
     }
 
     static void set_operand(TranslationMatch& match, const TranslationOperandIdentifier& id, const ir::Operand& operand) {
@@ -159,6 +160,25 @@ namespace toycc::arch::x86_64 {
             const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
             set_operand(match.group_match.statements[statement_id.index]->statement(), statement_id.id, operand);
         }
+    }
+
+    static bool is_output_operand(const TranslationOperandIdentifier& id) {
+        if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id))
+            return false;
+        return !std::get<TranslationOperandIdentifier::Statement>(id.id).id.is_input;
+    }
+
+    static bool is_pointer(const TranslationOperandIdentifier& id) {
+        if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id))
+            return false;
+        return std::get<TranslationOperandIdentifier::Statement>(id.id).id.is_pointer;
+    }
+
+    static bool has_pointer(const AllocatedValue& value) {
+        for (const TranslationOperandIdentifier& id : value.operands)
+            if (is_pointer(id))
+                return true;
+        return false;
     }
 }
 
@@ -238,7 +258,7 @@ namespace toycc::arch::x86_64 {
         {Location::memory,   LocationType::MEMORY},
     };
 
-    static const std::unordered_set<Location> POINTER_LOCATIONS = {Location::a,  Location::b,  Location::c,   Location::d,   Location::si,  Location::di,  Location::sp,  Location::bp,
+    static const std::unordered_set<Location> POINTER_LOCATIONS = {Location::a,  Location::b,  Location::c,   Location::d,   Location::si,  Location::di,
                                                                    Location::r8, Location::r9, Location::r10, Location::r11, Location::r12, Location::r13, Location::r14, Location::r15};
 
     static const arma::fmat TRANSFER_COSTS = {
@@ -248,6 +268,14 @@ namespace toycc::arch::x86_64 {
         /* MAIN_REGISTER */ {  INFINITY,       100,             10,            11,     INFINITY},
         /* EXT_REGISTER  */ {  INFINITY,       101,             11,            11,     INFINITY},
         /* MM_REGISTER   */ {  INFINITY,  INFINITY,       INFINITY,      INFINITY,     INFINITY},
+    };
+
+    static const std::unordered_map<LocationType, float> OUTPUT_COSTS = {
+        {LocationType::CONSTANT,    INFINITY},
+        {LocationType::MEMORY,           100},
+        {LocationType::MAIN_REGISTER,      0},
+        {LocationType::EXT_REGISTER,       1},
+        {LocationType::MM_REGISTER, INFINITY},
     };
 
     struct WeightsMatrix {
@@ -361,7 +389,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    static void add_operand_weights(WeightsMatrix& weights, const StackFrame& frame, const AllocatedValue& value, const ir::Operand& operand, const std::unordered_set<Location>& allowed_locations) {
+    static void add_input_weights(WeightsMatrix& weights, const StackFrame& frame, const AllocatedValue& value, const ir::Operand& operand, const std::unordered_set<Location>& allowed_locations) {
         std::unordered_set<Location> current_locations = frame.locate(operand);
         if (current_locations.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Input operand {} has no location", operand.ir_code()), operand.location);
@@ -380,6 +408,20 @@ namespace toycc::arch::x86_64 {
 
             size_t location_col = weights.get_column(allowed_specific_location);
             weights.weights(value_row, location_col) = min_weight;
+        }
+    }
+
+    static void add_output_weights(WeightsMatrix& weights, const AllocatedValue& value, const ir::Operand& operand, const std::unordered_set<Location>& allowed_locations) {
+        if (allowed_locations.empty())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Output operand {} has no allowed location", operand.ir_code()), operand.location);
+
+        const size_t value_row = weights.get_row(value);
+        for (Location allowed_location : allowed_locations) {
+            SpecificLocation allowed_specific_location(allowed_location, value);
+            LocationType allowed_location_type = LOCATION_TYPES.at(allowed_location);
+            const float weight = OUTPUT_COSTS.at(allowed_location_type);
+            size_t location_col = weights.get_column(allowed_specific_location);
+            weights.weights(value_row, location_col) = weight;
         }
     }
 
@@ -407,14 +449,31 @@ namespace toycc::arch::x86_64 {
                 AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                                                                      .id = {.is_input = true, .is_pointer = false, .index = input_index}}}}};
-                add_operand_weights(weights, frame, value, operand, operand_match.locations);
+                add_input_weights(weights, frame, value, operand, operand_match.locations);
 
                 if (operand.is_dereference()) {
                     ir::Operand pointer = operand.pointer();
-                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
-                                                    .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
-                                                                                                                 .id = {.is_input = true, .is_pointer = true, .index = input_index}}}}};
-                    add_operand_weights(weights, frame, pointer_value, pointer, POINTER_LOCATIONS);
+                    AllocatedValue pointer_value = value;
+                    std::get<TranslationOperandIdentifier::Statement>(pointer_value.operands[0].id).id.is_pointer = true;
+                    add_input_weights(weights, frame, pointer_value, pointer, POINTER_LOCATIONS);
+                }
+            }
+
+            // If the output doesn't overwrite an input, it should also get allocated
+            if (statement_match.output.has_value() && !statement_match.is_inout) {
+                const OperandMatch& operand_match = statement_match.output.value();
+                const ir::Operand& operand = statement.output.value();
+
+                AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
+                                        .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
+                                                      .id = {.is_input = false, .is_pointer = false, .index = {}}}}}};
+                add_output_weights(weights, value, operand, operand_match.locations);
+
+                if (operand.is_dereference()) {
+                    ir::Operand pointer = operand.pointer();
+                    AllocatedValue pointer_value = value;
+                    std::get<TranslationOperandIdentifier::Statement>(pointer_value.operands[0].id).id.is_pointer = true;
+                    add_input_weights(weights, frame, pointer_value, pointer, POINTER_LOCATIONS);
                 }
             }
         }
@@ -597,6 +656,33 @@ namespace toycc::arch::x86_64 {
         return allocation;
     }
 
+    // Sort allocations in order of transfer emission : pointers first
+    static void sort_transfers(std::vector<std::pair<AllocatedValue, SpecificLocation>>& allocation_map) {
+        auto operand_comparator = [](const TranslationOperandIdentifier& left, const TranslationOperandIdentifier& right) {
+            if (is_pointer(left))
+                return true;
+            if (is_pointer(right))
+                return false;
+            return false;
+        };
+
+        for (auto& [value, location] : allocation_map)
+            std::ranges::sort(value.operands, operand_comparator);
+
+        auto value_comparator = [](const std::pair<AllocatedValue, SpecificLocation>& left_pair, const std::pair<AllocatedValue, SpecificLocation>& right_pair) {
+            const AllocatedValue& left  = left_pair.first;
+            const AllocatedValue& right = right_pair.first;
+
+            if (has_pointer(left))
+                return true;
+            if (has_pointer(right))
+                return false;
+            return false;
+        };
+
+        std::ranges::sort(allocation_map, value_comparator);
+    }
+
     void CodeGenerator::emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> indirects;
         std::unordered_set<std::shared_ptr<ir::Declaration>> reads;
@@ -604,6 +690,7 @@ namespace toycc::arch::x86_64 {
 
         WeightsMatrix weights = build_weights_matrix(frame, match, indirects);
         std::vector<std::pair<AllocatedValue, SpecificLocation>> allocation_map = find_matching(weights);
+        sort_transfers(allocation_map);
 
         if (toycc::config::debug::with_translation_trace) {
             std::cerr << "        Location weights matrix :\n";
@@ -615,13 +702,18 @@ namespace toycc::arch::x86_64 {
 
         for (const auto& [value, specific_location] : allocation_map) {
             if (value.variable.get() != nullptr) {
-                transfer(frame, value.variable, specific_location.location);
-                for (const TranslationOperandIdentifier& id : value.operands)
+                bool is_only_output = false;
+                for (const TranslationOperandIdentifier& id : value.operands) {
                     set_operand_match(match, id, {OperandMatch::OK, {specific_location.location}});
+                    is_only_output = is_only_output || is_output_operand(id);
+                }
+
+                if (!is_only_output)
+                    transfer(frame, value.variable, specific_location.location);
             } else {
                 for (const TranslationOperandIdentifier& id : value.operands) {
                     set_operand_match(match, id, {OperandMatch::OK, {specific_location.location}});
-                    if (std::holds_alternative<TranslationOperandIdentifier::Statement>(id.id)) {
+                    if (std::holds_alternative<TranslationOperandIdentifier::Statement>(id.id) && !is_output_operand(id)) {
                         ir::Operand operand = get_operand(match, id);
                         transfer(frame, operand, specific_location.location);
                         set_operand(match, id, operand);
@@ -636,6 +728,11 @@ namespace toycc::arch::x86_64 {
 
         for (std::shared_ptr<ir::Declaration> variable : unordered_set_difference(indirects, reads))
             frame.move(variable, Location::stack);
+
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        Allocated translation match :\n";
+            std::cerr << indent(dump(match), true, "            ") << "\n";
+        }
 
         if (!match.matches())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "There are still non-matching operands in the translation match after transfers");

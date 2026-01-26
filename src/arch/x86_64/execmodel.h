@@ -60,6 +60,7 @@ namespace toycc::arch::x86_64 {
     struct StatementMatch {
         std::vector<OperandMatch> input;
         std::optional<OperandMatch> output;
+        bool is_inout;  // Whether the `output` operand overwrites one of the inputs
 
         inline bool matches() const {
             for (const OperandMatch& operand : input)

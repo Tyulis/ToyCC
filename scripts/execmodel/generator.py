@@ -301,7 +301,8 @@ def generate_statement_match(translation: TranslationSpec, statement_index: int,
             operand_match += f".with_index({input_index})"
         operand_list.append(operand_match)
 
-    return "StatementMatch {.input = {" + ", ".join(inputs) + "}, .output = {" + ", ".join(outputs) + "}}"
+    is_inout = ("output" in statement.operands and not isinstance(statement.operands["output"], Constraint))
+    return "StatementMatch {.input = {" + ", ".join(inputs) + "}, .output = {" + ", ".join(outputs) + f"}}, .is_inout = {BOOL[is_inout]}}}"
 
 def generate_statement_matcher(translation: TranslationSpec, statement_index: int, translation_model: TranslationModel, operand_conditions: dict[str, str]) -> str:
     statement = translation.ir[statement_index]
