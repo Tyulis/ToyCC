@@ -1,5 +1,6 @@
 #include "config.h"
 #include "arch/x86_64/execmodel.h"
+#include "gen/execmodel/x86_64/location.h"
 #include "util/strings.h"
 #include "util/combinatorics.hpp"
 
@@ -165,7 +166,9 @@ namespace toycc::arch::x86_64 {
             case OperandMatch::KO:                 stream << "KO";  break;
         }
 
-        if (!match.locations.empty()) {
+        if (match.locations == toycc::execmodel::x86_64::ALL_LOCATIONS) {
+            stream << "(any)";
+        } else if (!match.locations.empty()) {
             stream << "(";
             for (const auto& [index, location] : std::ranges::enumerate_view(match.locations)) {
                 if (index > 0)  stream << ", ";

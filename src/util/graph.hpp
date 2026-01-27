@@ -104,9 +104,10 @@ namespace toycc {
             inline std::shared_ptr<Node> pop_node(std::shared_ptr<Node> node) {
                 auto it = _nodes.find(node);
                 if (it != _nodes.end()) {
-                    disconnect_node(*it);
+                    node = *it;
+                    disconnect_node(node);
                     _nodes.erase(it);
-                    return *it;
+                    return node;
                 } else {
                     return nullptr;
                 }

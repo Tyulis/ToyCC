@@ -1,5 +1,6 @@
 #include "config.h"
 #include "diagnostic.h"
+#include "gen/execmodel/x86_64/location.h"
 #include "ir/declaration.h"
 #include "ir/type.h"
 #include "arch/x86_64/execmodel.h"
@@ -38,7 +39,7 @@ namespace toycc::arch::x86_64 {
     std::optional<Location> StackFrame::allocate(const std::unordered_set<Location>& locations) const {
         const auto& location_index = allocations.template get<ir::location_tag>();
         for (Location location : locations) {
-            if (location == Location::constant || location == Location::memory || location == Location::stack)
+            if (toycc::execmodel::x86_64::BANKED_LOCATIONS.contains(location))
                 continue;  // FIXME : For now, don't allocate additional space on the stack for intermediate allocations
 
             if (location_index.find(location) == location_index.end())

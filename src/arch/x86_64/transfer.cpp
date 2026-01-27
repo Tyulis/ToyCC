@@ -5,8 +5,10 @@
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/execmodel.h"
+#include "gen/execmodel/x86_64/location.h"
 #include "gen/execmodel/x86_64/transfer_matcher.h"
 #include "gen/execmodel/x86_64/transfer_emission.h"
+#include "util/sets.hpp"
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
@@ -111,6 +113,22 @@ namespace toycc::arch::x86_64 {
         }
     };
 
+    static OperandMatch get_operand_match(const StatementMatch& match, const StatementOperandIdentifier& id) {
+        if (id.is_input)
+            return match.input[id.index];
+        else
+            return match.output.value();
+    }
+
+    static OperandMatch get_operand_match(const TranslationMatch& match, const TranslationOperandIdentifier& id) {
+        if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id)) {
+            return match.allocations[std::get<TranslationOperandIdentifier::Allocation>(id.id).index];
+        } else {
+            const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
+            return get_operand_match(match.statements[statement_id.index], statement_id.id);
+        }
+    }
+
     static void set_operand_match(StatementMatch& match, const StatementOperandIdentifier& id, const OperandMatch& operand_match) {
         if (id.is_pointer)
             return;
@@ -166,6 +184,13 @@ namespace toycc::arch::x86_64 {
         if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id))
             return false;
         return !std::get<TranslationOperandIdentifier::Statement>(id.id).id.is_input;
+    }
+
+    static bool has_output(const AllocatedValue& value) {
+        for (const TranslationOperandIdentifier& id : value.operands)
+            if (is_output_operand(id))
+                return true;
+        return false;
     }
 
     static bool is_pointer(const TranslationOperandIdentifier& id) {
@@ -301,7 +326,7 @@ namespace toycc::arch::x86_64 {
             return false;
         }
 
-        size_t get_row(const AllocatedValue& value) {
+        size_t add(const AllocatedValue& value) {
             for (auto& [existing_value, row] : value_rows) {
                 if (value == existing_value) {
                     for (const TranslationOperandIdentifier& id : value.operands)
@@ -318,7 +343,14 @@ namespace toycc::arch::x86_64 {
             return row;
         }
 
-        size_t get_column(const SpecificLocation& location) {
+        std::optional<size_t> get_row(const AllocatedValue& value) {
+            for (auto& [existing_value, row] : value_rows)
+                if (value == existing_value)
+                    return row;
+            return {};
+        }
+
+        size_t add(const SpecificLocation& location) {
             for (auto& [existing_location, col] : location_cols)
                 if (location == existing_location)
                     return col;
@@ -328,6 +360,13 @@ namespace toycc::arch::x86_64 {
             weights.insert_cols(col, 1);
             weights.col(col).fill(INFINITY);
             return col;
+        }
+
+        std::optional<size_t> get_col(const SpecificLocation& location) {
+            for (auto& [existing_location, col] : location_cols)
+                if (location == existing_location)
+                    return col;
+            return {};
         }
     };
 
@@ -389,104 +428,122 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    static void add_input_weights(WeightsMatrix& weights, const StackFrame& frame, const AllocatedValue& value, const ir::Operand& operand, const std::unordered_set<Location>& allowed_locations) {
-        std::unordered_set<Location> current_locations = frame.locate(operand);
-        if (current_locations.empty())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Input operand {} has no location", operand.ir_code()), operand.location);
-        if (allowed_locations.empty())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Input operand {} has no allowed location", operand.ir_code()), operand.location);
-
-        const size_t value_row = weights.get_row(value);
-        for (Location allowed_location : allowed_locations) {
-            SpecificLocation allowed_specific_location(allowed_location, value);
-            LocationType allowed_location_type = LOCATION_TYPES.at(allowed_location);
-            float min_weight = INFINITY;
-            for (Location current_location : current_locations) {
-                LocationType current_location_type = LOCATION_TYPES.at(current_location);
-                min_weight = std::min(TRANSFER_COSTS(std::to_underlying(current_location_type), std::to_underlying(allowed_location_type)), min_weight);
-            }
-
-            size_t location_col = weights.get_column(allowed_specific_location);
-            weights.weights(value_row, location_col) = min_weight;
-        }
-    }
-
-    static void add_output_weights(WeightsMatrix& weights, const AllocatedValue& value, const ir::Operand& operand, const std::unordered_set<Location>& allowed_locations) {
-        if (allowed_locations.empty())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Output operand {} has no allowed location", operand.ir_code()), operand.location);
-
-        const size_t value_row = weights.get_row(value);
-        for (Location allowed_location : allowed_locations) {
-            SpecificLocation allowed_specific_location(allowed_location, value);
-            LocationType allowed_location_type = LOCATION_TYPES.at(allowed_location);
-            const float weight = OUTPUT_COSTS.at(allowed_location_type);
-            size_t location_col = weights.get_column(allowed_specific_location);
-            weights.weights(value_row, location_col) = weight;
-        }
-    }
-
-    static void add_allocation_weights(WeightsMatrix& weights, const AllocatedValue& value, const std::unordered_set<Location>& allowed_locations) {
-        if (allowed_locations.empty())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Allocation has no allowed location");
-
-        const size_t value_row = weights.get_row(value);
-        for (Location allowed_location : allowed_locations) {
-            SpecificLocation allowed_specific_location(allowed_location, value);
-            size_t location_col = weights.get_column(allowed_specific_location);
-            weights.weights(value_row, location_col) = 0;
-        }
-    }
-
     static void set_operand_weights(WeightsMatrix& weights, const StackFrame& frame, const TranslationMatch& match) {
         for (size_t statement_index = 0; statement_index < match.statements.size(); statement_index++) {
             const StatementMatch& statement_match = match.statements[statement_index];
             const ir::Statement& statement = match.group_match.statements[statement_index]->statement();
 
             for (size_t input_index = 0; input_index < statement_match.input.size(); input_index++) {
-                const OperandMatch& operand_match = statement_match.input[input_index];
                 const ir::Operand& operand = statement.inputs[input_index];
-
                 AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                                                                      .id = {.is_input = true, .is_pointer = false, .index = input_index}}}}};
-                add_input_weights(weights, frame, value, operand, operand_match.locations);
+                weights.add(value);
 
                 if (operand.is_dereference()) {
                     ir::Operand pointer = operand.pointer();
-                    AllocatedValue pointer_value = value;
-                    std::get<TranslationOperandIdentifier::Statement>(pointer_value.operands[0].id).id.is_pointer = true;
-                    add_input_weights(weights, frame, pointer_value, pointer, POINTER_LOCATIONS);
+                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
+                                                    .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
+                                                                                                                 .id = {.is_input = true, .is_pointer = true, .index = input_index}}}}};
+                    weights.add(pointer_value);
                 }
             }
 
             // If the output doesn't overwrite an input, it should also get allocated
             if (statement_match.output.has_value() && !statement_match.is_inout) {
-                const OperandMatch& operand_match = statement_match.output.value();
                 const ir::Operand& operand = statement.output.value();
-
                 AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                       .id = {.is_input = false, .is_pointer = false, .index = {}}}}}};
-                add_output_weights(weights, value, operand, operand_match.locations);
+                weights.add(value);
 
                 if (operand.is_dereference()) {
                     ir::Operand pointer = operand.pointer();
-                    AllocatedValue pointer_value = value;
-                    std::get<TranslationOperandIdentifier::Statement>(pointer_value.operands[0].id).id.is_pointer = true;
-                    add_input_weights(weights, frame, pointer_value, pointer, POINTER_LOCATIONS);
+                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
+                                                    .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
+                                                                                                                 .id = {.is_input = false, .is_pointer = true, .index = {}}}}}};
+                    weights.add(pointer_value);
                 }
             }
         }
 
+        for (const auto& [value, row] : weights.value_rows) {
+            std::unordered_set<Location> allowed_locations = toycc::execmodel::x86_64::ALL_LOCATIONS;
+            for (const TranslationOperandIdentifier& id : value.operands) {
+                if (is_pointer(id))
+                    allowed_locations = unordered_set_intersection(allowed_locations, POINTER_LOCATIONS);
+                else
+                    allowed_locations = unordered_set_intersection(allowed_locations, get_operand_match(match, id).locations);
+            }
+
+            if (allowed_locations.empty())
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Value {} has no allowed location", dump(value)));
+
+            bool has_location = false;
+            if (has_output(value)) {
+                for (Location allowed_location : allowed_locations) {
+                    SpecificLocation allowed_specific_location(allowed_location, value);
+                    LocationType allowed_location_type = LOCATION_TYPES.at(allowed_location);
+                    const float weight = OUTPUT_COSTS.at(allowed_location_type);
+                    if (std::isfinite(weight)) {
+                        size_t location_col = weights.add(allowed_specific_location);
+                        weights.weights(row, location_col) = weight;
+                        has_location = true;
+                    }
+                }
+            } else {
+                std::unordered_set<Location> current_locations = toycc::execmodel::x86_64::ALL_LOCATIONS;
+                for (const TranslationOperandIdentifier& id : value.operands)
+                    current_locations = unordered_set_intersection(current_locations, frame.locate(get_operand(match, id)));
+
+                if (current_locations.empty())
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Input value {} has no location", dump(value)));
+
+                for (Location allowed_location : allowed_locations) {
+                    SpecificLocation allowed_specific_location(allowed_location, value);
+                    float min_weight = INFINITY;
+                    if (current_locations.contains(allowed_location)) {
+                        min_weight = 0;
+                    } else {
+                        LocationType allowed_location_type = LOCATION_TYPES.at(allowed_location);
+                        for (Location current_location : current_locations) {
+                            LocationType current_location_type = LOCATION_TYPES.at(current_location);
+                            min_weight = std::min(TRANSFER_COSTS(std::to_underlying(current_location_type), std::to_underlying(allowed_location_type)), min_weight);
+                        }
+                    }
+
+                    if (std::isfinite(min_weight)) {
+                        size_t location_col = weights.add(allowed_specific_location);
+                        weights.weights(row, location_col) = min_weight;
+                        has_location = true;
+                    }
+                }
+            }
+
+            if (!has_location)
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Value {} has no allowed destination", dump(value)));
+        }
+    }
+
+    static void set_allocation_weights(WeightsMatrix& weights, const TranslationMatch& match) {
         for (size_t allocation_index = 0; allocation_index < match.allocations.size(); allocation_index++) {
             const OperandMatch& allocation_match = match.allocations[allocation_index];
             AllocatedValue value = {.is_flush = false, .variable = nullptr, .operands = {{.id = TranslationOperandIdentifier::Allocation {.index = allocation_index}}}};
-            add_allocation_weights(weights, value, allocation_match.locations);
+
+            if (allocation_match.locations.empty())
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Allocation {} has no allowed location", allocation_index));
+
+            const size_t value_row = weights.add(value);
+            for (Location allowed_location : allocation_match.locations) {
+                SpecificLocation allowed_specific_location(allowed_location, value);
+                size_t location_col = weights.add(allowed_specific_location);
+                weights.weights(value_row, location_col) = 0;
+            }
         }
     }
 
     // Before a dereference or call, flush all indirect operands to their respective memory locations
-    void set_indirect_flushes(WeightsMatrix& weights, const StackFrame& frame, const std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects) {
+    static void set_indirect_flushes(WeightsMatrix& weights, const StackFrame& frame, const std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects) {
         for (std::shared_ptr<ir::Declaration> variable : indirects) {
             const std::unordered_set<Location> locations = frame.locate(variable);
 
@@ -501,9 +558,8 @@ namespace toycc::arch::x86_64 {
 
                 AllocatedValue value = {.is_flush = true, .variable = variable, .operands = {}};
                 SpecificLocation specific_location(destination, value);
-                size_t value_row = weights.get_row(value);
-                size_t location_col = weights.get_column(specific_location);
-                weights.weights.row(value_row).fill(INFINITY);
+                size_t value_row = weights.add(value);
+                size_t location_col = weights.add(specific_location);
 
                 std::unordered_set<Location> current_locations = frame.locate(variable);
                 if (current_locations.empty())
@@ -525,8 +581,8 @@ namespace toycc::arch::x86_64 {
             AllocatedValue value = {.is_flush = false, .variable = variable, .operands = {}};
             const std::unordered_set<Location> current_locations = frame.locate(variable);
 
-            if (weights.contains(value)) {
-                const size_t value_row = weights.get_row(value);
+            const std::optional<size_t> value_row = weights.get_row(value);
+            if (value_row.has_value()) {
                 for (Location current_location : current_locations) {
                     SpecificLocation specific_location(current_location, value);
 
@@ -534,27 +590,27 @@ namespace toycc::arch::x86_64 {
                     if (!weights.contains(specific_location))
                         continue;
 
-                    const size_t location_col = weights.get_column(specific_location);
-                    if (std::isfinite(weights.weights(value_row, location_col)))
-                        weights.weights(value_row, location_col) = 0;
+                    const size_t location_col = weights.add(specific_location);
+                    if (std::isfinite(weights.weights(*value_row, location_col)))
+                        weights.weights(*value_row, location_col) = 0;
                 }
             } else {
                 // Not an operand -> set existing locations
                 bool is_on_stack = false;
-                const size_t value_row = weights.get_row(value);
+                const size_t value_row = weights.add(value);
                 for (Location current_location : current_locations) {
                     if (current_location == Location::stack)
                         is_on_stack = true;
 
                     SpecificLocation specific_location(current_location, value);
-                    size_t location_col = weights.get_column(specific_location);
+                    size_t location_col = weights.add(specific_location);
                     weights.weights(value_row, location_col) = 0;  // It's already there, so no transfer cost
                 }
 
                 // Add a possible spill to the stack of non-operand values
                 if (!is_on_stack) {
                     SpecificLocation stack_location(Location::stack, value);
-                    size_t location_col = weights.get_column(stack_location);
+                    size_t location_col = weights.add(stack_location);
 
                     float min_weight = INFINITY;
                     for (Location current_location : current_locations) {
@@ -570,8 +626,25 @@ namespace toycc::arch::x86_64 {
     static WeightsMatrix build_weights_matrix(const StackFrame& frame, const TranslationMatch& match, const std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects) {
         WeightsMatrix weights;
         set_operand_weights(weights, frame, match);
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        With operand weights :\n";
+            std::cerr << indent(dump(weights), true, "            ");
+        }
+        set_allocation_weights(weights, match);
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        With allocation weights :\n";
+            std::cerr << indent(dump(weights), true, "            ");
+        }
         set_indirect_flushes(weights, frame, indirects);
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        With indirect flushes :\n";
+            std::cerr << indent(dump(weights), true, "            ");
+        }
         set_variable_weights(weights, frame);
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        With variable weights :\n";
+            std::cerr << indent(dump(weights), true, "            ");
+        }
         return weights;
     }
 
@@ -689,12 +762,15 @@ namespace toycc::arch::x86_64 {
         find_indirects(indirects, reads, graph, match);
 
         WeightsMatrix weights = build_weights_matrix(frame, match, indirects);
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        Location weights matrix :\n";
+            std::cerr << indent(dump(weights), true, "            ");
+        }
+
         std::vector<std::pair<AllocatedValue, SpecificLocation>> allocation_map = find_matching(weights);
         sort_transfers(allocation_map);
 
         if (toycc::config::debug::with_translation_trace) {
-            std::cerr << "        Location weights matrix :\n";
-            std::cerr << indent(dump(weights), true, "            ");
             std::cerr << "        Location matching :\n";
             for (const auto& [value, specific_location] : allocation_map)
                 std::cerr << "            " << value << " -> " << specific_location.location << "\n";

@@ -179,6 +179,8 @@ class TranslationModel:
         allowed_allocations = set(self.locations) - set(description["no_allocation"])
         self.allocation_constraint = Constraint(ConstraintType.DISJUNCTION, frozenset(Constraint(ConstraintType.LOCATION, location) for location in allowed_allocations))
 
+        self.banked_locations = set(description["banked_locations"])
+
         self.ir = {tag: IRSpec(tag, spec) for tag, spec in description["ir"].items()}
         self.transfers = self.parse_transfers(description["transfers"], instruction_set)
         self.translations = self.parse_translations(description["translations"], instruction_set)

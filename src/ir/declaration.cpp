@@ -270,8 +270,6 @@ namespace toycc::ir {
         for (const Operand& index : indices)
             code << "[" << index.ir_code() << "]";
 
-        if (dereference_type.get() != nullptr)
-            code << ":" << dereference_type->ir_code();
         return code.str();
     }
 }

@@ -16,6 +16,10 @@
     "register_sizes":     {"al": 1, "ax": 2, "eax": 4, "rax": 8,
                            "dl": 1, "dx": 2, "edx": 4, "rdx": 8},
 
+    "no_output":         ["constant", "sp", "bp"],
+    "no_allocation":     ["constant", "stack", "memory"],
+    "banked_locations":  ["constant", "stack", "memory"],  // Non-unique locations
+
     "operand_types": {
         "0"            : {"category": "constant", "type": "INTEGER", "value":  0},
         "-1"           : {"category": "constant", "type": "INTEGER", "value": -1},
@@ -113,9 +117,6 @@
         "{sae}"        : false,
         "{er}"         : false
     },
-
-    "no_output":     ["constant", "sp", "bp"],
-    "no_allocation": ["constant", "stack", "memory"],
 
     "transfers": ["MOV"],
 

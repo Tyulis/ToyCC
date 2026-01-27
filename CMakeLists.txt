@@ -68,6 +68,7 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/allocation.cpp
 	src/arch/x86_64/assembly.cpp
 	src/arch/x86_64/block.cpp
+	src/arch/x86_64/constraints.cpp
 	src/arch/x86_64/custom_targets.cpp
 	src/arch/x86_64/datamodel.cpp
 	src/arch/x86_64/execmodel.cpp

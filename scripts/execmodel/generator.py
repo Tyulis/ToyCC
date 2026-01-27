@@ -63,9 +63,13 @@ def generate_locations(translation_model: TranslationModel, output_dir: Path):
 
     header_content += location_enum + "\n"
     header_content +=  "extern const std::unordered_set<Location> ALL_LOCATIONS;\n"
+    header_content +=  "extern const std::unordered_set<Location> BANKED_LOCATIONS;\n"
+    header_content +=  "extern const std::unordered_set<Location> UNIQUE_LOCATIONS;\n"
     header_content += f"{location_repr_prototype};\n"
 
     source_content +=  "const std::unordered_set<Location> ALL_LOCATIONS = {" + ", ".join(f"Location::{location}" for location in translation_model.locations) + "};\n";
+    source_content +=  "const std::unordered_set<Location> BANKED_LOCATIONS = {" + ", ".join(f"Location::{location}" for location in sorted(translation_model.banked_locations)) + "};\n";
+    source_content +=  "const std::unordered_set<Location> UNIQUE_LOCATIONS = {" + ", ".join(f"Location::{location}" for location in sorted(set(translation_model.locations) - translation_model.banked_locations)) + "};\n";
     source_content += f"{location_repr_prototype} {{\n"
     source_content += location_repr
     source_content += '    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown location");\n'
