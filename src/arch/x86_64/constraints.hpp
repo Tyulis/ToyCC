@@ -96,4 +96,5 @@ namespace toycc::arch::x86_64 {
     }
 
     OperandMatch check_overwrite(const StackFrame& frame, const ir::DependencyGraph& graph, const ir::Operand& input_operand, const ir::Operand& output_operand, const GroupMatch& group_match);
+    OperandMatch check_implicit_overwrite(const StackFrame& frame, const ir::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match, Location overwritten_location);
 }

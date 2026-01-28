@@ -626,25 +626,9 @@ namespace toycc::arch::x86_64 {
     static WeightsMatrix build_weights_matrix(const StackFrame& frame, const TranslationMatch& match, const std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects) {
         WeightsMatrix weights;
         set_operand_weights(weights, frame, match);
-        if (toycc::config::debug::with_translation_trace) {
-            std::cerr << "        With operand weights :\n";
-            std::cerr << indent(dump(weights), true, "            ");
-        }
         set_allocation_weights(weights, match);
-        if (toycc::config::debug::with_translation_trace) {
-            std::cerr << "        With allocation weights :\n";
-            std::cerr << indent(dump(weights), true, "            ");
-        }
         set_indirect_flushes(weights, frame, indirects);
-        if (toycc::config::debug::with_translation_trace) {
-            std::cerr << "        With indirect flushes :\n";
-            std::cerr << indent(dump(weights), true, "            ");
-        }
         set_variable_weights(weights, frame);
-        if (toycc::config::debug::with_translation_trace) {
-            std::cerr << "        With variable weights :\n";
-            std::cerr << indent(dump(weights), true, "            ");
-        }
         return weights;
     }
 

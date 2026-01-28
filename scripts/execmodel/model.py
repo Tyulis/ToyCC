@@ -35,7 +35,7 @@ class IRSpec:
             self.commutative = description["commutative"]
 
 class TranslationIRSpec:
-    def __init__(self, tag: str, operands: dict[str, Constraint]):
+    def __init__(self, tag: str, operands: dict[str, Constraint|tuple[int, str]]):
         self.tag = tag
         self.operands = operands
 
@@ -508,6 +508,12 @@ class TranslationModel:
                 if input_id in ir_operands:
                     ir_operands[output_id] = input_id
 
+        target_implicit_operands = target_form.implicit_inputs | target_form.implicit_outputs
+        if len(target_implicit_operands) != 0 and "implicit" not in target_desc:
+            return None
+        elif "implicit" in target_desc and len(target_desc["implicit"]) != len(target_implicit_operands):
+            return None
+
         implicit_inputs = {}
         implicit_outputs = {}
         for register in target_form.implicit_inputs | target_form.implicit_outputs:
@@ -519,7 +525,7 @@ class TranslationModel:
             elif location in target_desc["implicit"]:
                 main_id = target_desc["implicit"][location]
             else:
-                raise TranslationModelError(f"Implicit operand `{register}` is missing from the target description")
+                return None
 
             is_inout = False
             if not isinstance(main_id, str):

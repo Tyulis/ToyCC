@@ -90,7 +90,11 @@ def generate_translation_tags(translation_model: TranslationModel, output_dir: P
         group_tags += f"    {group_tag},\n"
         group_repr += f'        case TranslationGroupTag::{group_tag}:  output << "{group_tag}";  return output;\n'
         for translation in group.translations:
-            translation_tags += f"    {translation.tag},\n"
+            if isinstance(translation.target, CustomTargetSpec):
+                comment = f"Custom {translation.target.header}:{translation.target.function}"
+            else:
+                comment = ", ".join(str(target.form) for target in translation.target)
+            translation_tags += f"    {translation.tag},  // {comment}\n"
             translation_repr += f'        case TranslationTag::{translation.tag}:  output << "{translation.tag}";  return output;\n'
 
     group_tags += "};\n"
@@ -231,18 +235,25 @@ def generate_operand_constraint(operand: Constraint, is_output: bool, arg_usage:
     denormalized = denormalize(operand)
     return generate_constraint(denormalized, is_output, arg_usage)
 
-def generate_operand_condition(operand_condition_name: str, operand: Constraint|tuple[int, str], is_output: bool, overwritten_by: list[int]) -> str:
+def generate_operand_condition(operand_condition_name: str, operand: Constraint|tuple[int, str], is_output: bool, operand_overwrites: list[int], implicit_overwrites: list[str]) -> str:
     conjunction = []
     arg_usage = {"frame": False, "graph": False, "group_match": False, "operand": False}
     if isinstance(operand, Constraint):
         conjunction.append(generate_operand_constraint(operand, is_output, arg_usage))
 
-    for overwrite_index in range(len(overwritten_by)):
+    for overwrite_index in range(len(operand_overwrites)):
         arg_usage["frame"] = True
         arg_usage["graph"] = True
         arg_usage["group_match"] = True
         arg_usage["operand"] = True
         conjunction.append(f"check_overwrite(frame, graph, operand, overwrite_{overwrite_index}, group_match)")
+
+    for overwrite_location in implicit_overwrites:
+        arg_usage["frame"] = True
+        arg_usage["graph"] = True
+        arg_usage["group_match"] = True
+        arg_usage["operand"] = True
+        conjunction.append(f"check_implicit_overwrite(frame, graph, operand, group_match, Location::{overwrite_location})")
 
     if len(conjunction) == 0:
         expression = "OperandMatch::OK"
@@ -256,8 +267,8 @@ def generate_operand_condition(operand_condition_name: str, operand: Constraint|
     operand_arg     = " operand"     if arg_usage["operand"]     else ""
 
     source  = f"static inline OperandMatch {operand_condition_name}(const StackFrame&{frame_arg}, const ir::DependencyGraph&{graph_arg}, const GroupMatch&{group_match_arg}, const ir::Operand&{operand_arg}"
-    if len(overwritten_by) > 0:
-        source += ", " + ", ".join(f"const ir::Operand& overwrite_{index}" for index in range(len(overwritten_by)))
+    if len(operand_overwrites) > 0:
+        source += ", " + ", ".join(f"const ir::Operand& overwrite_{index}" for index in range(len(operand_overwrites)))
     source += "){\n"
 
     source += f"    return {expression};\n"
@@ -278,7 +289,8 @@ def generate_statement_match(translation: TranslationSpec, statement_index: int,
     outputs = []
 
     for name, operand in statement.operands.items():
-        overwritten_by = []
+        operand_overwrites = []
+        implicit_overwrites = []
         if name == "output":
             operand_list = outputs
             input_index = None
@@ -291,15 +303,21 @@ def generate_statement_match(translation: TranslationSpec, statement_index: int,
             for overwrite_statement_index, overwrite_statement in enumerate(translation.ir):
                 for overwrite_operand_name, overwrite_operand in overwrite_statement.operands.items():
                     if overwrite_operand_name == "output" and not isinstance(overwrite_operand, Constraint) and overwrite_operand[0] == statement_index and overwrite_operand[1] == name:
-                        overwritten_by.append(overwrite_statement_index)
+                        operand_overwrites.append(overwrite_statement_index)
                         break
+
+            if not isinstance(translation.target, CustomTargetSpec):
+                for target_index, target in enumerate(translation.target):
+                    for register, (overwrite_statement_index, overwrite_operand_name) in target.implicit_outputs.items():
+                        if overwrite_statement_index == statement_index and overwrite_operand_name == name:
+                            implicit_overwrites.append(translation_model.register_locations[register])
 
         operand_condition_name = f"condition_{translation.tag}_{statement_index}_{name}"
         if operand_condition_name not in operand_conditions:
-            operand_conditions[operand_condition_name] = generate_operand_condition(operand_condition_name, operand, name == "output", overwritten_by)
+            operand_conditions[operand_condition_name] = generate_operand_condition(operand_condition_name, operand, name == "output", operand_overwrites, implicit_overwrites)
         operand_match = f"{operand_condition_name}(frame, graph, group_match, {operand_ref}"
-        if len(overwritten_by) > 0:
-            operand_match += ", " + ", ".join(generate_operand_ref(overwrite_statement_index, None) for overwrite_statement_index in overwritten_by)
+        if len(operand_overwrites) > 0:
+            operand_match += ", " + ", ".join(generate_operand_ref(overwrite_statement_index, None) for overwrite_statement_index in operand_overwrites)
         operand_match += f")"
         if input_index is not None:
             operand_match += f".with_index({input_index})"
@@ -480,12 +498,27 @@ def generate_emission_translation(translation: Translation, translation_model: T
                 if operand.is_output:
                     operand_moves += f"    move_operand(frame, {output_ref}, {operand_location});\n"
 
-        for implicit_output, (statement_index, operand_name) in target.implicit_outputs.items():
-            if statement_index != "allocations":
+        for register, (statement_index, operand_name) in target.implicit_outputs.items():
+            if statement_index == "allocations":
+                continue
+
+            is_output_operand = False
+            if operand_name == "output":
+                is_output_operand = True
+            for source_statement_index, statement in enumerate(translation.ir):
+                if is_output_operand:
+                    break
+                for ir_operand_name, constraint in statement.operands.items():
+                    if ir_operand_name == "output" and not isinstance(constraint, Constraint) and constraint[0] == statement_index and constraint[1] == operand_name:
+                        is_output_operand = True
+                        statement_index = source_statement_index
+                        break
+
+            if is_output_operand:
                 output_ref = f"match.group_match.statements[{statement_index}]->statement().output.value()"
                 output_location = f"*match.statements[{statement_index}].output->location.begin()"
 
-                operand_moves += f"    move_operand(frame, {output_ref}, Location::{translation_model.register_locations[implicit_output]});\n"
+                operand_moves += f"    move_operand(frame, {output_ref}, Location::{translation_model.register_locations[register]});\n"
 
         if len(operand_arguments) == 0:
             function_content += f'    frame.statement("{target.form.gas_name}");\n'
