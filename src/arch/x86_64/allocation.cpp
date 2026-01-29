@@ -30,8 +30,12 @@ namespace toycc::arch::x86_64 {
             return {Location::constant};
         else if (operand.is_label())
             return {Location::constant};
-        else if (operand.is_variable())
-            return ir::StackFrame<Location>::locate(operand.declaration());
+        else if (operand.is_variable()) {
+            if (operand.type()->dequalify()->category == ir::TypeCategory::FUNCTION)
+                return {Location::constant};
+            else
+                return ir::StackFrame<Location>::locate(operand.declaration());
+        }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
     }
 
@@ -107,6 +111,9 @@ namespace toycc::arch::x86_64 {
     // FIXME : For now, assume the variables that are live on entry of the block are on the stack
     void StackFrame::load_entry_variables(std::shared_ptr<ir::BasicBlock> block) {
         for (std::shared_ptr<ir::Declaration> live : block->live_on_entry()) {
+            if (live->type->dequalify()->category == ir::TypeCategory::FUNCTION)
+                continue;
+
             if (live->storage & ir::StorageClass::GLOBAL)
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variables live on entry are not implemented");
             copy(live, Location::stack);
