@@ -11,8 +11,7 @@ namespace toycc::ir {
             case StatementTag::MARKER:          return "MARKER";
             case StatementTag::BLOCK:           return "BLOCK";
             case StatementTag::FUNCTION:        return "FUNCTION";
-            case StatementTag::CALL_FUNCTION:   return "CALL_FUNCTION";
-            case StatementTag::CALL_PROCEDURE:  return "CALL_PROCEDURE";
+            case StatementTag::CALL:            return "CALL";
             case StatementTag::JUMP:            return "JUMP";
             case StatementTag::JUMP_IF_TRUE:    return "JUMP_IF_TRUE";
             case StatementTag::JUMP_IF_FALSE:   return "JUMP_IF_FALSE";
@@ -100,16 +99,10 @@ namespace toycc::ir {
         return {.tag = tag, .location = location, .inputs = {left, right}, .output = output, .block = {}};
     }
 
-    Statement Statement::make_call(CodeLocation location, Operand function, std::vector<Operand> arguments) {
+    Statement Statement::make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, std::optional<Operand> return_value) {
         std::vector<Operand> inputs = {function};
         inputs.append_range(arguments);
-        return {.tag = StatementTag::CALL_PROCEDURE, .location = location, .inputs = inputs, .output = {}, .block = {}};
-    }
-
-    Statement Statement::make_call(CodeLocation location, Operand function, std::vector<Operand> arguments, Operand return_value) {
-        std::vector<Operand> inputs = {function};
-        inputs.append_range(arguments);
-        return {.tag = StatementTag::CALL_FUNCTION, .location = location, .inputs = inputs, .output = return_value, .block = {}};
+        return {.tag = StatementTag::CALL, .location = location, .inputs = inputs, .output = return_value, .block = {}};
     }
 
     Statement Statement::make_jump(CodeLocation location, std::string label) {

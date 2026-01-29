@@ -1,6 +1,7 @@
 #include "diagnostic.h"
 #include "ir/declaration.h"
 #include "arch/x86_64/assembly.h"
+#include "arch/x86_64/execmodel.h"
 #include "arch/x86_64/custom_targets.h"
 
 namespace toycc::arch::x86_64 {
@@ -25,5 +26,9 @@ namespace toycc::arch::x86_64 {
 
         frame.statement(std::format("leaq {}, {}", emit_operand(frame, operand, Location::stack), emit_operand(frame, output, destination.value())));
         move_operand(frame, output, destination.value());
+    }
+
+    void emit_call(StackFrame&, const TranslationMatch&) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Call assembly emission is not implemented");
     }
 }

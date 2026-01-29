@@ -7,6 +7,11 @@ from execmodel.constraints import *
 
 unique_id = 0
 
+class CustomHook:
+    def __init__(self, description: dict[str, str]):
+        self.header   : str = description["header"]
+        self.function : str = description["function"]
+
 class TransferSpec:
     def __init__(self, form: InstructionForm, source: Constraint, destination: Constraint):
         self.form = form
@@ -50,33 +55,38 @@ class TranslationTargetSpec:
         self.allocations = allocations
         self.allocation_use = allocation_use
 
-class CustomTargetSpec:
-    def __init__(self, header: str, function: str):
-        self.header:   str = header
-        self.function: str = function
-
 class TranslationSpec:
-    def __init__(self, ir: list[TranslationIRSpec], target: list[TranslationTargetSpec]|CustomTargetSpec, allocations: dict[str, Constraint], subgraph: tuple[tuple[int]]):
+    def __init__(self, ir: list[TranslationIRSpec], target: list[TranslationTargetSpec]|CustomHook, allocations: dict[str, Constraint], subgraph: tuple[tuple[int]]):
         self.ir = ir
         self.target = target
         self.allocations = allocations
         self.allocation_order = tuple(allocations.keys())
         self.subgraph = subgraph
 
-class TranslationGroup:
-    def __init__(self, first_translation: TranslationSpec):
-        self.statements = tuple(ir.tag for ir in first_translation.ir)
-        self.subgraph = first_translation.subgraph
-
+class BaseTranslationGroup:
+    def __init__(self):
         global unique_id
-        self.unique_id = unique_id
+        self.unique_id : int = unique_id
         unique_id += 1
-
-        first_translation.tag = f"{self.tag()}_0"
-        self.translations = [first_translation]
 
     def tag(self):
         return "_".join(self.statements) + f"_{self.unique_id}"
+
+class CustomIRSpec (BaseTranslationGroup):
+    def __init__(self, tag: str, matcher: CustomHook, emitter: CustomHook):
+        super().__init__()
+        self.matcher    : CustomHook = matcher
+        self.emitter    : CustomHook = emitter
+        self.statements : tuple[str] = (tag, )
+
+class TranslationGroup (BaseTranslationGroup):
+    def __init__(self, first_translation: TranslationSpec):
+        super().__init__()
+        self.statements = tuple(ir.tag for ir in first_translation.ir)
+        self.subgraph = first_translation.subgraph
+
+        first_translation.tag = f"{self.tag()}_0"
+        self.translations = [first_translation]
 
     def contains(self, translation: TranslationSpec) -> bool:
         translation_statements = tuple(statement.tag for statement in translation.ir)
@@ -181,9 +191,18 @@ class TranslationModel:
 
         self.banked_locations = set(description["banked_locations"])
 
-        self.ir = {tag: IRSpec(tag, spec) for tag, spec in description["ir"].items()}
+        self.ir = {}
+        custom_ir = []
+        for tag, spec in description["ir"].items():
+            if "matcher" in spec and "emitter" in spec:
+                custom_ir.append(CustomIRSpec(tag, CustomHook(spec["matcher"]), CustomHook(spec["emitter"])))
+            else:
+                self.ir[tag] = IRSpec(tag, spec)
+
         self.transfers = self.parse_transfers(description["transfers"], instruction_set)
         self.translations = self.parse_translations(description["translations"], instruction_set)
+        for group in custom_ir:
+            self.translations[group.tag()] = group
 
     def constraint_context(self) -> ConstraintContext:
         return ConstraintContext(self.operand_types, self.category_locations)
@@ -411,8 +430,8 @@ class TranslationModel:
         return combined
 
 
-    def parse_custom_target(self, target_description: dict[str, object]) -> CustomTargetSpec:
-        return CustomTargetSpec(target_description["header"], target_description["function"])
+    def parse_custom_target(self, target_description: dict[str, object]) -> CustomHook:
+        return CustomHook(target_description)
 
     def parse_target(self, ir_specs: list[IRSpec], target_desc: dict[str, object], target_form: InstructionForm, ir_operands_ids: list[str], allocations_ids: list[str]) -> TranslationTargetSpec|None:
         ir_operands = {name: CONSTRAINT_TRUE for name in ir_operands_ids}
@@ -585,7 +604,7 @@ class TranslationModel:
 
         return TranslationTargetSpec(target_form, target_operands, implicit_inputs, implicit_outputs, ir_operands, allocations, allocation_use)
 
-    def make_translation_spec(self, ir_specs: list[IRSpec], ir_operands: dict[str, Constraint], translation_targets: list[TranslationTargetSpec]|CustomTargetSpec, allocations: dict[str, Constraint]) -> TranslationSpec|None:
+    def make_translation_spec(self, ir_specs: list[IRSpec], ir_operands: dict[str, Constraint], translation_targets: list[TranslationTargetSpec]|CustomHook, allocations: dict[str, Constraint]) -> TranslationSpec|None:
         for operand_id, constraint in ir_operands.items():
             if isinstance(constraint, str):
                 ref, _, ir_name = constraint.partition(".")

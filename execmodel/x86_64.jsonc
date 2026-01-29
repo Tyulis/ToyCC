@@ -125,8 +125,8 @@
         "BLOCK":          {"input": [], "output": false, "block": true, "translate": false},
         "FUNCTION":       {"input": [], "output": false, "block": true, "translate": false},
 
-        "CALL_FUNCTION":  {"input": "any", "output": true},
-        "CALL_PROCEDURE": {"input": "any", "output": false},
+        "CALL":           {"matcher": {"header": "arch/x86_64/custom_matchers.h", "function": "match_call"},
+                           "emitter": {"header": "arch/x86_64/custom_targets.h",  "function": "emit_call"}},
 
         "JUMP":           {"input": ["target"],              "output": false},
         "JUMP_IF_TRUE":   {"input": ["target", "predicate"], "output": false},

@@ -89,13 +89,17 @@ def generate_translation_tags(translation_model: TranslationModel, output_dir: P
     for group_tag, group in translation_model.translations.items():
         group_tags += f"    {group_tag},\n"
         group_repr += f'        case TranslationGroupTag::{group_tag}:  output << "{group_tag}";  return output;\n'
-        for translation in group.translations:
-            if isinstance(translation.target, CustomTargetSpec):
-                comment = f"Custom {translation.target.header}:{translation.target.function}"
-            else:
-                comment = ", ".join(str(target.form) for target in translation.target)
-            translation_tags += f"    {translation.tag},  // {comment}\n"
-            translation_repr += f'        case TranslationTag::{translation.tag}:  output << "{translation.tag}";  return output;\n'
+        if isinstance(group, CustomIRSpec):
+            translation_tags += f"    {group.tag()},  // Custom matcher {group.matcher.header}:{group.matcher.function}, emitter {group.emitter.header}:{group.emitter.function}\n"
+            translation_repr += f'        case TranslationTag::{group.tag()}:  output << "{group.tag()}";  return output;\n'
+        else:
+            for translation in group.translations:
+                if isinstance(translation.target, CustomHook):
+                    comment = f"Custom {translation.target.header}:{translation.target.function}"
+                else:
+                    comment = ", ".join(str(target.form) for target in translation.target)
+                translation_tags += f"    {translation.tag},  // {comment}\n"
+                translation_repr += f'        case TranslationTag::{translation.tag}:  output << "{translation.tag}";  return output;\n'
 
     group_tags += "};\n"
     group_repr += "}\n"
@@ -125,12 +129,12 @@ def generate_translation_tags(translation_model: TranslationModel, output_dir: P
     write_header(header_content, output_dir / "translation_tag.h",   [], ["iostream"])
     write_source(source_content, output_dir / "translation_tag.cpp", ["diagnostic.h", output_dir / "translation_tag.h"], ["iostream"])
 
-def generate_group_subgraph(group: TranslationGroup) -> str:
+def generate_group_subgraph(group: TranslationGroup|CustomIRSpec) -> str:
     content = f"const static std::vector<ir::StatementTag> STATEMENTS_{group.tag()} = {{"
     content += ", ".join(f"ir::StatementTag::{tag}" for tag in group.statements)
     content += "};\n"
 
-    if len(group.subgraph) > 0:
+    if isinstance(group, TranslationGroup) and len(group.subgraph) > 0:
         if len(group.subgraph[0]) == 1:
             content += f"const static arma::icolvec SUBGRAPH_{group.tag()} = {{"
             content += ", ".join(str(row[0]) for row in group.subgraph)
@@ -154,7 +158,7 @@ def generate_group_matcher_functions(translation_model: TranslationModel) -> tup
         source_content += f"template<> inline void match_subgraph_group<TranslationGroupTag::{group.tag()}>"
         source_content += f"(std::vector<GroupMatch>& matches, const ir::DependencyMatrix& matrix) {{\n"
 
-        subgraph_name = "TRIVIAL_SUBGRAPH" if len(group.subgraph) == 0 else f"SUBGRAPH_{group.tag()}"
+        subgraph_name = "TRIVIAL_SUBGRAPH" if isinstance(group, CustomIRSpec) or len(group.subgraph) == 0 else f"SUBGRAPH_{group.tag()}"
         source_content += f"    matches.insert_range(matches.begin(), match_dependency_subgraph(TranslationGroupTag::{group.tag()}, matrix, STATEMENTS_{group.tag()}, {subgraph_name}));\n"
         source_content += f"}}\n\n"
 
@@ -306,7 +310,7 @@ def generate_statement_match(translation: TranslationSpec, statement_index: int,
                         operand_overwrites.append(overwrite_statement_index)
                         break
 
-            if not isinstance(translation.target, CustomTargetSpec):
+            if not isinstance(translation.target, CustomHook):
                 for target_index, target in enumerate(translation.target):
                     for register, (overwrite_statement_index, overwrite_operand_name) in target.implicit_outputs.items():
                         if overwrite_statement_index == statement_index and overwrite_operand_name == name:
@@ -397,13 +401,15 @@ def generate_translation_group(group: TranslationGroup, translation_model: Trans
     source_content += f"template <TranslationTag tag>\n"
     source_content += f"TranslationMatch match_translation(const StackFrame& frame, const ir::DependencyGraph& graph, const GroupMatch& group_match);\n\n"
 
-    for translation in group.translations:
-        source_content += generate_translation_matcher_function(translation, translation_model)
+    if isinstance(group, TranslationGroup):
+        for translation in group.translations:
+            source_content += generate_translation_matcher_function(translation, translation_model)
 
     source_content += f"{prototype} {{\n"
     source_content += f"    std::optional<TranslationMatch> match;\n"
     for translation in group.translations:
         source_content += f"    update_translation_match(match, match_translation<TranslationTag::{translation.tag}> (frame, graph, group_match));\n"
+
     source_content += f"    return match;\n"
     source_content += "}\n"
 
@@ -420,7 +426,8 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
 
     group_headers = []
     for group in translation_model.translations.values():
-        group_headers.append(generate_translation_group(group, translation_model, translation_matcher_dir))
+        if isinstance(group, TranslationGroup):
+            group_headers.append(generate_translation_group(group, translation_model, translation_matcher_dir))
 
     header_content = "using namespace toycc::arch::x86_64;\n\n"
     source_content = "using namespace toycc::arch::x86_64;\n\n"
@@ -437,14 +444,18 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
     source_content += f"    for (const GroupMatch& group_match : group_matches) {{\n"
     source_content += f"        switch (group_match.group) {{\n"
     for group in translation_model.translations.values():
-        source_content += f"            case TranslationGroupTag::{group.tag()}: add_match(match_translation_group<TranslationGroupTag::{group.tag()}> (frame, graph, group_match));  break;\n"
+        if isinstance(group, CustomIRSpec):
+            source_content += f"            case TranslationGroupTag::{group.tag()}: add_match({group.matcher.function}(frame, graph, group_match));  break;\n"
+            group_headers.append(Path(group.matcher.header))
+        else:
+            source_content += f"            case TranslationGroupTag::{group.tag()}: add_match(match_translation_group<TranslationGroupTag::{group.tag()}> (frame, graph, group_match));  break;\n"
     source_content +=  "        }\n"
     source_content +=  "    }\n"
     source_content +=  "    return matches;\n"
     source_content +=  "}\n"
 
     write_header(header_content, output_dir / "translation_matcher.h", ["ir/flow.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector", "optional"])
-    write_source(source_content, output_dir / "translation_matcher.cpp", [output_dir / "translation_matcher.h"] + group_headers)
+    write_source(source_content, output_dir / "translation_matcher.cpp", [output_dir / "translation_matcher.h"] + sorted(group_headers))
 
 
 # -------- Code emission routines
@@ -547,7 +558,7 @@ def generate_emission_group(group: TranslationGroup, translation_model: Translat
 
     nof_translations = 0
     for translation in group.translations:
-        if isinstance(translation.target, CustomTargetSpec):
+        if isinstance(translation.target, CustomHook):
             continue
         translation_header, translation_source = generate_emission_translation(translation, translation_model)
         header_content += translation_header
@@ -567,6 +578,8 @@ def generate_emission(translation_model: TranslationModel, output_dir: Path):
 
     group_headers = []
     for group in translation_model.translations.values():
+        if isinstance(group, CustomIRSpec):
+            continue
         header = generate_emission_group(group, translation_model, emission_dir)
         if header is not None:
             group_headers.append(header)
@@ -585,12 +598,16 @@ def generate_emission(translation_model: TranslationModel, output_dir: Path):
 
     custom_headers = set()
     for group in translation_model.translations.values():
-        for translation in group.translations:
-            if isinstance(translation.target, CustomTargetSpec):
-                custom_headers.add(translation.target.header)
-                source_content += f"        case TranslationTag::{translation.tag}:  return {translation.target.function} (frame, match);\n"
-            else:
-                source_content += f"        case TranslationTag::{translation.tag}:  return emit_translation<TranslationTag::{translation.tag}> (frame, match);\n"
+        if isinstance(group, CustomIRSpec):
+            source_content += f"        case TranslationTag::{group.tag()}:  return {group.emitter.function}(frame, match);\n"
+            custom_headers.add(group.emitter.header)
+        else:
+            for translation in group.translations:
+                if isinstance(translation.target, CustomHook):
+                    custom_headers.add(translation.target.header)
+                    source_content += f"        case TranslationTag::{translation.tag}:  return {translation.target.function} (frame, match);\n"
+                else:
+                    source_content += f"        case TranslationTag::{translation.tag}:  return emit_translation<TranslationTag::{translation.tag}> (frame, match);\n"
 
     source_content += "    }\n"
     source_content += "}\n"
