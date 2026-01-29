@@ -5,10 +5,6 @@
 #include "util/combinatorics.hpp"
 
 namespace toycc::arch::x86_64 {
-    const std::unordered_set<Location> CALLER_SAVED = {Location::a, Location::c, Location::d, Location::si, Location::di, Location::r8, Location::r9, Location::r10, Location::r11};
-    const std::unordered_set<Location> CALLEE_SAVED = {Location::b, Location::r12, Location::r13, Location::r14, Location::r15};
-    // FIXME : XMM LOCs not implemented
-
     // Return the indices of the inner values, or an empty optional if this combination doesn't match
     static std::optional<std::vector<size_t>> match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
         // Find which values are links between the selected statements (= which values have more than two edges in the statement combination)

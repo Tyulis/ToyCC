@@ -28,7 +28,27 @@ namespace toycc::arch::x86_64 {
         move_operand(frame, output, destination.value());
     }
 
-    void emit_call(StackFrame&, const TranslationMatch&) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Call assembly emission is not implemented");
+    void emit_call(StackFrame& frame, const TranslationMatch& match) {
+        const ir::Statement& statement = match.group_match.statements[0]->statement();
+        std::shared_ptr<ir::Declaration> function = statement.inputs[0].declaration();
+
+        // Save caller-saved register contents
+        std::deque<std::pair<Location, std::shared_ptr<ir::Declaration>>> saved_registers;
+        for (Location saved_register : CALLER_SAVED_REGISTERS) {
+            std::shared_ptr<ir::Declaration> to_save = frame.content(saved_register);
+            if (to_save.get() != nullptr) {
+                frame.statement(std::format("push {}", location_code(frame, to_save, saved_register)));
+                saved_registers.emplace_front(saved_register, to_save);
+            }
+        }
+
+        frame.statement(std::format("call {}", function->name));
+
+        // Pop the saved registers
+        for (const auto& [saved_register, to_restore] : saved_registers)
+            frame.statement(std::format("pop {}", location_code(frame, to_restore, saved_register)));
+
+        if (statement.output.has_value())
+            move_operand(frame, statement.output.value(), RETURN_VALUE_LOCATION);
     }
 }

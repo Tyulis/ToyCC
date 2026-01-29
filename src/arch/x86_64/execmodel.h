@@ -21,10 +21,11 @@ namespace toycc::arch::x86_64 {
     constexpr static Location RETURN_VALUE_LOCATION = Location::a;
     constexpr static std::array<Location, 6> INTEGER_REGISTER_ARGUMENTS = {Location::di, Location::si, Location::d, Location::c, Location::r8, Location::r9};
     constexpr static std::array<Location, 8> FLOAT_REGISTER_ARGUMENTS   = {Location::mm0, Location::mm1, Location::mm2, Location::mm3,
-        Location::mm4, Location::mm5, Location::mm6, Location::mm7};
+                                                                           Location::mm4, Location::mm5, Location::mm6, Location::mm7};
 
-    extern const std::unordered_set<Location> CALLER_SAVED;
-    extern const std::unordered_set<Location> CALLEE_SAVED;
+    constexpr std::array<Location, 9> CALLER_SAVED_REGISTERS = {Location::a, Location::c, Location::d, Location::si, Location::di, Location::r8, Location::r9, Location::r10, Location::r11};
+    constexpr std::array<Location, 5> CALLEE_SAVED_REGISTERS = {Location::b, Location::r12, Location::r13, Location::r14, Location::r15};
+    // FIXME : XMM locations not implemented
 
     struct GroupMatch {
        TranslationGroupTag group;
