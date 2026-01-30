@@ -125,6 +125,16 @@ namespace toycc::arch::x86_64 {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown location", variable->location);
     }
 
+    std::string size_suffix(std::shared_ptr<ir::Declaration> variable) {
+        switch (variable->type->size({})) {
+            case 1: return "b";
+            case 2: return "w";
+            case 4: return "l";
+            case 8: return "q";
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("No size suffix for size {}", variable->type->size({})), variable->location);
+        }
+    }
+
     std::string emit_operand(StackFrame& frame, const ir::Operand& operand, Location location) {
         std::stringstream code;
         if (operand.is_dereference()) {

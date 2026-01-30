@@ -37,7 +37,7 @@ namespace toycc::arch::x86_64 {
         for (Location saved_register : CALLER_SAVED_REGISTERS) {
             std::shared_ptr<ir::Declaration> to_save = frame.content(saved_register);
             if (to_save.get() != nullptr) {
-                frame.statement(std::format("push {}", location_code(frame, to_save, saved_register)));
+                frame.statement(std::format("pushq {}", emit_operand(saved_register, 8)));
                 saved_registers.emplace_front(saved_register, to_save);
             }
         }
@@ -46,7 +46,7 @@ namespace toycc::arch::x86_64 {
 
         // Pop the saved registers
         for (const auto& [saved_register, to_restore] : saved_registers)
-            frame.statement(std::format("pop {}", location_code(frame, to_restore, saved_register)));
+            frame.statement(std::format("popq {}", emit_operand(saved_register, 8)));
 
         if (statement.output.has_value())
             move_operand(frame, statement.output.value(), RETURN_VALUE_LOCATION);

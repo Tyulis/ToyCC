@@ -149,8 +149,8 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    static ir::Operand get_operand(const ir::Statement& match, const StatementOperandIdentifier& id) {
-        ir::Operand base_operand = (id.is_input ? match.inputs[id.index] : match.output.value());
+    static ir::Operand get_operand(const StatementMatch& statement_match, const ir::Statement& statement, const StatementOperandIdentifier& id) {
+        const ir::Operand& base_operand = (id.is_input ? statement.inputs[statement_match.input[id.index].input_index.value_or(id.index)] : statement.output.value());
         if (id.is_pointer)
             return base_operand.pointer();
         else
@@ -162,11 +162,11 @@ namespace toycc::arch::x86_64 {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to get the operand associated to an allocation");
 
         const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
-        return get_operand(match.group_match.statements[statement_id.index]->statement(), statement_id.id);
+        return get_operand(match.statements[statement_id.index], match.group_match.statements[statement_id.index]->statement(), statement_id.id);
     }
 
-    static void set_operand(ir::Statement& statement, const StatementOperandIdentifier& id, ir::Operand operand) {
-        ir::Operand& target = (id.is_input ? statement.inputs[id.index] : statement.output.value());
+    static void set_operand(ir::Statement& statement, const StatementMatch& statement_match, const StatementOperandIdentifier& id, ir::Operand operand) {
+        ir::Operand& target = (id.is_input ? statement.inputs[statement_match.input[id.index].input_index.value_or(id.index)] : statement.output.value());
         if (id.is_pointer)
             target.value = operand.value;
         else
@@ -176,7 +176,7 @@ namespace toycc::arch::x86_64 {
     static void set_operand(TranslationMatch& match, const TranslationOperandIdentifier& id, const ir::Operand& operand) {
         if (std::holds_alternative<TranslationOperandIdentifier::Statement>(id.id)) {
             const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
-            set_operand(match.group_match.statements[statement_id.index]->statement(), statement_id.id, operand);
+            set_operand(match.group_match.statements[statement_id.index]->statement(), match.statements[statement_id.index], statement_id.id, operand);
         }
     }
 
@@ -434,17 +434,18 @@ namespace toycc::arch::x86_64 {
             const ir::Statement& statement = match.group_match.statements[statement_index]->statement();
 
             for (size_t input_index = 0; input_index < statement_match.input.size(); input_index++) {
-                const ir::Operand& operand = statement.inputs[input_index];
+                const size_t input_operand_index = statement_match.input[input_index].input_index.value_or(input_index);
+                const ir::Operand& operand = statement.inputs[input_operand_index];
                 AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
-                                                                                                     .id = {.is_input = true, .is_pointer = false, .index = input_index}}}}};
+                                                      .id = {.is_input = true, .is_pointer = false, .index = input_index}}}}};
                 weights.add(value);
 
                 if (operand.is_dereference()) {
                     ir::Operand pointer = operand.pointer();
                     AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
                                                     .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
-                                                                                                                 .id = {.is_input = true, .is_pointer = true, .index = input_index}}}}};
+                                                                  .id = {.is_input = true, .is_pointer = true, .index = input_index}}}}};
                     weights.add(pointer_value);
                 }
             }
