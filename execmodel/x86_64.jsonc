@@ -244,24 +244,11 @@
                     {"instruction": "JE",  "input": ["$1.target"]}]},
 
         // -------- RETURN_VAL
-        {"ir":       {"tag": "RETURN_VAL", "value": "constint"},
-         "allocate": {"return_register": {"location": "a"}, "bp": {"location": "bp", "size": 8}, "sp": {"location": "sp", "size": 8}},
-         "target":  [{"instruction": "MOV", "input": ["value"], "output": "$return_register"},
-                     {"instruction": "MOV", "input": ["$bp"], "output": "$sp"},
-                     {"instruction": "POP", "output": "$bp"},
-                     {"instruction": "RET", "input": []}]},
-
         {"ir":       {"tag": "RETURN_VAL", "value": "a"},
-         "allocate": {"bp": {"location": "bp", "size": 8}, "sp": {"location": "sp", "size": 8}},
-         "target":  [{"instruction": "MOV", "input": ["$bp"], "output": "$sp"},
-                     {"instruction": "POP", "output": "$bp"},
-                     {"instruction": "RET", "input": []}]},
+         "target":   {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_return"}},
 
         // -------- RETURN
         {"ir":       {"tag": "RETURN"},
-         "allocate": {"bp": {"location": "bp", "size": 8}, "sp": {"location": "sp", "size": 8}},
-         "target":  [{"instruction": "MOV", "input": ["$bp"], "output": "$sp"},
-                     {"instruction": "POP", "output": "$bp"},
-                     {"instruction": "RET", "input": []}]},
+         "target":   {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_return"}},
     ]
 }

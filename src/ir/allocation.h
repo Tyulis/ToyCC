@@ -58,6 +58,7 @@ namespace toycc::ir {
 
         // Value allocation management
         AllocationTable<Location> allocations;
+        std::unordered_set<Location> used_locations;
 
         std::unordered_set<Location> locate(std::shared_ptr<Declaration> declaration) const {
             const auto& declaration_index = allocations.template get<declaration_tag>();
@@ -84,6 +85,7 @@ namespace toycc::ir {
                 location_index.erase(location);
 
             declaration_index.emplace(declaration, location);
+            used_locations.insert(location);
         }
 
         // Add another location for a variable. If there is already something at `location`, it is overwritten
@@ -100,6 +102,7 @@ namespace toycc::ir {
             }
 
             location_index.emplace(declaration, location);
+            used_locations.insert(location);
         }
 
         // Remove all locations of this variable

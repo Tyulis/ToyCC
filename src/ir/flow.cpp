@@ -421,7 +421,8 @@ namespace toycc::ir {
 
         std::shared_ptr<Scope> scope = function.block;
         entry_block = blocks.emplace_node(BasicBlockType::ENTRY, unique_id);
-        exit_block  = blocks.emplace_node(BasicBlockType::EXIT,  unique_id);
+        exit_block  = blocks.emplace_node(BasicBlockType::EXIT,  unique_id,
+                                          Label {.type = LabelType::INTERNAL, .name = std::format(".{}.BB.__exit", declaration->name), .location = function.location});
 
         for (std::shared_ptr<Declaration> declaration : scope->locals_list())
             if (declaration->storage & StorageClass::PARAMETER)
@@ -484,7 +485,7 @@ namespace toycc::ir {
         //                        !current && !previous : Right after an unconditional jump
         std::shared_ptr<BasicBlock> previous_block = entry_block;
         std::shared_ptr<BasicBlock> current_block = nullptr;
-        for (const Statement& statement : scope->statements) {
+        for (const auto& [statement_index, statement] : std::ranges::enumerate_view(scope->statements)) {
             // Label = jump destination -> start a new block. FIXME : may benefit from a step to clear orphan labels
             if (statement.tag == StatementTag::MARKER) {
                 const std::optional<Label> label = scope->find_label(statement);

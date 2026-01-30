@@ -3,6 +3,7 @@
 #include "gen/execmodel/x86_64/location.h"
 #include "ir/declaration.h"
 #include "ir/type.h"
+#include "arch/x86_64/assembly.h"
 #include "arch/x86_64/execmodel.h"
 #include "arch/x86_64/allocation.h"
 #include "util/strings.h"
@@ -12,16 +13,7 @@ namespace toycc::arch::x86_64 {
     // -------- StackFrame
     static const std::unordered_set<Location> NONUNIQUE_LOCATIONS = {Location::constant, Location::memory, Location::stack};
 
-    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name) {
-        auto& declaration_index = allocations.get<ir::declaration_tag>();
-
-        size_t integer_parameter_index = 0;
-        for (std::shared_ptr<ir::Declaration> parameter : procedure.parameters) {
-            if (parameter->type->category == ir::TypeCategory::INTEGER)
-                declaration_index.insert(Allocation {parameter, INTEGER_REGISTER_ARGUMENTS[integer_parameter_index++]});
-            else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer function parameters are not implemented", parameter->location);
-        }
-    }
+    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name) {}
 
     std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
         if (operand.is_dereference())
@@ -109,7 +101,13 @@ namespace toycc::arch::x86_64 {
     }
 
     // FIXME : For now, assume the variables that are live on entry of the block are on the stack
-    void StackFrame::load_entry_variables(std::shared_ptr<ir::BasicBlock> block) {
+    void StackFrame::enter_block(std::shared_ptr<ir::BasicBlock> block, bool is_last) {
+        current_block = block;
+        is_last_block = is_last;
+
+        if (current_block->label.has_value() && current_block->label->type != ir::LabelType::FUNCTION)
+            label(current_block->label->name);
+
         for (std::shared_ptr<ir::Declaration> live : block->live_on_entry()) {
             if (live->type->dequalify()->category == ir::TypeCategory::FUNCTION)
                 continue;
@@ -127,12 +125,29 @@ namespace toycc::arch::x86_64 {
             for (const auto& [variable, offset] : stack_offsets)
                 code.comment(std::format("-{}(%rbp) : {}", offset, variable->name));
 
+        // Emit the entry block : setup the stack and push the callee-saved registers
         code.statement("pushq %rbp");
+
+        for (Location reg : CALLEE_SAVED_REGISTERS)
+            if (used_locations.contains(reg))
+                code.statement(std::format("pushq {}", emit_operand(reg, 8)));
+
         code.statement("movq %rsp, %rbp");
+
         if (current_offset > 0)
             code.statement(std::format("subq ${}, %rsp", align_offset(current_offset, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
 
+        // Then the actual code
         code << output;
+
+        // Emit the exit block : restore saved registers then return
+        code.label(procedure.exit_block->label->name);
+        for (Location reg : std::ranges::reverse_view(CALLEE_SAVED_REGISTERS))
+            if (used_locations.contains(reg))
+                code.statement(std::format("popq {}", emit_operand(reg, 8)));
+
+        code.statement("leave");
+        code.statement("ret");
         return code.str();
     }
 

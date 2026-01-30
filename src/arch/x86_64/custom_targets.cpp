@@ -2,6 +2,7 @@
 #include "ir/declaration.h"
 #include "arch/x86_64/assembly.h"
 #include "arch/x86_64/execmodel.h"
+#include "ir/flow.h"
 #include "arch/x86_64/custom_targets.h"
 
 namespace toycc::arch::x86_64 {
@@ -50,5 +51,16 @@ namespace toycc::arch::x86_64 {
 
         if (statement.output.has_value())
             move_operand(frame, statement.output.value(), RETURN_VALUE_LOCATION);
+    }
+
+    void emit_return(StackFrame& frame, const TranslationMatch&) {
+        std::optional<ir::FlowGraph::Edge> exit_edge = frame.procedure.blocks.find_edge(frame.current_block, frame.procedure.exit_block);
+        if (!exit_edge.has_value())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Found a return statement in a basic block with no edge towards the exit block");
+
+        if (exit_edge->attr == ir::FlowType::JUMP && !frame.is_last_block) {
+            const std::string& exit_label = frame.procedure.exit_block->label->name;
+            frame.statement(std::format("jmp {}", exit_label));
+        }
     }
 }

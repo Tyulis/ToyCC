@@ -28,11 +28,11 @@ namespace toycc::arch::x86_64 {
         ir::FlowGraph remaining_blocks = procedure.blocks;
         std::shared_ptr<ir::BasicBlock> current_block = procedure.entry_block;
         while (current_block != procedure.exit_block) {
-            frame.load_entry_variables(current_block);
-
-            generate_basic_block(frame, current_block, globals);
             const ir::FlowGraph::EdgeSet transitions = remaining_blocks.out_edges(current_block);
             remaining_blocks.pop_node(current_block);
+
+            frame.enter_block(current_block, remaining_blocks.nof_nodes() <= 1);
+            generate_basic_block(frame, current_block, globals);
 
             // Only the exit block remains -> exit
             if (remaining_blocks.nof_nodes() <= 1)

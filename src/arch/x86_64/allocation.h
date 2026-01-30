@@ -27,7 +27,7 @@ namespace toycc::arch::x86_64 {
             std::shared_ptr<ir::Declaration> declare_intermediate(std::shared_ptr<ir::Type> type, CodeLocation code_location);
             void flush_intermediates();
             void load_parameters();
-            void load_entry_variables(std::shared_ptr<ir::BasicBlock> block);
+            void enter_block(std::shared_ptr<ir::BasicBlock> block, bool is_last);
 
             void label(std::string name);
             void statement(std::string code);
@@ -36,12 +36,14 @@ namespace toycc::arch::x86_64 {
             std::string str() const;
             std::string dump() const;
 
-            CodeOutput output;
+            std::shared_ptr<ir::BasicBlock> current_block;
+            bool is_last_block = false;
 
         private:
             std::string name;
             size_t unique_id = 0;
             std::unordered_set<std::shared_ptr<ir::Declaration>> intermediates;
+            CodeOutput output;
 
             std::string dump_allocations() const;
     };
