@@ -633,10 +633,29 @@ namespace toycc::ir {
         }
 
         for (const Statement& statement : global_scope->statements) {
-            if (statement.tag == StatementTag::FUNCTION) {
-                std::shared_ptr<Declaration> function = statement.output->declaration();
-                procedures[function->name] = Procedure {statement, globals, unique_id};
-            } else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global statements other than functions are not implemented", statement.location);
+            switch (statement.tag) {
+                case StatementTag::FUNCTION: {
+                    std::shared_ptr<Declaration> function = statement.output->declaration();
+                    procedures[function->name] = Procedure {statement, globals, unique_id};
+                    break;
+                }
+
+                case StatementTag::COPY: {
+                    if (!statement.inputs[0].is_constant())
+                        throw Diagnostic(DiagnosticLevel::ERROR, "Global initializers must be constants", statement.location);
+                    if (!statement.output->is_variable())
+                        throw Diagnostic(DiagnosticLevel::ERROR, "Global initializers must be assigned to global variables", statement.location);
+
+                    auto found = globals.find(statement.output->declaration());
+                    if (found == globals.end())
+                        throw Diagnostic(DiagnosticLevel::ERROR, "Global initializers must be assigned to global variables", statement.location);
+
+                    found->second = statement.inputs[0].constant();
+                    break;
+                }
+
+                default:  throw Diagnostic(DiagnosticLevel::ERROR, std::format("{} can't be a global statement", statement.ir_code()), statement.location);
+            }
         }
     }
 

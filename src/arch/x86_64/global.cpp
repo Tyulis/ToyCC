@@ -3,6 +3,7 @@
 #include "arch/x86_64/allocation.h"
 #include "ir/declaration.h"
 #include "ir/flow.h"
+#include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_translation_unit(CodeOutput& output, const ir::TranslationUnit& unit) {
@@ -122,12 +123,20 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_readwrite_globals(CodeOutput&, const ir::GlobalMap&) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variables are not implemented");
+    void CodeGenerator::generate_readwrite_globals(CodeOutput& output, const ir::GlobalMap& globals) {
+        output.directive(".data");
+        for (const auto& [declaration, value] : globals) {
+            generate_global_declaration(output, declaration);
+            generate_global_value(output, value.value());
+        }
     }
 
-    void CodeGenerator::generate_readonly_globals(CodeOutput&, const ir::GlobalMap&) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global constants are not implemented");
+    void CodeGenerator::generate_readonly_globals(CodeOutput& output, const ir::GlobalMap& globals) {
+        output.directive(".rodata");
+        for (const auto& [declaration, value] : globals) {
+            generate_global_declaration(output, declaration);
+            generate_global_value(output, value.value());
+        }
     }
 
     // Generate the symbol for a global declaration, do not fill it
@@ -142,5 +151,26 @@ namespace toycc::arch::x86_64 {
         output.directive(std::format(".size {}, {}", variable->name, variable->type->size(variable->location)));
         output.directive(std::format(".align {}", variable->type->alignment(variable->location)));
         output.label(variable->name);
+    }
+
+    // Set the actual value of a global declaration
+    void CodeGenerator::generate_global_value(CodeOutput& output, const ir::Constant& value) {
+        if (value.is_integer()) {
+            switch (value.type->size(value.location)) {
+                case 1:  output.directive(".byte "  + dump(value.integer()));  break;
+                case 2:  output.directive(".short " + dump(value.integer()));  break;
+                case 4:  output.directive(".long "  + dump(value.integer()));  break;
+                case 8:  output.directive(".quad "  + dump(value.integer()));  break;
+                default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Global integers of size {} are not supported", value.type->size(value.location)), value.location);
+            }
+        } else if (value.is_floating_point()) {
+            switch (value.type->size(value.location)) {
+                case 4:  output.directive(".single " + dump(value.floating_point()));  break;
+                case 8:  output.directive(".double " + dump(value.floating_point()));  break;
+                default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Global floats of size {} are not supported", value.type->size(value.location)), value.location);
+            }
+        } else if (value.is_string()) {
+            output.directive(std::format(".ascii \"{}\"", value.string()));
+        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown global constant type");
     }
 }

@@ -647,7 +647,7 @@ namespace toycc::arch::x86_64 {
 
             do {
                 used[j0] = true;
-                size_t i0 = matching[j0], j1;
+                size_t i0 = matching[j0], j1 = 0;
                 float delta = INFINITY;
                 for (size_t j = 1; j < weights.weights.n_cols; j++) {
                     if (!used[j]) {
