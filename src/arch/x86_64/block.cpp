@@ -10,7 +10,7 @@
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
-    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, const std::unordered_set<std::shared_ptr<ir::Declaration>>&) {
+    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block) {
         ir::DependencyGraph graph = block->dependencies;
         ir::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);
@@ -66,6 +66,7 @@ namespace toycc::arch::x86_64 {
             emit_transfers(frame, graph, selected_match);
             toycc::execmodel::x86_64::emit_code(frame, selected_match);
             clear_processed_statements(frame, graph, selected_match.group_match);
+            flush_globals(frame);
             frame.flush_intermediates();
         } catch (Diagnostic& diagnostic) {
             if (diagnostic.level() == DiagnosticLevel::INTERNAL_ERROR || diagnostic.level() == DiagnosticLevel::NOT_IMPLEMENTED)
@@ -196,5 +197,12 @@ namespace toycc::arch::x86_64 {
             if (keep_match)
                 group_matches.push_back(match);
         }
+    }
+
+    // After any statement, flush the global variables back to memory
+    void CodeGenerator::flush_globals(StackFrame& frame) {
+        for (std::shared_ptr<ir::Declaration> variable : frame.allocated_variables())
+            if (variable->storage & ir::StorageClass::GLOBAL && !frame.locate(variable).contains(Location::memory))
+                transfer(frame, variable, Location::memory);
     }
 }

@@ -217,6 +217,9 @@ namespace toycc::ir {
 
         // Add edges from input variables, adding unknown ones as source nodes
         for (const auto& [input, dependency] : inputs) {
+            if (input->storage & ir::StorageClass::GLOBAL)
+                used_globals.insert(input);
+
             auto found = last_modification.find(input);
             std::shared_ptr<DependencyNode> input_node = nullptr;
             if (found == last_modification.end()) {
@@ -231,6 +234,9 @@ namespace toycc::ir {
 
         // Add edges to output variables
         for (const auto& [output, dependency] : outputs) {
+            if (output->storage & ir::StorageClass::GLOBAL)
+                used_globals.insert(output);
+
             std::shared_ptr<DependencyNode> output_node = dependencies.emplace_node(output);
             dependencies.add_edge(statement_node, output_node, dependency);
             last_modification[output] = output_node;
@@ -413,7 +419,7 @@ namespace toycc::ir {
 
 
     // -------- Procedure
-    Procedure::Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals, std::shared_ptr<size_t> unique_id)
+    Procedure::Procedure(const Statement& function, const GlobalMap& globals, std::shared_ptr<size_t> unique_id)
             : declaration(function.output->declaration()), location(function.location), unique_id(unique_id)
     {
         if (function.tag != StatementTag::FUNCTION)
@@ -460,11 +466,11 @@ namespace toycc::ir {
         return block_nodes.begin()->second;
     }
 
-    void Procedure::build_flow_graph(std::shared_ptr<Scope> scope, const std::unordered_set<std::shared_ptr<Declaration>>& globals) {
+    void Procedure::build_flow_graph(std::shared_ptr<Scope> scope, const GlobalMap& globals) {
         std::unordered_set<std::shared_ptr<Declaration>> defined_decls;
-        for (std::shared_ptr<Declaration> global : globals)
-            if (global->type->category != TypeCategory::FUNCTION)
-                defined_decls.insert(global);
+        for (const auto& [declaration, value] : globals)
+            if (declaration->type->category != TypeCategory::FUNCTION)
+                defined_decls.insert(declaration);
         for (std::shared_ptr<Declaration> local : scope->locals_list())
             if (!(local->storage & INTERNAL_STORAGE) && local->type->category != TypeCategory::FUNCTION)
                 defined_decls.insert(local);
@@ -623,14 +629,14 @@ namespace toycc::ir {
         // After descoping, only procedures and static declarations remain
         for (std::shared_ptr<Declaration> declaration : global_scope->locals_list()) {
             declaration->storage = StorageClass::GLOBAL;
-            globals.insert(declaration);
+            globals[declaration] = {};
         }
 
         for (const Statement& statement : global_scope->statements) {
             if (statement.tag == StatementTag::FUNCTION) {
                 std::shared_ptr<Declaration> function = statement.output->declaration();
                 procedures[function->name] = Procedure {statement, globals, unique_id};
-            }
+            } else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global statements other than functions are not implemented", statement.location);
         }
     }
 

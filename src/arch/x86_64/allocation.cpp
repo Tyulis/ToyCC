@@ -100,7 +100,6 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    // FIXME : For now, assume the variables that are live on entry of the block are on the stack
     void StackFrame::enter_block(std::shared_ptr<ir::BasicBlock> block, bool is_last) {
         current_block = block;
         is_last_block = is_last;
@@ -111,11 +110,14 @@ namespace toycc::arch::x86_64 {
         for (std::shared_ptr<ir::Declaration> live : block->live_on_entry()) {
             if (live->type->dequalify()->category == ir::TypeCategory::FUNCTION)
                 continue;
-
             if (live->storage & ir::StorageClass::GLOBAL)
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variables live on entry are not implemented");
+                continue;
+
             copy(live, Location::stack);
         }
+
+        for (std::shared_ptr<ir::Declaration> global : block->used_globals)
+            copy(global, Location::memory);
     }
 
     std::string StackFrame::str() const {

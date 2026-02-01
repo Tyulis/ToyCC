@@ -116,7 +116,7 @@ namespace toycc::arch::x86_64 {
                 return std::format("-{}(%rbp)", frame.offset(variable));
 
             case Location::memory:
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Memory dereferences should be handled elsewhere", variable->location);
+                return std::format("{}(%rip)", variable->name);
 
             case Location::sp:
             case Location::bp:

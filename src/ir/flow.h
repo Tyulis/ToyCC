@@ -66,6 +66,7 @@ namespace toycc::ir {
             BasicBlockType type;
             std::optional<Label> label;
             DependencyGraph dependencies;
+            std::unordered_set<std::shared_ptr<Declaration>> used_globals;
 
             BasicBlock(BasicBlockType type, std::shared_ptr<size_t> unique_id, std::optional<Label> label = {});
 
@@ -93,6 +94,7 @@ namespace toycc::ir {
     };
 
     using FlowGraph = Graph<BasicBlock, FlowType>;
+    using GlobalMap = std::unordered_map<std::shared_ptr<Declaration>, std::optional<Constant>>;
 
     struct Procedure {
         public:
@@ -104,7 +106,7 @@ namespace toycc::ir {
             std::vector<std::shared_ptr<Declaration>> parameters;
 
             Procedure() = default;
-            Procedure(const Statement& function, const std::unordered_set<std::shared_ptr<Declaration>>& globals, std::shared_ptr<size_t> unique_id);
+            Procedure(const Statement& function, const GlobalMap& globals, std::shared_ptr<size_t> unique_id);
 
             std::string dot_subgraph(std::stringstream& dot) const;
 
@@ -113,12 +115,12 @@ namespace toycc::ir {
         private:
             std::shared_ptr<size_t> unique_id;
 
-            void build_flow_graph(std::shared_ptr<Scope> scope, const std::unordered_set<std::shared_ptr<Declaration>>& globals);
+            void build_flow_graph(std::shared_ptr<Scope> scope, const GlobalMap& globals);
             void resolve_intermediates();
     };
 
     struct TranslationUnit {
-        std::unordered_set<std::shared_ptr<Declaration>> globals;
+        GlobalMap globals;
         std::unordered_map<std::string, Procedure> procedures;
         std::shared_ptr<size_t> unique_id = 0;
 

@@ -60,6 +60,14 @@ namespace toycc::arch::x86_64 {
 
     inline OperandMatch check_out_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
         const std::unordered_set<Location> locations = frame.locate(operand);
+
+        // Global variables will need to be flushed back to memory shortly after, so consider non-memory locations for them as requiring transfers
+        if (operand.is_variable()) {
+            std::shared_ptr<ir::Declaration> variable = operand.declaration();
+            if (variable->storage & ir::StorageClass::GLOBAL && expected_location != Location::memory)
+                return {OperandMatch::REQUIRES_TRANSFER, {expected_location}};
+        }
+
         if (locations.contains(expected_location) || frame.is_free(expected_location))
             return {OperandMatch::OK, {expected_location}};
         else
