@@ -291,7 +291,7 @@ namespace toycc::semantic {
         }
 
         RValue destination = declare_temporary(function_type->return_type, locate(call));
-        if (function_type->category == TypeCategory::VOID)
+        if (function_type->return_type->category == TypeCategory::VOID)
             emit(Statement::make_call(location, function, parameters));
         else
             emit(Statement::make_call(location, function, parameters, destination));
