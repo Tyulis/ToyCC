@@ -29,7 +29,7 @@ namespace toycc::semantic {
 
     void SemanticAnalyzer::decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type, std::string entry_label, std::string exit_label) {
         if (context->labeledStatement())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Labeled statements are not implemented", locate(context));
+            decode_labeled_statement(context->labeledStatement());
         else if (context->compoundStatement())
             decode_compound_statement(context->compoundStatement(), scope_type.value_or(ScopeType::BLOCK), entry_label, exit_label);
         else if (context->expressionStatement())
@@ -184,7 +184,7 @@ namespace toycc::semantic {
 
     void SemanticAnalyzer::decode_jump_statement(CParser::JumpStatementContext* context) {
         if (context->Goto())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "`goto` statements are not implemented", locate(context));
+            decode_goto_statement(context);
         else if (context->Continue())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "`continue` statements are not implemented", locate(context));
         else if (context->Break())
@@ -192,6 +192,10 @@ namespace toycc::semantic {
         else if (context->Return())
             decode_return_statement(context);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown jump statement `{}`", context->getText()), locate(context));
+    }
+
+    void SemanticAnalyzer::decode_goto_statement(CParser::JumpStatementContext* context) {
+        emit(Statement::make_jump(locate(context), context->Identifier()->getText()));
     }
 
     void SemanticAnalyzer::decode_return_statement(CParser::JumpStatementContext* context) {
@@ -217,6 +221,17 @@ namespace toycc::semantic {
                 throw Diagnostic(DiagnosticLevel::ERROR, "Return without a value within a function with a non-void return type", location);
             emit(Statement::make_return(location));
         }
+    }
+
+    void SemanticAnalyzer::decode_labeled_statement(CParser::LabeledStatementContext* context) {
+        if (context->Case())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Case statements are not implemented", locate(context));
+        else if (context->Default())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Default statements are not implemented", locate(context));
+        else
+            emit_label(LabelType::NAMED, context->Identifier()->getText(), locate(context));
+
+        decode_statement(context->statement());
     }
 
 

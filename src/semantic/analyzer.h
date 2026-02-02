@@ -87,7 +87,9 @@ namespace toycc::semantic {
             void decode_do_while_statement(CParser::IterationStatementContext* context);
             void decode_for_statement(CParser::IterationStatementContext* context);
             void decode_jump_statement(CParser::JumpStatementContext* context);
+            void decode_goto_statement(CParser::JumpStatementContext* context);
             void decode_return_statement(CParser::JumpStatementContext* context);
+            void decode_labeled_statement(CParser::LabeledStatementContext* context);
 
             void emit_conditional_jump(std::shared_ptr<ExpressionResult> predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location);
 
