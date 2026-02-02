@@ -236,7 +236,7 @@ namespace toycc::semantic {
         for (CParser::PostfixOperatorContext* postfix : context->postfixOperator()) {
             const CodeLocation location = locate(postfix);
             if (postfix->LeftBracket() || postfix->RightBracket())
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Array indexing is not implemented", location);
+                result = decode_array_index(result, postfix);
             else if (postfix->LeftParen() || postfix->RightParen()) {
                 result = decode_function_call(result, postfix);
             } else if (postfix->Dot() || postfix->Arrow())
@@ -248,6 +248,20 @@ namespace toycc::semantic {
             else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown postfix operator `{}`", postfix->getText()));
         }
         return result;
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_array_index(std::shared_ptr<SemanticAnalyzer::ExpressionResult> array, CParser::PostfixOperatorContext* postfix) {
+        RValue index = decode_expression(postfix->expression())->rvalue();
+
+        if (array->is_lvalue()) {
+            LValue value = array->lvalue();
+            value.indices.push_back(index);
+            return make_expression(value, value.location);
+        } else {
+            RValue pointer = array->rvalue();
+            LValue dereference(pointer, pointer.location(), {index});
+            return make_expression(dereference, dereference.location);
+        }
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_primary_expression(CParser::PrimaryExpressionContext* context) {

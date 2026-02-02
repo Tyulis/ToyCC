@@ -148,6 +148,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> decode_unary_bitwise_not(CParser::UnaryExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_unary_logical_not(CParser::UnaryExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_postfix_expression(CParser::PostfixExpressionContext* context);
+            std::shared_ptr<ExpressionResult> decode_array_index(std::shared_ptr<ExpressionResult> array, CParser::PostfixOperatorContext* postfix);
             std::shared_ptr<ExpressionResult> decode_primary_expression(CParser::PrimaryExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_function_call(std::shared_ptr<ExpressionResult> function, CParser::PostfixOperatorContext* call);
 

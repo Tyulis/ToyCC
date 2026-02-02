@@ -714,7 +714,7 @@ namespace toycc::arch::x86_64 {
         return allocation;
     }
 
-    // Sort allocations in order of transfer emission : pointers first
+    // Sort allocations in order of transfer emission : pointers first, then flushes, then dereferences and normal transfers
     static void sort_transfers(std::vector<std::pair<AllocatedValue, SpecificLocation>>& allocation_map) {
         auto operand_comparator = [](const TranslationOperandIdentifier& left, const TranslationOperandIdentifier& right) {
             if (is_pointer(left))
@@ -734,6 +734,10 @@ namespace toycc::arch::x86_64 {
             if (has_pointer(left))
                 return true;
             if (has_pointer(right))
+                return false;
+            if (left.is_flush)
+                return true;
+            if (right.is_flush)
                 return false;
             return false;
         };
