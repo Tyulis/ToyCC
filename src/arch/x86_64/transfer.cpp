@@ -552,28 +552,28 @@ namespace toycc::arch::x86_64 {
             if (locations.contains(Location::memory) && !locations.contains(Location::stack))
                 destination = Location::memory;
 
+            if (locations.empty())
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Indirect dependency variable {} has no location", variable->name));
+
+            if (locations.contains(destination))
+                continue;
+
             // Move the variable to memory if necessary
-            if (!locations.contains(destination)) {
-                if (variable->storage & ir::StorageClass::GLOBAL)
-                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing indirect global variables is not implemented", variable->location);
+            if (variable->storage & ir::StorageClass::GLOBAL)
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing indirect global variables is not implemented", variable->location);
 
-                AllocatedValue value = {.is_flush = true, .variable = variable, .operands = {}};
-                SpecificLocation specific_location(destination, value);
-                size_t value_row = weights.add(value);
-                size_t location_col = weights.add(specific_location);
+            AllocatedValue value = {.is_flush = true, .variable = variable, .operands = {}};
+            SpecificLocation specific_location(destination, value);
+            size_t value_row = weights.add(value);
+            size_t location_col = weights.add(specific_location);
 
-                std::unordered_set<Location> current_locations = frame.locate(variable);
-                if (current_locations.empty())
-                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Indirect dependency variable {} has no location", variable->name));
-
-                LocationType destination_location_type = LOCATION_TYPES.at(destination);
-                float min_weight = INFINITY;
-                for (Location current_location : current_locations) {
-                    LocationType current_location_type = LOCATION_TYPES.at(current_location);
-                    min_weight = std::min(TRANSFER_COSTS(std::to_underlying(current_location_type), std::to_underlying(destination_location_type)), min_weight);
-                }
-                weights.weights(value_row, location_col) = min_weight;
+            LocationType destination_location_type = LOCATION_TYPES.at(destination);
+            float min_weight = INFINITY;
+            for (Location current_location : locations) {
+                LocationType current_location_type = LOCATION_TYPES.at(current_location);
+                min_weight = std::min(TRANSFER_COSTS(std::to_underlying(current_location_type), std::to_underlying(destination_location_type)), min_weight);
             }
+            weights.weights(value_row, location_col) = min_weight;
         }
     }
 

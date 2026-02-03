@@ -291,15 +291,13 @@ namespace toycc::ir {
     // Make intermediate values of external variables into internal temporaries
     void BasicBlock::split_intermediate_values() {
         for (std::shared_ptr<Declaration> local : locals()) {
-            DependencyGraph::NodeSet intermediates;
-
             for (std::shared_ptr<DependencyNode> value_node : dependencies.find_nodes(local)) {
                 // Values live on entry and exit are not intermediates
                 if (dependencies.is_source(value_node) || dependencies.is_sink(value_node))
                     continue;
 
                 Flags<DependencyType> dependency_types;
-                for (DependencyGraph::Edge edge : dependencies.out_edges(value_node))
+                for (DependencyGraph::Edge edge : dependencies.connected_edges(value_node))
                     dependency_types |= edge.attr.type;
 
                 // Also keep variables affected by dereferences and calls
