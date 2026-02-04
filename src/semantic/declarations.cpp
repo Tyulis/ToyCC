@@ -434,6 +434,8 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Type qualifiers in array lengths are not implemented", locate(context));
         if (context->attributeSpecifierSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
+        if (!context->assignmentExpression())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
 
         decode_direct_declarator(member, context->directDeclarator());
         std::shared_ptr<ExpressionResult> length = decode_assignment_expression(context->assignmentExpression());
