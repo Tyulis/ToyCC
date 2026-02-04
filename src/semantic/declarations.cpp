@@ -413,7 +413,7 @@ namespace toycc::semantic {
         else if (context->declarator() && context->LeftParen() && context->RightParen())  // Parenthesized alternative
             decode_declarator(member, context->declarator());
         else if (context->directDeclarator() && context->LeftBracket() && context->RightBracket())  // Array alternatives
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Array declarators are not implemented", location);
+            return decode_array_direct_declarator(member, context);
         else if (context->directDeclarator() && context->LeftParen() && context->RightParen())  // Function alternative
             return decode_function_direct_declarator(member, context);
         else if (context->Identifier() && context->DigitSequence())  // Bitfield alternative
@@ -423,6 +423,21 @@ namespace toycc::semantic {
         else if (context->gnuAttribute())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not implemented", location);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()), location);
+    }
+
+    void SemanticAnalyzer::decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
+        if (context->Static())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Static variables as array length are not implemented", locate(context));
+        if (context->Star())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Stars in array lengths are not implemented", locate(context));
+        if (context->typeQualifierList())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Type qualifiers in array lengths are not implemented", locate(context));
+        if (context->attributeSpecifierSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
+
+        decode_direct_declarator(member, context->directDeclarator());
+        std::shared_ptr<ExpressionResult> length = decode_assignment_expression(context->assignmentExpression());
+        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length->operand());
     }
 
     void SemanticAnalyzer::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {

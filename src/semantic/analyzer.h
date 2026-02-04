@@ -115,6 +115,7 @@ namespace toycc::semantic {
             size_t resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context);
             void decode_declarator(Member& member, CParser::DeclaratorContext* context);
             void decode_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context);
+            void decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context);
             void decode_function_direct_declarator(Member& spec, CParser::DirectDeclaratorContext* context);
             std::vector<Member> decode_parameter_type_list(CParser::ParameterTypeListContext* context);
             std::vector<Member> decode_parameter_list(CParser::ParameterListContext* context);

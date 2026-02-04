@@ -32,7 +32,7 @@ namespace toycc::ir {
 
         do {
             std::shared_ptr<Type> pointer_type = result.base_type()->dequalify();
-            if (pointer_type->category == TypeCategory::POINTER)
+            if (pointer_type->category == TypeCategory::POINTER || pointer_type->category == TypeCategory::ARRAY)
                 result = resolve_first_index(result, scope);
             else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't dereference object of type `{}`", pointer_type->text()), original.location);
 
