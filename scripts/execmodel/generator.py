@@ -683,7 +683,7 @@ def generate_transfer_matcher(translation_model: TranslationModel, output_dir: P
     source_content += "template <TransferTag tag>\n"
     source_content += "std::optional<TransferMatch> match_transfer(const StackFrame& frame, const ir::Operand& operand, Location destination);\n\n"
 
-    dispatch_code = "std::optional<TransferMatch> match = {};\n"
+    dispatch_code = "    std::optional<TransferMatch> match = {};\n"
     for transfer in translation_model.transfers:
         function_source = generate_transfer_matcher_function(translation_model, transfer)
         source_content += function_source

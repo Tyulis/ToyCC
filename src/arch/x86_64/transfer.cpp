@@ -183,7 +183,8 @@ namespace toycc::arch::x86_64 {
     static bool is_output_operand(const TranslationOperandIdentifier& id) {
         if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id))
             return false;
-        return !std::get<TranslationOperandIdentifier::Statement>(id.id).id.is_input;
+        const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
+        return !statement_id.id.is_input && !statement_id.id.is_pointer;
     }
 
     static bool has_output(const AllocatedValue& value) {

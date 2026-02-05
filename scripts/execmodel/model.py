@@ -214,24 +214,24 @@ class TranslationModel:
             raise TranslationModelError(f"Operand type `{name}` is undefined")
 
     # -------- Transfers
-    def parse_transfers(self, description: list[str], instruction_set: dict[str, Instruction]) -> list[TransferSpec]:
+    def parse_transfers(self, description: list[dict], instruction_set: dict[str, Instruction]) -> list[TransferSpec]:
         transfers = []
-        for instruction in description:
-            transfers.extend(self.parse_transfer_set(instruction_set[instruction]))
+        for transfer in description:
+            transfers.extend(self.parse_transfer_set(transfer, instruction_set[transfer["target"]]))
         return transfers
 
-    def parse_transfer_set(self, instruction: Instruction) -> list[TransferSpec]:
+    def parse_transfer_set(self, description: dict[str, object], instruction: Instruction) -> list[TransferSpec]:
         transfer_index = 0
         transfers = []
         for form in instruction.forms:
-            spec = self.make_transfer_spec(form)
+            spec = self.make_transfer_spec(description, form)
             if spec is not None:
                 spec.tag = f"{form.name}_{transfer_index}"
                 transfers.append(spec)
                 transfer_index += 1
         return transfers
 
-    def make_transfer_spec(self, form: InstructionForm) -> TransferSpec|None:
+    def make_transfer_spec(self, description: dict[str, object], form: InstructionForm) -> TransferSpec|None:
         source = None
         destination = None
         for operand in form.operands:
@@ -254,6 +254,13 @@ class TranslationModel:
 
         if source is None or destination is None:
             raise TranslationModelError(f"Transfer instruction form {form} doesn't have exactly one input and one output")
+
+        if "source" in description:
+            constraint = load_constraint_expression(description["source"], self.constraint_context())
+            source = to_simplified_constraint(Constraint(ConstraintType.CONJUNCTION, frozenset({source, constraint})))
+        if "destination" in description:
+            constraint = load_constraint_expression(description["destination"], self.constraint_context())
+            destination = to_simplified_constraint(Constraint(ConstraintType.CONJUNCTION, frozenset({destination, constraint})))
 
         if is_false(source) or is_false(destination):
             return None

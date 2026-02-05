@@ -118,7 +118,9 @@
         "{er}"         : false
     },
 
-    "transfers": ["MOV"],
+    "transfers": [{"source": {"location": ["stack", "memory"], "type": "ARRAY"}, "destination": {"size": 8},
+                   "target": "LEA"},
+                  {"target": "MOV"}],
 
     "ir": {
         "MARKER":         {"input": [], "output": true,                 "translate": false},
