@@ -1,4 +1,5 @@
 #include "diagnostic.h"
+#include "gen/execmodel/x86_64/location.h"
 #include "ir/declaration.h"
 #include "arch/x86_64/assembly.h"
 #include "arch/x86_64/execmodel.h"
@@ -6,27 +7,57 @@
 #include "arch/x86_64/custom_targets.h"
 
 namespace toycc::arch::x86_64 {
-    // Necessary because a generated translation model would unnecessarily transfer the operand to the stack
+    // --------- ADDRESSOF : Necessary because a generated translation model would unnecessarily transfer the operand to the stack
+    static void emit_addressof_variable(StackFrame& frame, const ir::Operand& operand, const ir::Operand& output, Location destination) {
+        std::shared_ptr<ir::Declaration> variable = operand.declaration();
+        if (variable->storage & ir::StorageClass::GLOBAL)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Taking the address of a global variable is not implemented", operand.location);
+
+        frame.statement(std::format("leaq {}, {}", emit_operand(frame, operand, Location::stack), emit_operand(frame, output, destination)));
+        move_operand(frame, output, destination);
+    }
+
+    static void emit_addressof_dereference(StackFrame& frame, const ir::Operand& operand, const ir::Operand& output, Location destination) {
+        std::shared_ptr<ir::Declaration> pointer = operand.declaration();
+        const ir::Constant& index_constant = operand.indices[0].constant();
+        if (!index_constant.is_integer())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Array indices must be integer constants", operand.location);
+
+        const size_t index = static_cast<size_t>(index_constant.integer());
+
+        std::optional<Location> pointer_location;
+        for (Location location : frame.locate(pointer)) {
+            if (!execmodel::x86_64::BANKED_LOCATIONS.contains(location)) {
+                pointer_location = location;
+                break;
+            }
+        }
+
+        if (!pointer_location.has_value())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The pointer has no register location", operand.location);
+
+        frame.statement(std::format("leaq {}({}), {}", index, emit_operand(frame, pointer, pointer_location.value()), location_code(frame, output.declaration(), destination)));
+        move_operand(frame, output, destination);
+    }
+
     void emit_addressof(StackFrame& frame, const TranslationMatch& match) {
         const ir::Statement& statement = match.group_match.statements[0]->statement();
         const ir::Operand& operand = statement.inputs[0];
         const ir::Operand& output  = statement.output.value();
 
-        if (!operand.is_variable())
+        if (!operand.has_variable_base())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't take the address of something other than a variable", operand.location);
         if (output.is_constant() || output.is_label())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The result of an ADDRESSOF operator can't be a constant", operand.location);
-
-        std::shared_ptr<ir::Declaration> variable = operand.declaration();
-        if (variable->storage & ir::StorageClass::GLOBAL)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Taking the address of a global variable is not implemented", operand.location);
 
         std::optional<Location> destination = *match.statements[0].output.value().locations.begin();
         if (!destination.has_value())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "ADDRESSOF statements without output location are not implemented", output.location);
 
-        frame.statement(std::format("leaq {}, {}", emit_operand(frame, operand, Location::stack), emit_operand(frame, output, destination.value())));
-        move_operand(frame, output, destination.value());
+        if (operand.is_variable())
+            emit_addressof_variable(frame, operand, output, destination.value());
+        else if (operand.is_dereference())
+            emit_addressof_dereference(frame, operand, output, destination.value());
     }
 
     void emit_call(StackFrame& frame, const TranslationMatch& match) {

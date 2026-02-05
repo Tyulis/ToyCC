@@ -318,7 +318,7 @@ class TranslationModel:
 
             for operand_name in ir_spec.input:
                 if operand_name in ir_desc:
-                    if ir_desc[operand_name].startswith("$"):
+                    if isinstance(ir_desc[operand_name], str) and ir_desc[operand_name].startswith("$"):
                         ir_operands[f"${index}.{operand_name}"] = ir_desc[operand_name]
                     else:
                         ir_operands[f"${index}.{operand_name}"] = self.parse_operand_constraint(ir_desc[operand_name])
@@ -333,6 +333,7 @@ class TranslationModel:
                         raise TranslationModelError(f"IR statement `{ir_spec.tag}` doesn't have an output")
                 elif operand_name not in ir_spec.input:
                     raise TranslationModelError(f"Input `{operand_name}` not defined in IR spec for {ir_spec.tag}")
+
         return ir_operands
 
     def parse_translation_set(self, description: dict[str, object], instruction_set: dict[str, Instruction]) -> list[TranslationSpec]:

@@ -25,6 +25,7 @@
         "-1"           : {"category": "constant", "type": "INTEGER", "value": -1},
         "constint"     : {"category": "constant", "type": "INTEGER"},
         "var"          : {"category": "variable"},
+        "deref"        : {"category": "dereference"},
         "int"          : {"type": "INTEGER"},
         "sint"         : {"type": "INTEGER", "signed": true},
         "uint"         : {"type": "INTEGER", "signed": false},
@@ -198,7 +199,10 @@
         {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},
 
         // -------- ADDRESSOF
-        {"ir": {"tag": "ADDRESSOF", "operand": "var", "output": "var"}, "target": {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_addressof"}},
+        {"ir":     {"tag": "ADDRESSOF", "operand": "var", "output": "var"},
+         "target": {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_addressof"}},
+        {"ir":     {"tag": "ADDRESSOF", "operand": "deref", "output": "var"},
+         "target": {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_addressof"}},
 
         // -------- Unconditional JUMP
         {"ir": {"tag": "JUMP", "target": "label"}, "target": {"instruction": "JMP"}},
