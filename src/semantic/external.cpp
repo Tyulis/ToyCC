@@ -29,6 +29,8 @@ namespace toycc::semantic {
     void SemanticAnalyzer::decode_function_definition(CParser::FunctionDefinitionContext* context) {
         if (context->declarationList())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Parameter declarations outside of the prototype are not supported", locate(context));
+        if (context->attributeSpecifierSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
 
         Declaration declaration;
         decode_declaration_specifiers(declaration, context->declarationSpecifiers());
@@ -44,6 +46,10 @@ namespace toycc::semantic {
         std::shared_ptr<Scope> function_scope = create_function_scope(function_decl);
 
         emit(Statement::make_function(locate(context), function_decl, function_scope));
+        decode_function_body(context->functionBody(), function_scope);
+    }
+
+    void SemanticAnalyzer::decode_function_body(CParser::FunctionBodyContext* context, std::shared_ptr<Scope> function_scope) {
         decode_compound_statement(context->compoundStatement(), function_scope);
     }
 }

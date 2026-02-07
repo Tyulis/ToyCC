@@ -33,13 +33,12 @@
 
 lexer grammar CLexer;
 
+// Insert here @header for lexer.
+
 channels {
     LINEDIRECTIVECHANNEL
 }
 
-KW__asm: '__asm';
-KW__asm__: '__asm__';
-KWasm: 'asm';
 Attribute: '__attribute__' | '__attribute' ;
 KW__builtin_offsetof: '__builtin_offsetof';
 KW__builtin_va_arg: '__builtin_va_arg';
@@ -52,14 +51,12 @@ KW__clrcall: '__clrcall';
 KW__declspec: '__declspec';
 KW__extension__: '__extension__';
 KW__fastcall: '__fastcall';
-KW__inline__: '__inline__';
 KW__m128: '__m128';
 KW__m128d: '__m128d';
 KW__m128i: '__m128i';
 KW__stdcall: '__stdcall';
 KW__thiscall: '__thiscall';
 KW__vectorcall: '__vectorcall';
-KW__volatile__: '__volatile__';
 KW__real__: '__real__';
 KW__imag__: '__imag__';
 KW__func__: '__func__';
@@ -77,6 +74,12 @@ Alignof
     | '_Alignof'
     | '__alignof__' // GNU
     | '__alignof'
+    ;
+
+Asm
+    : 'asm'
+    | '__asm'
+    | '__asm__'
     ;
 
 Auto
@@ -114,6 +117,10 @@ Continue
 
 Default
     : 'default'
+    ;
+
+Deprecated
+    : 'deprecated' // CLANG
     ;
 
 Do
@@ -158,17 +165,23 @@ If
 
 Inline
     : 'inline'
+    | '__inline__'
+    | '__inline'
     ;
 
 Int
     : 'int'
     ;
 
+Label
+    : '__label__' // gnu
+    ;
+
 Long
     : 'long'
     ;
 
-Nulptr
+Nullptr
     : 'nullptr'
     ;
 
@@ -178,6 +191,8 @@ Register
 
 Restrict
     : 'restrict'
+    | '__restrict__'
+    | '__restrict'
     ;
 
 Return
@@ -212,8 +227,8 @@ Switch
     : 'switch'
     ;
 
-Thread_local
-    : 'thread_local'
+True
+    : 'true'
     ;
 
 Typedef
@@ -245,6 +260,7 @@ Void
 
 Volatile
     : 'volatile'
+    | '__volatile__'
     ;
 
 While
@@ -293,6 +309,7 @@ StaticAssert
 
 ThreadLocal
     : '_Thread_local'
+    | 'thread_local'
     ;
 
 LeftParen
@@ -507,14 +524,7 @@ fragment HexQuad
     : HexadecimalDigit HexadecimalDigit HexadecimalDigit HexadecimalDigit
     ;
 
-Constant
-    : IntegerConstant
-    | FloatingConstant
-    //|   EnumerationConstant
-    | CharacterConstant
-    ;
-
-fragment IntegerConstant
+IntegerConstant
     : DecimalConstant IntegerSuffix?
     | OctalConstant IntegerSuffix?
     | HexadecimalConstant IntegerSuffix?
@@ -573,7 +583,7 @@ fragment LongLongSuffix
     | 'LL'
     ;
 
-fragment FloatingConstant
+FloatingConstant
     : DecimalFloatingConstant
     | HexadecimalFloatingConstant
     ;
@@ -618,10 +628,19 @@ fragment HexadecimalDigitSequence
     ;
 
 fragment FloatingSuffix
-    : [flFL]
+    : [Ff]
+    | [Ll]
+    | [Dd][Ff]
+    | [Dd][Dd]
+    | [Dd][Ll]
+    | [Ff] '16'
+    | [Ff] '32'
+    | [Ff] '64'
+    | [Ff] '128'
+    | [Bb][Ff] '16'
     ;
 
-fragment CharacterConstant
+CharacterConstant
     : '\'' CCharSequence '\''
     | 'L\'' CCharSequence '\''
     | 'u\'' CCharSequence '\''
@@ -683,7 +702,8 @@ MultiLineMacro
     ;
 
 LineDirective
-    : '#' [ \t]* 'line' .*? ( '\n' | '\r\n' | '\r' ) -> channel (LINEDIRECTIVECHANNEL)
+    : ('#' [ \t]* 'line' | '#' [ \t]* [0-9]+)
+		.*? ( '\n' | '\r\n' | '\r' ) -> channel (LINEDIRECTIVECHANNEL)
     ;
 
 Directive

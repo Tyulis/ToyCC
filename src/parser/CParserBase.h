@@ -1,18 +1,25 @@
 #pragma once
 
+#include <memory>
+#include <string>
+
 #include "Parser.h"
 #include "TokenStream.h"
+#include "code_location.h"
 #include "parser/SymbolTable.h"
 
-// Parser base class translated from https://github.com/kaby76/grammars-v4/commit/26a6b40d2af7b7689d6fcfff2080310455a725e4
+// Parser base class translated from https://github.com/antlr/grammars-v4/blob/master/c/CSharp/CParserBase.cs
 
 namespace toycc {
     class CParserBase : public antlr4::Parser {
         private:
             SymbolTable st;
 
-            antlr4::Token* next_token();
-            std::string next_token_text();
+            antlr4::Token* next_token(size_t index = 1);
+            std::string next_token_text(size_t index = 1);
+
+            std::shared_ptr<Symbol> ResolveWithOutput(antlr4::Token* token);
+            CodeLocation GetSourceLocation(antlr4::Token* token);
 
         protected:
             CParserBase(antlr4::TokenStream* input);
@@ -25,6 +32,7 @@ namespace toycc {
             bool IsAttributeSpecifierSequence();
             bool IsDeclaration();
             bool IsDeclarationSpecifier();
+            bool IsTypeSpecifierQualifier();
             bool IsDeclarationSpecifiers();
             bool IsEnumSpecifier();
             bool IsFunctionSpecifier();
@@ -38,5 +46,8 @@ namespace toycc {
             bool IsTypeSpecifier();
             void EnterDeclaration();
             bool IsNullStructDeclarationListExtension();
+            void EnterScope();
+            void ExitScope();
+            bool IsCast();
     };
 }

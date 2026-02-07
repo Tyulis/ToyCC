@@ -145,9 +145,9 @@ namespace toycc::semantic {
     }
 
     Flags<FunctionSpecifier> SemanticAnalyzer::decode_function_specifier(CParser::FunctionSpecifierContext* context) {
-        if      (context->Inline() || context->KW__inline__()) return FunctionSpecifier::INLINE;
-        else if (context->Noreturn())                          return FunctionSpecifier::NORETURN;
-        else if (context->KW__stdcall())                       return FunctionSpecifier::STDCALL;
+        if      (context->Inline())       return FunctionSpecifier::INLINE;
+        else if (context->Noreturn())     return FunctionSpecifier::NORETURN;
+        else if (context->KW__stdcall())  return FunctionSpecifier::STDCALL;
         else if (context->gnuAttribute()) throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not supported", locate(context));
         else if (context->KW__declspec()) throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Declspec specifiers are not supported", locate(context));
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown function specifier `{}`", context->getText()), locate(context));
@@ -361,13 +361,13 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not supported", locate(context));
 
         std::vector<Member> members;
-        for (CParser::StructDeclaratorContext* declarator : context->structDeclarator())
-            members.push_back(decode_struct_declarator(declarator, base_type));
+        for (CParser::MemberDeclaratorContext* declarator : context->memberDeclarator())
+            members.push_back(decode_member_declarator(declarator, base_type));
 
         return members;
     }
 
-    Member SemanticAnalyzer::decode_struct_declarator(CParser::StructDeclaratorContext* context, std::shared_ptr<Type> base_type) {
+    Member SemanticAnalyzer::decode_member_declarator(CParser::MemberDeclaratorContext* context, std::shared_ptr<Type> base_type) {
         const CodeLocation location = locate(context);
         if (context->gnuAttributes())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "GNU attributes are not implemented", location);
@@ -385,47 +385,63 @@ namespace toycc::semantic {
 
     // Decode a member or variable declarator, updates its type with the qualifiers found in the declarator, and may update its name if one is provided
     void SemanticAnalyzer::decode_declarator(Member& member, CParser::DeclaratorContext* context) {
-        if (context->gnuAttribute())
+        if (!context->gnuAttribute().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not implemented", locate(context));
         if (!context->gccDeclaratorExtension().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
-        if (context->declarationSpecifiers())
+
+        for (CParser::DeclaratorPointerLevelContext* level : context->declaratorPointerLevel())
+            member.type = decode_declarator_pointer_level(level, member.type);
+
+        return decode_direct_declarator(member, context->directDeclarator());
+    }
+
+    std::shared_ptr<Type> SemanticAnalyzer::decode_declarator_pointer_level(CParser::DeclaratorPointerLevelContext* context, std::shared_ptr<Type> base_type) {
+        if (context->gnuAttribute())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not implemented", locate(context));
+        if (context->declarationSpecifier())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Declarator-level specifiers are not implemented", locate(context));
 
-        if (context->pointer())
-            member.type = decode_pointer_spec(context->pointer(), member.type);
-
-        if (context->declarator())
-            return decode_declarator(member, context->declarator());
-        else if (context->directDeclarator())
-            return decode_direct_declarator(member, context->directDeclarator());
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()));
+        return decode_pointer_spec(context->pointer(), base_type);
     }
 
     void SemanticAnalyzer::decode_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
-        const CodeLocation location = locate(context);
+        decode_base_direct_declarator(member, context->baseDirectDeclarator());
 
-        if (context->attributeSpecifierSequence())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", location);
-
-        if (context->Identifier() && !context->DigitSequence())  // Identifier alternative
-            member.name = context->Identifier()->getText();
-        else if (context->declarator() && context->LeftParen() && context->RightParen())  // Parenthesized alternative
-            decode_declarator(member, context->declarator());
-        else if (context->directDeclarator() && context->LeftBracket() && context->RightBracket())  // Array alternatives
-            return decode_array_direct_declarator(member, context);
-        else if (context->directDeclarator() && context->LeftParen() && context->RightParen())  // Function alternative
-            return decode_function_direct_declarator(member, context);
-        else if (context->Identifier() && context->DigitSequence())  // Bitfield alternative
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfields are not implemented", location);
-        else if (context->vcSpecificModifer())  // VC-specific alternatives
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "VC declarator extensions are not supported", location);
-        else if (context->gnuAttribute())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not implemented", location);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()), location);
+        // From inner to outer to build type expressions recursively
+        for (CParser::DirectDeclaratorExtensionContext* extension : std::ranges::reverse_view(context->directDeclaratorExtension()))
+            decode_direct_declarator_extension(member, extension);
     }
 
-    void SemanticAnalyzer::decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
+
+    void SemanticAnalyzer::decode_base_direct_declarator(Member& member, CParser::BaseDirectDeclaratorContext* context) {
+        if (context->attributeSpecifierSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
+        if (context->vcSpecificModifer())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "VC declarator extensions are not supported", locate(context));
+
+        if (context->Identifier() && !context->DigitSequence())
+            member.name = context->Identifier()->getText();
+        else if (context->LeftParen() && context->declarator() && context->RightParen())
+            decode_declarator(member, context->declarator());
+        else if (context->Identifier() && context->DigitSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Bitfields are not implemented", locate(context));
+        else if (context->gnuAttribute())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GNU attributes are not implemented", locate(context));
+    }
+
+    void SemanticAnalyzer::decode_direct_declarator_extension(Member& member, CParser::DirectDeclaratorExtensionContext* context) {
+        if (context->attributeSpecifierSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
+
+        if (context->LeftBracket() && context->RightBracket())  // Array alternatives
+            return decode_array_direct_declarator(member, context);
+        else if (context->LeftParen() && context->RightParen())  // Function alternative
+            return decode_function_direct_declarator(member, context);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()), locate(context));
+    }
+
+    void SemanticAnalyzer::decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorExtensionContext* context) {
         if (context->Static())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Static variables as array length are not implemented", locate(context));
         if (context->Star())
@@ -437,16 +453,14 @@ namespace toycc::semantic {
         if (!context->assignmentExpression())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
 
-        decode_direct_declarator(member, context->directDeclarator());
         std::shared_ptr<ExpressionResult> length = decode_assignment_expression(context->assignmentExpression());
         member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length->operand());
     }
 
-    void SemanticAnalyzer::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context) {
+    void SemanticAnalyzer::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorExtensionContext* context) {
         if (context->attributeSpecifierSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
 
-        decode_direct_declarator(member, context->directDeclarator());
         std::shared_ptr<FunctionType> function_type = FunctionType::make(anonymous_type(), locate(context), member.type);
         if (context->parameterTypeList())
             function_type->parameters = decode_parameter_type_list(context->parameterTypeList());
@@ -464,15 +478,22 @@ namespace toycc::semantic {
 
     std::vector<Member> SemanticAnalyzer::decode_parameter_list(CParser::ParameterListContext* context) {
         std::vector<Member> parameters;
-        for (CParser::ParameterDeclarationContext* parameter : context->parameterDeclaration())
-            parameters.push_back(decode_parameter_declaration(parameter));
+        for (CParser::ParameterDeclarationContext* parameter : context->parameterDeclaration()) {
+            std::optional<Member> parameter_decl = decode_parameter_declaration(parameter);
+            if (parameter_decl.has_value())
+                parameters.push_back(parameter_decl.value());
+        }
 
         return parameters;
     }
 
-    Member SemanticAnalyzer::decode_parameter_declaration(CParser::ParameterDeclarationContext* context) {
+    std::optional<Member> SemanticAnalyzer::decode_parameter_declaration(CParser::ParameterDeclarationContext* context) {
+        if (context->attributeSpecifierSequence())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
+
         Declaration parameter;
-        decode_declaration_specifiers(parameter, context->declarationSpecifiers());
+        if (context->declarationSpecifiers())
+            decode_declaration_specifiers(parameter, context->declarationSpecifiers());
 
         // The syntax allows it, but the semantics don't
         if (parameter.storage.without(StorageClass::AUTO) || parameter.function_spec)
@@ -483,7 +504,7 @@ namespace toycc::semantic {
             decode_declarator(parameter, context->declarator());
         else if (context->abstractDeclarator())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Abstract parameter declarators are not implemented", locate(context));
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No declarator found in parameter declaration", locate(context));
+        else return {};
 
         if (name.has_value())
             parameter.name = name.value();

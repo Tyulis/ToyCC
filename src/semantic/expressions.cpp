@@ -268,8 +268,8 @@ namespace toycc::semantic {
         const CodeLocation location = locate(context);
         if (context->Identifier())
             return make_expression(LValue {resolve(context->Identifier()->getText(), location), location}, location);
-        else if (context->Constant())
-            return make_expression(decode_constant(context->Constant()), location);
+        else if (context->constant())
+            return make_expression(decode_constant(context->constant()), location);
         else if (!context->StringLiteral().empty())
             return make_expression(decode_string_literal(context->StringLiteral()), location);
         else if (context->LeftParen() && context->expression() && context->RightParen())

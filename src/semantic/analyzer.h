@@ -27,11 +27,13 @@ namespace toycc::semantic {
 
             size_t unique_id = 0;
 
+            std::shared_ptr<Type> void_type;
             std::shared_ptr<Type> enum_underlying_type;
             std::shared_ptr<Type> boolean_type;
             std::shared_ptr<Type> literal_character_type;
             std::shared_ptr<Type> literal_integer_type;
             std::shared_ptr<Type> literal_floating_type;
+            std::shared_ptr<Type> void_pointer_type;
 
         public:
             SemanticAnalyzer(const SourceMap& source_map, CParser::CompilationUnitContext* context);
@@ -43,6 +45,7 @@ namespace toycc::semantic {
             void decode_translation_unit(CParser::TranslationUnitContext* context);
             void decode_external_declaration(CParser::ExternalDeclarationContext* context);
             void decode_function_definition(CParser::FunctionDefinitionContext* context);
+            void decode_function_body(CParser::FunctionBodyContext* context, std::shared_ptr<Scope> function_scope);
 
             // -------- RAII expression result to keep track of lvalues and lingering effects -> semantic/expressionresult.cpp
             struct ExpressionResult {
@@ -110,16 +113,19 @@ namespace toycc::semantic {
             TypeIdentifier decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context);
             std::vector<Member> decode_member_declaration(CParser::MemberDeclarationContext* context);
             std::vector<Member> decode_member_declarator_list(CParser::MemberDeclaratorListContext* context, std::shared_ptr<Type> base_type);
-            Member decode_struct_declarator(CParser::StructDeclaratorContext* context, std::shared_ptr<Type> base_type);
+            Member decode_member_declarator(CParser::MemberDeclaratorContext* context, std::shared_ptr<Type> base_type);
 
             size_t resolve_alignment_specifier(CParser::AlignmentSpecifierContext* context);
             void decode_declarator(Member& member, CParser::DeclaratorContext* context);
+            std::shared_ptr<Type> decode_declarator_pointer_level(CParser::DeclaratorPointerLevelContext* context, std::shared_ptr<Type> base_type);
             void decode_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context);
-            void decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorContext* context);
-            void decode_function_direct_declarator(Member& spec, CParser::DirectDeclaratorContext* context);
+            void decode_base_direct_declarator(Member& member, CParser::BaseDirectDeclaratorContext* context);
+            void decode_direct_declarator_extension(Member& member, CParser::DirectDeclaratorExtensionContext* context);
+            void decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorExtensionContext* context);
+            void decode_function_direct_declarator(Member& spec, CParser::DirectDeclaratorExtensionContext* context);
             std::vector<Member> decode_parameter_type_list(CParser::ParameterTypeListContext* context);
             std::vector<Member> decode_parameter_list(CParser::ParameterListContext* context);
-            Member decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
+            std::optional<Member> decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
             std::shared_ptr<Type> decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> base_type);
 
             // -------- Expressions -> semantic/expressions.cpp
@@ -163,10 +169,11 @@ namespace toycc::semantic {
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
 
             // -------- Literals -> semantic/literals.cpp
-            RValue decode_constant(antlr4::tree::TerminalNode* terminal);
+            RValue decode_constant(CParser::ConstantContext* context);
             RValue decode_character_constant(antlr4::tree::TerminalNode* terminal);
             RValue decode_floating_constant(antlr4::tree::TerminalNode* terminal);
             RValue decode_integer_constant(antlr4::tree::TerminalNode* terminal);
+            RValue decode_predefined_constant(CParser::PredefinedConstantContext* context);
             RValue decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals);
 
             // -------- Convenience class to make temporaries of a given type only when necessary -> semantic/temporarygenerator.cpp

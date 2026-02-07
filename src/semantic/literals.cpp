@@ -1,16 +1,19 @@
 #include "diagnostic.h"
+#include "ir/declaration.h"
 #include "semantic/analyzer.h"
 #include "util/strings.h"
 
 namespace toycc::semantic {
-    RValue SemanticAnalyzer::decode_constant(antlr4::tree::TerminalNode* terminal) {
-        const std::string text = terminal->getText();
-        if (text.starts_with("'") || text.starts_with("L'") || text.starts_with("u'") || text.starts_with("U'"))
-            return decode_character_constant(terminal);
-        else if (text.contains("."))
-            return decode_floating_constant(terminal);
-        else
-            return decode_integer_constant(terminal);
+    RValue SemanticAnalyzer::decode_constant(CParser::ConstantContext* context) {
+        if (context->CharacterConstant())
+            return decode_character_constant(context->CharacterConstant());
+        else if (context->FloatingConstant())
+            return decode_floating_constant(context->FloatingConstant());
+        else if (context->IntegerConstant())
+            return decode_integer_constant(context->IntegerConstant());
+        else if (context->predefinedConstant())
+            return decode_predefined_constant(context->predefinedConstant());
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown constant type `{}`", context->getText()), locate(context));
     }
 
     RValue SemanticAnalyzer::decode_character_constant(antlr4::tree::TerminalNode* terminal) {
@@ -87,6 +90,16 @@ namespace toycc::semantic {
 
         std::shared_ptr<Type> type = resolve_type(type_identifier, location);
         return Constant {IntegerConstant(value), location, type};
+    }
+
+    RValue SemanticAnalyzer::decode_predefined_constant(CParser::PredefinedConstantContext* context) {
+        if (context->True())
+            return Constant {.value = IntegerConstant(1), .location = locate(context), .type = boolean_type};
+        else if (context->False())
+            return Constant {.value = IntegerConstant(0), .location = locate(context), .type = boolean_type};
+        else if (context->Nullptr())
+            return Constant {.value = IntegerConstant(0), .location = locate(context), .type = void_pointer_type};
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown predefined constant `{}`", context->getText()), locate(context));
     }
 
     RValue SemanticAnalyzer::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {

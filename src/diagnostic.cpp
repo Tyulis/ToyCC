@@ -92,13 +92,17 @@ namespace toycc {
         if (source_line.empty())
             return message;
 
-        message += std::format("\n\t{}", source_line);
+        message += std::format("\n\t{}", replace(source_line, "\t", "    "));
         if (!_character.has_value())
             return message;
 
         message += "\n\t";
-        for (unsigned character = 0; character < _character.value(); character++)
-            message += "-";
+        for (unsigned character = 0; character < _character.value(); character++) {
+            if (source_line[character] == '\t')
+                message += "----";
+            else
+                message += '-';
+        }
         message += "^";
 
         return message;
