@@ -330,8 +330,6 @@ namespace toycc::semantic {
 
             for (CParser::MemberDeclarationContext* declaration : context->memberDeclarationList()->memberDeclaration())
                 definition->members.append_range(decode_member_declaration(declaration));
-
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Complete structure declarations are not implemented", location);
             definition->is_complete = true;
         }
 

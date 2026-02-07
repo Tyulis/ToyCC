@@ -45,8 +45,8 @@ namespace toycc::ir {
 
     Operand PostProcessor::resolve_first_index(const Operand& original, std::shared_ptr<Scope> scope) {
         std::shared_ptr<Type> pointer_type = original.base_type()->dequalify();
-        std::shared_ptr<Type> referenced_type = pointer_type->dereference(original.location);
         Operand index = dereference_operand(original.indices[0], scope);
+        std::shared_ptr<Type> referenced_type = pointer_type->dereference(index.as_index(), original.location);
 
         // Fully dereference the index : after that, the index is either a constant or a variable
         if (index.is_dereference())
@@ -84,14 +84,15 @@ namespace toycc::ir {
     }
 
     Operand PostProcessor::dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope) {
-        std::shared_ptr<Type> referenced_type = operand.base_type()->dereference(operand.location);
+        const Operand& index = operand.indices[0];
+        std::shared_ptr<Type> referenced_type = operand.base_type()->dereference(index.as_index(), operand.location);
         std::shared_ptr<Declaration> pointee = declare_temporary(scope, referenced_type, operand.location);
-        const Operand reference = Operand {operand.value, operand.location, {operand.indices[0]}, referenced_type};
+        const Operand reference = Operand {operand.value, operand.location, {index}, referenced_type};
         scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::COPY, reference, pointee));
 
         std::shared_ptr<Type> pointee_referenced_type = nullptr;
         if (pointee->type->category == TypeCategory::POINTER)
-            pointee_referenced_type = pointee->type->dereference(operand.location);
+            pointee_referenced_type = pointee->type->dereference(index.as_index(), operand.location);
         return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}, pointee_referenced_type};
     }
 }

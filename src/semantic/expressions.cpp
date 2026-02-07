@@ -1,4 +1,5 @@
 #include <memory>
+#include <algorithm>
 
 #include "diagnostic.h"
 #include "ir/type_expressions.h"
@@ -237,10 +238,10 @@ namespace toycc::semantic {
             const CodeLocation location = locate(postfix);
             if (postfix->LeftBracket() || postfix->RightBracket())
                 result = decode_array_index(result, postfix);
-            else if (postfix->LeftParen() || postfix->RightParen()) {
+            else if (postfix->LeftParen() || postfix->RightParen())
                 result = decode_function_call(result, postfix);
-            } else if (postfix->Dot() || postfix->Arrow())
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Member access is not implemented", location);
+            else if (postfix->Dot() || postfix->Arrow())
+                result = decode_member_access(result, postfix);
             else if (postfix->PlusPlus())
                 result->postfix_increments.push_back(1);
             else if (postfix->MinusMinus())
@@ -310,6 +311,33 @@ namespace toycc::semantic {
         else
             emit(Statement::make_call(location, function, parameters, destination));
         return make_expression(destination, location);
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_member_access(std::shared_ptr<ExpressionResult> object, CParser::PostfixOperatorContext* access) {
+        const CodeLocation location = locate(access);
+
+        if (object->type()->category != TypeCategory::STRUCT && object->type()->category != TypeCategory::UNION)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Member access is only valid on struct and union types", location);
+        if (access->Arrow())
+            throw Diagnostic(DiagnosticLevel::ERROR, "Member dereference access is not implemented", location);
+
+        std::shared_ptr<CompoundType> type = std::static_pointer_cast<CompoundType>(object->type());
+        const std::string member_name = access->Identifier()->getText();
+
+        auto found_member = std::ranges::find_if(type->members, [&](const Member& member) {
+            return member.name == member_name;
+        });
+
+        if (found_member == type->members.end())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Member `{}` is not defined in type `{}`", member_name, type->name), location);
+
+        const size_t member_index = std::distance(type->members.begin(), found_member);
+        Constant index(IntegerConstant(member_index), location, literal_integer_type);
+        std::vector<RValue> indices = object->indices();
+        indices.push_back(index);
+
+        LValue result = {object->base(), location, indices};
+        return make_expression(result, location);
     }
 
 

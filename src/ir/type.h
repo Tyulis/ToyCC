@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <optional>
 
 #include "code_location.h"
 
@@ -35,7 +36,7 @@ namespace toycc::ir {
         virtual size_t alignment(CodeLocation location) const;  // In bytes
         virtual bool operator== (const Type& rhs) const;  // Defaults to same category
 
-        virtual std::shared_ptr<Type> dereference(CodeLocation location) const;  // Type emitted by a dereference of this type. Defaults to a throw.
+        virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const;  // Type emitted by a dereference of this type. Defaults to a throw.
         virtual std::shared_ptr<Type> dequalify() const;                         // Type without modifiers
         virtual std::shared_ptr<Type> storage_type() const;                      // Physical storage type
 

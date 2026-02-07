@@ -121,6 +121,7 @@ namespace toycc::ir {
         Constant& constant();
         std::shared_ptr<Declaration> declaration() const;
         Operand pointer() const;
+        std::optional<size_t> as_index() const;
 
         bool operator== (const Operand& operand) const;
 

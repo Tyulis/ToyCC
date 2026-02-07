@@ -42,6 +42,16 @@ namespace toycc::semantic {
         else              return rvalue();
     }
 
+    RValue SemanticAnalyzer::ExpressionResult::base() const {
+        if (is_lvalue())  return lvalue().base;
+        else              return rvalue();
+    }
+
+    std::vector<RValue>SemanticAnalyzer::ExpressionResult::indices() const {
+        if (is_lvalue())  return lvalue().indices;
+        else              return {};
+    }
+
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::ExpressionResult::dereference(RValue index, CodeLocation location) const {
         if (is_lvalue()) {
             LValue lvalue = std::get<LValue>(result);
@@ -70,7 +80,7 @@ namespace toycc::semantic {
                 break;
 
             case TypeCategory::POINTER:
-                factor = value_type->dereference(location)->size(location);
+                factor = value_type->dereference({}, location)->size(location);
                 break;
 
             default: throw Diagnostic(DiagnosticLevel::ERROR, "Postfix increment and decrement operators are only available on integer and pointer operands", location);

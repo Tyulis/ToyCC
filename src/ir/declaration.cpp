@@ -218,8 +218,8 @@ namespace toycc::ir {
             return dereference_type;
 
         std::shared_ptr<Type> type = base_type();
-        for (auto it = indices.begin(); it != indices.end(); it++)
-            type = type->dereference(location);
+        for (const Operand& index : indices)
+            type = type->dereference(index.as_index(), location);
         return type;
     }
 
@@ -246,6 +246,17 @@ namespace toycc::ir {
     // Get the operand without the dereferencing indices
     Operand Operand::pointer() const {
         return Operand {value, location, {}};
+    }
+
+    std::optional<size_t> Operand::as_index() const {
+        if (is_constant()) {
+            if (constant().is_integer())
+                return static_cast<size_t>(constant().integer());
+            else
+                throw Diagnostic(DiagnosticLevel::ERROR, "Constant indices must be integers", location);
+        } else {
+            return {};
+        }
     }
 
     bool Operand::operator== (const Operand& rhs) const {

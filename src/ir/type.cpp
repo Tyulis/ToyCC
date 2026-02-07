@@ -89,7 +89,7 @@ namespace toycc::ir {
         return category == rhs.category;
     }
 
-    std::shared_ptr<Type> Type::dereference(CodeLocation location) const {
+    std::shared_ptr<Type> Type::dereference(std::optional<size_t>, CodeLocation location) const {
         throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't dereference type `{}`", text()), location);
     }
 

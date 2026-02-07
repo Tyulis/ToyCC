@@ -47,7 +47,7 @@ namespace toycc::ir {
         return Type::operator== (rhs) && *referenced_type == *rhs.referenced_type;
     }
 
-    std::shared_ptr<Type> PointerType::dereference(CodeLocation) const {
+    std::shared_ptr<Type> PointerType::dereference(std::optional<size_t>, CodeLocation) const {
         return referenced_type;
     }
 
@@ -95,7 +95,7 @@ namespace toycc::ir {
         return Type::operator== (rhs) && *element_type == *rhs.element_type && length == rhs.length;  // FIXME : Evaluate lengths
     }
 
-    std::shared_ptr<Type> ArrayType::dereference(CodeLocation) const {
+    std::shared_ptr<Type> ArrayType::dereference(std::optional<size_t>, CodeLocation) const {
         return element_type;
     }
 
@@ -384,8 +384,8 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::ERROR, "Can't query the alignment of a bitfield type", location);
     }
 
-    std::shared_ptr<Type> BitfieldType::dereference(CodeLocation) const {
-        return underlying_type->dereference(location);
+    std::shared_ptr<Type> BitfieldType::dereference(std::optional<size_t> index, CodeLocation location) const {
+        return underlying_type->dereference(index, location);
     }
 
     std::shared_ptr<Type> BitfieldType::dequalify() const {
@@ -485,8 +485,8 @@ namespace toycc::ir {
         return TypeModifier::operator== (rhs) && alignment_bits == rhs.alignment_bits;
     }
 
-    std::shared_ptr<Type> AlignedType::dereference(CodeLocation) const {
-        return underlying_type->dereference(location);
+    std::shared_ptr<Type> AlignedType::dereference(std::optional<size_t>index, CodeLocation location) const {
+        return underlying_type->dereference(index, location);
     }
 
     std::shared_ptr<Type> AlignedType::dequalify() const {
@@ -549,8 +549,8 @@ namespace toycc::ir {
         return TypeModifier::operator== (rhs) && qualifiers == rhs.qualifiers;
     }
 
-    std::shared_ptr<Type> QualifiedType::dereference(CodeLocation) const {
-        return underlying_type->dereference(location);
+    std::shared_ptr<Type> QualifiedType::dereference(std::optional<size_t> index, CodeLocation location) const {
+        return underlying_type->dereference(index, location);
     }
 
     std::shared_ptr<Type> QualifiedType::dequalify() const {

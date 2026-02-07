@@ -64,6 +64,8 @@ namespace toycc::semantic {
                     LValue lvalue() const;
                     RValue rvalue() const;
                     Operand operand() const;
+                    RValue base() const;
+                    std::vector<RValue> indices() const;
 
                     std::shared_ptr<ExpressionResult> dereference(RValue index, CodeLocation location) const;
 
@@ -158,6 +160,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> decode_array_index(std::shared_ptr<ExpressionResult> array, CParser::PostfixOperatorContext* postfix);
             std::shared_ptr<ExpressionResult> decode_primary_expression(CParser::PrimaryExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_function_call(std::shared_ptr<ExpressionResult> function, CParser::PostfixOperatorContext* call);
+            std::shared_ptr<ExpressionResult> decode_member_access(std::shared_ptr<ExpressionResult> structure, CParser::PostfixOperatorContext* access);
 
             StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
             StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);

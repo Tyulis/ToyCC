@@ -35,6 +35,17 @@ namespace toycc::semantic {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant rvalue", location());
     }
 
+    std::optional<size_t> RValue::as_index() const {
+        if (is_constant()) {
+            if (constant().is_integer())
+                return static_cast<size_t>(constant().integer());
+            else
+                throw Diagnostic(DiagnosticLevel::ERROR, "Constant indices must be integers", location());
+        } else {
+            return {};
+        }
+    }
+
     std::string RValue::ir_code() const {
         if (is_constant())  return std::get<Constant>(value).ir_code();
         else                return std::get<std::shared_ptr<Declaration>>(value)->name;
@@ -65,7 +76,7 @@ namespace toycc::semantic {
     std::shared_ptr<Type> LValue::type() const {
         std::shared_ptr<Type> type = base.type();
         for (RValue index : indices)
-            type = type->dereference(location);
+            type = type->dereference(index.as_index(), location);
         return type;
     }
 }

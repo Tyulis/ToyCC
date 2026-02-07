@@ -25,6 +25,7 @@ namespace toycc::semantic {
         std::shared_ptr<Type> type() const;
         Constant constant() const;
         std::shared_ptr<Declaration> declaration() const;
+        std::optional<size_t> as_index() const;
 
         std::string ir_code() const;
     };
