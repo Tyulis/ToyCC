@@ -2,6 +2,7 @@
 
 #include "diagnostic.h"
 #include "ir/postprocessor.h"
+#include "ir/type_expressions.h"
 
 namespace toycc::ir {
     // Process pointer dereferences and array indices to flatten multi-dimensional and dynamic indexing, and resolve all array indices to static offsets
@@ -87,6 +88,26 @@ namespace toycc::ir {
         return result;
     }
 
+    Operand PostProcessor::resolve_struct_member(const Operand& original, std::shared_ptr<Scope>) {
+        std::shared_ptr<StructType> struct_type = std::static_pointer_cast<StructType>(original.base_type());
+        const Operand& original_index = original.indices[0];
+        std::optional<size_t> optional_index = original_index.as_index();
+        if (!optional_index.has_value())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Struct member indices must be constant integers", original_index.location);
+
+        const size_t member_index = optional_index.value();
+        const size_t member_offset = struct_type->member_offset(member_index);
+
+        Operand result = original;
+        result.indices[0] = Constant {IntegerConstant(member_offset), original_index.location, offset_type};
+        result.dereference_type = struct_type->members[member_index].type;
+        return result;
+    }
+
+    Operand PostProcessor::resolve_union_member(const Operand& original, std::shared_ptr<Scope>) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Union member dereference is not implemented", original.location);
+    }
+
     Operand PostProcessor::dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope) {
         const Operand& index = operand.indices[0];
         std::shared_ptr<Type> referenced_type = operand.base_type()->dereference(index.as_index(), operand.location);
@@ -99,13 +120,4 @@ namespace toycc::ir {
             pointee_referenced_type = pointee->type->dereference(index.as_index(), operand.location);
         return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}, pointee_referenced_type};
     }
-
-    Operand PostProcessor::resolve_struct_member(const Operand& original, std::shared_ptr<Scope>) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Struct member dereference is not implemented", original.location);
-    }
-
-    Operand PostProcessor::resolve_union_member(const Operand& original, std::shared_ptr<Scope>) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Union member dereference is not implemented", original.location);
-    }
-
 }

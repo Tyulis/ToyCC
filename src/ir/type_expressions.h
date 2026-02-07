@@ -78,6 +78,8 @@ namespace toycc::ir {
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
 
+            size_t member_offset(size_t member_index) const;
+
             virtual std::shared_ptr<Type> dequalify() const override;
         protected:
             StructType(std::string name, CodeLocation location, bool is_complete = false, std::vector<Member> members = {});

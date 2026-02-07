@@ -1,3 +1,4 @@
+#include <ranges>
 #include <sstream>
 
 #include "diagnostic.h"
@@ -44,7 +45,7 @@ namespace toycc::ir {
     }
 
     bool PointerType::operator== (const PointerType& rhs) const {
-        return Type::operator== (rhs) && *referenced_type == *rhs.referenced_type;
+        return *referenced_type == *rhs.referenced_type;
     }
 
     std::shared_ptr<Type> PointerType::dereference(std::optional<size_t>, CodeLocation) const {
@@ -124,10 +125,25 @@ namespace toycc::ir {
     }
 
     bool CompoundType::operator== (const CompoundType& rhs) const {
-        if (Type::operator== (rhs) && is_complete && rhs.is_complete && members.size() == rhs.members.size()) {
-            for (size_t member = 0; member < members.size(); member++)
-                if (*members[member].type != *rhs.members[member].type)
+        if (is_complete && rhs.is_complete && members.size() == rhs.members.size()) {
+            for (const auto& [left_member, right_member] : std::ranges::zip_view(members, rhs.members)) {
+                if (left_member.type->category != right_member.type->category)
                     return false;
+
+                // Protect against recursive structures
+                if (left_member.type->category == TypeCategory::POINTER) {
+                    std::shared_ptr<Type> left_referenced_type  = left_member.type->dereference({}, location);
+                    std::shared_ptr<Type> right_referenced_type = right_member.type->dereference({}, location);
+                    if (left_referenced_type.get() == this) {
+                        if (right_referenced_type.get() != this)
+                            return false;
+                        continue;
+                    }
+                }
+
+                if (left_member.type != right_member.type)
+                    return false;
+            }
             return true;
         } else {
             return false;
@@ -178,7 +194,13 @@ namespace toycc::ir {
     }
 
     size_t StructType::size(CodeLocation location) const {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Struct type size computation is not implemented", location);
+        if (!is_complete)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to query the alignment of an incomplete type", location);
+
+        size_t size = 0;
+        for (const auto& [index, member] : std::ranges::enumerate_view(members))
+            size = align_offset(size, member.type->alignment(location)) + member.type->size(location);
+        return align_offset(size, alignment(location));
     }
 
     size_t StructType::alignment(CodeLocation location) const {
@@ -187,6 +209,17 @@ namespace toycc::ir {
         if (members.empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Alignment of empty structures is not implemented", location);
         return members[0].type->alignment(location);
+    }
+
+    size_t StructType::member_offset(size_t member_index) const {
+        size_t offset = 0;
+        for (const auto& [index, member] : std::ranges::enumerate_view(members)) {
+            offset = align_offset(offset, member.type->alignment(location));
+            if (static_cast<size_t>(index) == member_index)
+                break;
+            offset += member.type->size(location);
+        }
+        return offset;
     }
 
     std::shared_ptr<Type> StructType::dequalify() const {
