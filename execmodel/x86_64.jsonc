@@ -119,7 +119,7 @@
         "{er}"         : false
     },
 
-    "transfers": [{"source": {"location": ["stack", "memory"], "type": "ARRAY"}, "destination": {"size": 8},
+    "transfers": [{"source": {"location": ["stack", "memory"], "type": ["ARRAY", "STRUCT"]}, "destination": {"size": 8},
                    "target": "LEA"},
                   {"target": "MOV"}],
 

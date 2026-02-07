@@ -1,6 +1,7 @@
 #include <format>
 #include <unordered_map>
 
+#include "arch/datamodel.h"
 #include "diagnostic.h"
 #include "ir/declaration.h"
 #include "arch/x86_64/assembly.h"
@@ -110,7 +111,13 @@ namespace toycc::arch::x86_64 {
             case Location::mm13:
             case Location::mm14:
             case Location::mm15:
-                return REGISTER_NAMES.at(location).at(variable->type->size({}));
+                switch (variable->type->dequalify()->category) {
+                    case ir::TypeCategory::ARRAY:
+                    case ir::TypeCategory::STRUCT:
+                        return REGISTER_NAMES.at(location).at(DATAMODEL->pointer_size());
+                    default:
+                        return REGISTER_NAMES.at(location).at(variable->type->size({}));
+                }
 
             case Location::stack:
                 return std::format("-{}(%rbp)", frame.offset(variable));
