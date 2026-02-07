@@ -161,6 +161,8 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> decode_primary_expression(CParser::PrimaryExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_function_call(std::shared_ptr<ExpressionResult> function, CParser::PostfixOperatorContext* call);
             std::shared_ptr<ExpressionResult> decode_member_access(std::shared_ptr<ExpressionResult> structure, CParser::PostfixOperatorContext* access);
+            std::shared_ptr<ExpressionResult> decode_direct_member_access(std::shared_ptr<ExpressionResult> structure, const std::string& member_name, CodeLocation location);
+            std::shared_ptr<ExpressionResult> decode_indirect_member_access(std::shared_ptr<ExpressionResult> structure, const std::string& member_name, CodeLocation location);
 
             StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
             StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);

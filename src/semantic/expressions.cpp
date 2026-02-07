@@ -314,15 +314,20 @@ namespace toycc::semantic {
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_member_access(std::shared_ptr<ExpressionResult> object, CParser::PostfixOperatorContext* access) {
-        const CodeLocation location = locate(access);
+        const std::string member_name = access->Identifier()->getText();
 
+        if (access->Dot())
+            return decode_direct_member_access(object, member_name, locate(access));
+        else if (access->Arrow())
+            return decode_indirect_member_access(object, member_name, locate(access));
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown member access type `{}`", access->getText()), locate(access));
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_direct_member_access(std::shared_ptr<ExpressionResult> object, const std::string& member_name, CodeLocation location) {
         if (object->type()->category != TypeCategory::STRUCT && object->type()->category != TypeCategory::UNION)
             throw Diagnostic(DiagnosticLevel::ERROR, "Member access is only valid on struct and union types", location);
-        if (access->Arrow())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Member dereference access is not implemented", location);
 
         std::shared_ptr<CompoundType> type = std::static_pointer_cast<CompoundType>(object->type());
-        const std::string member_name = access->Identifier()->getText();
 
         auto found_member = std::ranges::find_if(type->members, [&](const Member& member) {
             return member.name == member_name;
@@ -338,6 +343,17 @@ namespace toycc::semantic {
 
         LValue result = {object->base(), location, indices};
         return make_expression(result, location);
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_indirect_member_access(std::shared_ptr<ExpressionResult> object, const std::string& member_name, CodeLocation location) {
+        if (object->type()->category != TypeCategory::POINTER)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Indirect member access is only valid on pointer to struct or union types", location);
+
+        std::vector<RValue> indices = object->indices();
+        indices.push_back(make_constant_zero(TypeCategory::INTEGER, location));
+
+        std::shared_ptr<SemanticAnalyzer::ExpressionResult> dereference = make_expression(LValue {object->base(), location, indices}, location);
+        return decode_direct_member_access(dereference, member_name, location);
     }
 
 
