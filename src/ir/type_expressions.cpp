@@ -134,6 +134,12 @@ namespace toycc::ir {
         }
     }
 
+    std::shared_ptr<Type> CompoundType::dereference(std::optional<size_t> index, CodeLocation location) const {
+        if (!index.has_value())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't dereference a compound type member without a constant index", location);
+        return members[index.value()].type;
+    }
+
     std::shared_ptr<Type> CompoundType::storage_type() const {
         if (!is_complete)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to use the storage type of an incomplete type", location);

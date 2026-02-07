@@ -28,6 +28,8 @@ namespace toycc::ir {
             void dereference(std::shared_ptr<Scope> scope);
             Operand dereference_operand(const Operand& original, std::shared_ptr<Scope> scope);
             Operand resolve_first_index(const Operand& original, std::shared_ptr<Scope> scope);
+            Operand resolve_struct_member(const Operand& original, std::shared_ptr<Scope> scope);
+            Operand resolve_union_member(const Operand& original, std::shared_ptr<Scope> scope);
             Operand dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope);
 
             // -------- Control flow analysis -> ir/postprocessor/flow_analysis.cpp

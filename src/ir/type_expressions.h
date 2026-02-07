@@ -62,6 +62,7 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const CompoundType& rhs) const;
 
+            virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code() const override;

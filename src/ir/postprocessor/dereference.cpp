@@ -34,6 +34,10 @@ namespace toycc::ir {
             std::shared_ptr<Type> pointer_type = result.base_type()->dequalify();
             if (pointer_type->category == TypeCategory::POINTER || pointer_type->category == TypeCategory::ARRAY)
                 result = resolve_first_index(result, scope);
+            else if (pointer_type->category == TypeCategory::STRUCT)
+                result = resolve_struct_member(result, scope);
+            else if (pointer_type->category == TypeCategory::UNION)
+                result = resolve_union_member(result, scope);
             else throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't dereference object of type `{}`", pointer_type->text()), original.location);
 
             if (result.indices.size() > 1)
@@ -95,4 +99,13 @@ namespace toycc::ir {
             pointee_referenced_type = pointee->type->dereference(index.as_index(), operand.location);
         return {pointee, operand.location, {operand.indices.begin() + 1, operand.indices.end()}, pointee_referenced_type};
     }
+
+    Operand PostProcessor::resolve_struct_member(const Operand& original, std::shared_ptr<Scope>) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Struct member dereference is not implemented", original.location);
+    }
+
+    Operand PostProcessor::resolve_union_member(const Operand& original, std::shared_ptr<Scope>) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Union member dereference is not implemented", original.location);
+    }
+
 }
