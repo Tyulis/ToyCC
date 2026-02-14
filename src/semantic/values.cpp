@@ -37,7 +37,7 @@ namespace toycc::semantic {
 
     std::optional<size_t> RValue::as_index() const {
         if (is_constant()) {
-            if (constant().is_integer())
+            if (constant().tag() == Constant::INTEGER)
                 return static_cast<size_t>(constant().integer());
             else
                 throw Diagnostic(DiagnosticLevel::ERROR, "Constant indices must be integers", location());

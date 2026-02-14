@@ -82,7 +82,7 @@ namespace toycc::ir {
     size_t ArrayType::size(CodeLocation location) const {
         if (length.is_constant()) {
             const Constant& constant_length = length.constant();
-            if (constant_length.is_integer())
+            if (constant_length.tag() == Constant::INTEGER)
                 return static_cast<size_t> (constant_length.integer()) * element_type->size(location);
             else throw Diagnostic(DiagnosticLevel::ERROR, "Constant array lengths must be integers", length.location);
         } else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Variable-length arrays are not implemented", length.location);

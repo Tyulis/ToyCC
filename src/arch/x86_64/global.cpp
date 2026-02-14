@@ -155,22 +155,28 @@ namespace toycc::arch::x86_64 {
 
     // Set the actual value of a global declaration
     void CodeGenerator::generate_global_value(CodeOutput& output, const ir::Constant& value) {
-        if (value.is_integer()) {
-            switch (value.type->size(value.location)) {
-                case 1:  output.directive(".byte "  + dump(value.integer()));  break;
-                case 2:  output.directive(".short " + dump(value.integer()));  break;
-                case 4:  output.directive(".long "  + dump(value.integer()));  break;
-                case 8:  output.directive(".quad "  + dump(value.integer()));  break;
-                default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Global integers of size {} are not supported", value.type->size(value.location)), value.location);
-            }
-        } else if (value.is_floating_point()) {
-            switch (value.type->size(value.location)) {
-                case 4:  output.directive(".single " + dump(value.floating_point()));  break;
-                case 8:  output.directive(".double " + dump(value.floating_point()));  break;
-                default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Global floats of size {} are not supported", value.type->size(value.location)), value.location);
-            }
-        } else if (value.is_string()) {
-            output.directive(std::format(".ascii \"{}\"", value.string()));
-        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown global constant type");
+        switch (value.tag()) {
+            case ir::Constant::INTEGER:
+                switch (value.type->size(value.location)) {
+                    case 1:  output.directive(".byte "  + dump(value.integer()));  break;
+                    case 2:  output.directive(".short " + dump(value.integer()));  break;
+                    case 4:  output.directive(".long "  + dump(value.integer()));  break;
+                    case 8:  output.directive(".quad "  + dump(value.integer()));  break;
+                    default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Global integers of size {} are not supported", value.type->size(value.location)), value.location);
+                }
+                break;
+
+            case ir::Constant::FLOAT:
+                switch (value.type->size(value.location)) {
+                    case 4:  output.directive(".single " + dump(value.floating_point()));  break;
+                    case 8:  output.directive(".double " + dump(value.floating_point()));  break;
+                    default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Global floats of size {} are not supported", value.type->size(value.location)), value.location);
+                }
+                break;
+
+            case ir::Constant::STRING:
+                output.directive(std::format(".ascii \"{}\"", value.string()));
+                break;
+        }
     }
 }

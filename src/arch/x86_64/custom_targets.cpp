@@ -20,7 +20,7 @@ namespace toycc::arch::x86_64 {
     static void emit_addressof_dereference(StackFrame& frame, const ir::Operand& operand, const ir::Operand& output, Location destination) {
         std::shared_ptr<ir::Declaration> pointer = operand.declaration();
         const ir::Constant& index_constant = operand.indices[0].constant();
-        if (!index_constant.is_integer())
+        if (index_constant.tag() != ir::Constant::INTEGER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Array indices must be integer constants", operand.location);
 
         const size_t index = static_cast<size_t>(index_constant.integer());

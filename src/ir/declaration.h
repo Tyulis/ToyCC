@@ -71,13 +71,13 @@ namespace toycc::ir {
     using FloatingPointConstant = boost::multiprecision::cpp_bin_float_quad;
 
     struct Constant {
+        enum Tag {INTEGER, FLOAT, STRING};
+
         std::variant<IntegerConstant, FloatingPointConstant, std::string> value;
         CodeLocation location;
         std::shared_ptr<Type> type;
 
-        bool is_integer() const;
-        bool is_floating_point() const;
-        bool is_string() const;
+        Tag tag() const;
 
         IntegerConstant integer() const;
         FloatingPointConstant floating_point() const;

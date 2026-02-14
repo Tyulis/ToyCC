@@ -77,16 +77,14 @@ namespace toycc::ir {
 
 
     // -------- Constant
-    bool Constant::is_integer() const {
-        return std::holds_alternative<IntegerConstant>(value);
-    }
-
-    bool Constant::is_floating_point() const {
-        return std::holds_alternative<FloatingPointConstant>(value);
-    }
-
-    bool Constant::is_string() const {
-        return std::holds_alternative<std::string>(value);
+    Constant::Tag Constant::tag() const {
+        if (std::holds_alternative<IntegerConstant>(value))
+            return Constant::INTEGER;
+        else if (std::holds_alternative<FloatingPointConstant>(value))
+            return Constant::FLOAT;
+        else if (std::holds_alternative<std::string>(value))
+            return Constant::STRING;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown constant tag", location);
     }
 
     IntegerConstant Constant::integer() const {
@@ -104,6 +102,7 @@ namespace toycc::ir {
 
     Constant Constant::as(std::shared_ptr<Type> new_type) const {
         std::shared_ptr<Type> new_unqualified = new_type->dequalify();
+        const Constant::Tag value_tag = tag();
         switch (new_unqualified->category) {
             case TypeCategory::VOID:
             case TypeCategory::BUILTIN:
@@ -117,28 +116,28 @@ namespace toycc::ir {
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid type for a constant : `{}`", new_type->text()), location);
 
             case TypeCategory::POINTER:
-                if (is_string())
+                if (value_tag == Constant::STRING)
                     return {.value = value, .location = location, .type = new_type};
             [[fallthrough]];
 
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
             case TypeCategory::ENUM:
-                if (is_integer())
+                if (value_tag == Constant::INTEGER)
                     return {.value = value, .location = location, .type = new_type};
-                else if (is_floating_point())
+                else if (value_tag == Constant::FLOAT)
                     return {.value = IntegerConstant(floating_point()), .location = location, .type = new_type};
                 else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert non-arithmetic constants to integers", location);
 
             case TypeCategory::FLOAT:
-                if (is_integer())
+                if (value_tag == Constant::INTEGER)
                     return {.value = FloatingPointConstant(integer()), .location = location, .type = new_type};
-                else if (is_floating_point())
+                else if (value_tag == Constant::FLOAT)
                     return {.value = value, .location = location, .type = new_type};
                 else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert non-arithmetic constants to integers", location);
 
             case TypeCategory::ARRAY:
-                if (is_string())
+                if (value_tag == Constant::STRING)
                     return {.value = value, .location = location, .type = new_type};
                 else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert non-string literals to array types", location);
         }
@@ -146,25 +145,16 @@ namespace toycc::ir {
     }
 
     bool Constant::operator== (const Constant& rhs) const {
-        if (is_integer() && rhs.is_integer())
-            return integer() == rhs.integer();
-        else if (is_floating_point() && rhs.is_floating_point())
-            return floating_point() == rhs.floating_point();
-        else if (is_string() && rhs.is_string())
-            return string() == rhs.string();
-        else return false;
+        return value == rhs.value;
     }
 
     std::string Constant::ir_code() const {
         std::stringstream code;
-        if (is_integer())
-            code << integer();
-        else if (is_floating_point())
-            code << floating_point();
-        else if (is_string())
-            code << "\"" << string() << "\"";
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown constant category", location);
-
+        switch (tag()) {
+            case Constant::INTEGER:  code << integer();              break;
+            case Constant::FLOAT:    code << floating_point();       break;
+            case Constant::STRING:   code << string();               break;
+        }
         return code.str();
     }
 
@@ -250,7 +240,7 @@ namespace toycc::ir {
 
     std::optional<size_t> Operand::as_index() const {
         if (is_constant()) {
-            if (constant().is_integer())
+            if (constant().tag() == Constant::INTEGER)
                 return static_cast<size_t>(constant().integer());
             else
                 throw Diagnostic(DiagnosticLevel::ERROR, "Constant indices must be integers", location);

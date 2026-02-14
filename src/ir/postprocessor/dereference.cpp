@@ -61,7 +61,7 @@ namespace toycc::ir {
         Operand result = original;
         if (index.is_constant()) {
             const Constant& constant_index = index.constant();
-            if (!constant_index.is_integer())
+            if (constant_index.tag() != Constant::INTEGER)
                 throw Diagnostic(DiagnosticLevel::ERROR, "Array indices must be integers", original.location);
 
             IntegerConstant offset = constant_index.integer() * referenced_type->size(original.location);

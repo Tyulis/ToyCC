@@ -79,15 +79,15 @@ namespace toycc::arch::x86_64 {
     }
 
     inline OperandMatch check_value_eq(const ir::Operand& operand, ir::IntegerConstant value) {
-        return (operand.is_constant() && operand.constant().is_integer() && operand.constant().integer() == value) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.is_constant() && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() == value) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_value_ge(const ir::Operand& operand, ir::IntegerConstant value) {
-        return (operand.is_constant() && operand.constant().is_integer() && operand.constant().integer() >= value) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.is_constant() && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() >= value) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_value_le(const ir::Operand& operand, ir::IntegerConstant value) {
-        return (operand.is_constant() && operand.constant().is_integer() && operand.constant().integer() <= value) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.is_constant() && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() <= value) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_storage(const ir::Operand& operand, ir::StorageClass storage) {
