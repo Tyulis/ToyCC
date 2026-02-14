@@ -25,7 +25,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             PointerType(std::string name, CodeLocation location, std::shared_ptr<Type> referenced_type);
@@ -47,7 +47,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length);
@@ -65,7 +65,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             CompoundType(TypeCategory category, std::string name, CodeLocation location, bool is_complete = false, std::vector<Member> members = {});
@@ -113,7 +113,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             EnumType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, std::unordered_map<std::string, ssize_t> values = {});
@@ -134,7 +134,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             FunctionType(std::string name, CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters = {});
@@ -170,7 +170,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             BitfieldType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits);
@@ -190,7 +190,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             AlignedType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits);
@@ -217,7 +217,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual std::shared_ptr<Type> storage_type() const override;
 
-            virtual std::string ir_code() const override;
+            virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
             QualifiedType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers);

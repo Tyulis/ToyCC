@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <optional>
+#include <unordered_set>
 
 #include "code_location.h"
 
@@ -46,7 +47,7 @@ namespace toycc::ir {
         bool is_comparable() const;
         bool has_truth_value() const;
 
-        virtual std::string ir_code() const;
+        virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const;
         virtual std::string text() const;  // Defaults to the IR code
     };
 
@@ -61,7 +62,7 @@ namespace toycc::ir {
         virtual bool operator== (const Type& rhs) const override;
         bool operator== (const PrimitiveType& rhs) const;
 
-        virtual std::string ir_code() const override;
+        virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
     };
 
     struct BooleanType : public PrimitiveType {
@@ -82,7 +83,7 @@ namespace toycc::ir {
         virtual std::shared_ptr<Type> dequalify() const override;
         virtual std::shared_ptr<Type> storage_type() const override;
 
-        virtual std::string ir_code() const override;
+        virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
     };
 
     struct FloatingPointType : public PrimitiveType {

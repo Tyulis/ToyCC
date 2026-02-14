@@ -60,8 +60,12 @@ namespace toycc::ir {
         return std::make_shared<IntegerType> (".Tptr", location, 8 * arch::DATAMODEL->pointer_size(), 8 * arch::DATAMODEL->pointer_alignment(), false);
     }
 
-    std::string PointerType::ir_code() const {
-        return std::format("{}*", referenced_type->ir_code());
+    std::string PointerType::ir_code(std::unordered_set<const Type*> parents) const {
+        if (parents.contains(this))
+            return "(...)";
+
+        parents.insert(this);
+        return std::format("{}*", referenced_type->ir_code(parents));
     }
 
     // -------- ArrayType
@@ -108,8 +112,12 @@ namespace toycc::ir {
         return ArrayType::make(name, location, element_type->storage_type(), length);
     }
 
-    std::string ArrayType::ir_code() const {
-        return std::format("{}[{}]", element_type->ir_code(), length.ir_code());
+    std::string ArrayType::ir_code(std::unordered_set<const Type*> parents) const {
+        if (parents.contains(this))
+            return std::format("(...)[{}]", length.ir_code());
+
+        parents.insert(this);
+        return std::format("{}[{}]", element_type->ir_code(parents), length.ir_code());
     }
 
     // -------- CompoundType
@@ -171,13 +179,17 @@ namespace toycc::ir {
         }
     }
 
-    std::string CompoundType::ir_code() const {
+    std::string CompoundType::ir_code(std::unordered_set<const Type*> parents) const {
+        if (parents.contains(this))
+            return std::format("({}...)", name);
+
+        parents.insert(this);
         std::stringstream code;
-        code << Type::ir_code();
+        code << Type::ir_code(parents);
         if (is_complete) {
             code << "{\n";
             for (const Member& member : members)
-                code << member.ir_code() << ";\n";
+                code << "    " << member.ir_code(parents) << ";\n";
             code << "}";
         }
         return code.str();
@@ -299,9 +311,9 @@ namespace toycc::ir {
         return Type::operator== (rhs) && *underlying_type == *rhs.underlying_type && values == rhs.values;
     }
 
-    std::string EnumType::ir_code() const {
+    std::string EnumType::ir_code(std::unordered_set<const Type*> parents) const {
         std::stringstream code;
-        code << Type::ir_code() << "{\n";
+        code << Type::ir_code(parents) << "{\n";
         for (std::pair<std::string, ssize_t> value : values)
             code << value.first << " = " << value.second << ",\n";
         code << "}";
@@ -363,15 +375,19 @@ namespace toycc::ir {
         }
     }
 
-    std::string FunctionType::ir_code() const {
+    std::string FunctionType::ir_code(std::unordered_set<const Type*> parents) const {
+        if (parents.contains(this))
+            return "(...)";
+
+        parents.insert(this);
         std::stringstream code;
-        code << return_type->ir_code() << " " << Type::ir_code();
+        code << return_type->ir_code(parents) << " " << Type::ir_code(parents);
         if (parameters.size() == 0) {
             code << "()";
         } else {
             code << "(\n";
             for (const Member& parameter : parameters)
-                code << "    " << parameter.ir_code() << ",\n";
+                code << "    " << parameter.ir_code(parents) << ",\n";
             code << ")";
         }
         return code.str();
@@ -444,8 +460,8 @@ namespace toycc::ir {
         return TypeModifier::operator== (rhs) && size_bits == rhs.size_bits;
     }
 
-    std::string BitfieldType::ir_code() const {
-        return std::format("{}:{}", underlying_type->ir_code(), size_bits);
+    std::string BitfieldType::ir_code(std::unordered_set<const Type*> parents) const {
+        return std::format("{}:{}", underlying_type->ir_code(parents), size_bits);
     }
 
     // -------- AlignedType
@@ -536,8 +552,8 @@ namespace toycc::ir {
         return AlignedType::make(name, location, underlying_type->storage_type(), alignment_bits);
     }
 
-    std::string AlignedType::ir_code() const {
-        return std::format("{}|{}", underlying_type->ir_code(), alignment_bits);
+    std::string AlignedType::ir_code(std::unordered_set<const Type*> parents) const {
+        return std::format("{}|{}", underlying_type->ir_code(parents), alignment_bits);
     }
 
     // -------- QualifiedType
@@ -600,7 +616,7 @@ namespace toycc::ir {
         return QualifiedType::make(name, location, underlying_type->storage_type(), qualifiers);
     }
 
-    std::string QualifiedType::ir_code() const {
-        return std::format("{}{}", type_qualifiers_repr(qualifiers), underlying_type->ir_code());
+    std::string QualifiedType::ir_code(std::unordered_set<const Type*> parents) const {
+        return std::format("{}{}", type_qualifiers_repr(qualifiers), underlying_type->ir_code(parents));
     }
 }

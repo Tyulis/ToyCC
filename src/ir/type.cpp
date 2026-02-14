@@ -127,7 +127,7 @@ namespace toycc::ir {
                dequalified_category == TypeCategory::POINTER;
     }
 
-    std::string Type::ir_code() const {
+    std::string Type::ir_code(std::unordered_set<const Type*>) const {
         return category_repr(category);
     }
 
@@ -147,7 +147,7 @@ namespace toycc::ir {
         return alignment_bits_to_bytes(alignment_bits);
     }
 
-    std::string PrimitiveType::ir_code() const {
+    std::string PrimitiveType::ir_code(std::unordered_set<const Type*>) const {
         std::stringstream code;
         code << category_repr(category) << "(" << size_bits;
         if (alignment_bits != size_bits)
@@ -180,7 +180,7 @@ namespace toycc::ir {
     IntegerType::IntegerType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits, bool is_signed)
         : PrimitiveType(TypeCategory::INTEGER, name, location, size_bits, alignment_bits), is_signed(is_signed) {}
 
-    std::string IntegerType::ir_code() const {
+    std::string IntegerType::ir_code(std::unordered_set<const Type*>) const {
         return std::format("{} {}", (is_signed? "SIGNED" : "UNSIGNED"), PrimitiveType::ir_code());
     }
 

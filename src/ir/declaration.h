@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <variant>
+#include <unordered_set>
 
 // For some reason ANTLR silently undefines the standard EOF macro, which boost/multiprecision needs
 // Redefining it as constexpr seems to be satisfactory
@@ -50,7 +51,7 @@ namespace toycc::ir {
         Member(std::string name, std::shared_ptr<Type> type, CodeLocation location);
 
         Member to_storage_type() const;
-        std::string ir_code() const;
+        std::string ir_code(std::unordered_set<const Type*> parents = {}) const;
     };
 
     struct Declaration : public Member {

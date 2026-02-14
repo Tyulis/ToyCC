@@ -46,8 +46,8 @@ namespace toycc::ir {
         return {name, type->storage_type(), location};
     }
 
-    std::string Member::ir_code() const {
-        return std::format("{} {}", type->ir_code(), name);
+    std::string Member::ir_code(std::unordered_set<const Type*> parents) const {
+        return std::format("{} {}", type->ir_code(parents), name);
     }
 
     // -------- Declaration
