@@ -22,7 +22,7 @@ namespace toycc::ir {
             // -------- Split indirection levels -> ir/postprocessor/indirection.cpp
             // After this, multi-index dereferences are from a single pointer
             void split_indirections(std::shared_ptr<Scope> scope);
-            Operand split_operand_indirections(const Operand& operand, std::shared_ptr<Scope> scope);
+            Operand split_operand_indirections(Operand operand, std::shared_ptr<Scope> scope);
 
             // -------- Convert all types to raw storage types -> ir/postprocessor/detype.cpp
             void detype(std::shared_ptr<Scope> scope);
@@ -33,11 +33,10 @@ namespace toycc::ir {
 
             // -------- Flatten multi-level and dynamic indexing -> ir/postprocessor/dereference.cpp
             void dereference(std::shared_ptr<Scope> scope);
-            Operand dereference_operand(const Operand& original, std::shared_ptr<Scope> scope);
-            Operand resolve_first_index(const Operand& original, std::shared_ptr<Scope> scope);
-            Operand resolve_struct_member(const Operand& original, std::shared_ptr<Scope> scope);
-            Operand resolve_union_member(const Operand& original, std::shared_ptr<Scope> scope);
-            Operand dereference_first_index(const Operand& operand, std::shared_ptr<Scope> scope);
+            Operand dereference_operand(Operand original, std::shared_ptr<Scope> scope);
+            Operand fully_dereference_operand(Operand original, std::shared_ptr<Scope> scope);
+            Operand make_offset(Operand index, size_t size, std::shared_ptr<Scope> scope);
+            Operand merge_offsets(Operand flat_offset, Operand index, size_t size, std::shared_ptr<Scope> scope);
 
             // -------- Control flow analysis -> ir/postprocessor/flow_analysis.cpp
             TranslationUnit analyse_flow(std::shared_ptr<Scope> global_scope);

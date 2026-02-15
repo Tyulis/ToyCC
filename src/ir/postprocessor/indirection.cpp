@@ -1,4 +1,3 @@
-#include "diagnostic.h"
 #include "ir/postprocessor.h"
 
 namespace toycc::ir {
@@ -21,10 +20,15 @@ namespace toycc::ir {
         }
     }
 
-    Operand PostProcessor::split_operand_indirections(const Operand& operand, std::shared_ptr<Scope> scope) {
+    Operand PostProcessor::split_operand_indirections(Operand operand, std::shared_ptr<Scope> scope) {
+        // First, split indirections recursively in indices
+        for (Operand& index : operand.indices)
+            split_operand_indirections(index, scope);
+
         if (operand.indices.size() <= 1)
             return operand;
 
+        // Then split indirections in the actual operand
         Operand pointer = operand;
         std::shared_ptr<Type> pointer_type = pointer.base_type();
         size_t top_level = 0;
