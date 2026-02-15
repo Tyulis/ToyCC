@@ -42,7 +42,6 @@ namespace toycc::ir {
                 scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::COPY, reference, pointee));
                 pointer = Operand {pointee, operand.location, {operand.indices.begin() + level + 1, operand.indices.end()}};
                 top_level = level + 1;
-                break;
             }
 
             pointer_type = referenced_type;

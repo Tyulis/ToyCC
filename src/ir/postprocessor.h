@@ -35,8 +35,11 @@ namespace toycc::ir {
             void dereference(std::shared_ptr<Scope> scope);
             Operand dereference_operand(Operand original, std::shared_ptr<Scope> scope);
             Operand fully_dereference_operand(Operand original, std::shared_ptr<Scope> scope);
-            Operand make_offset(Operand index, size_t size, std::shared_ptr<Scope> scope);
-            Operand merge_offsets(Operand flat_offset, Operand index, size_t size, std::shared_ptr<Scope> scope);
+            Operand make_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);
+            Operand make_pointer_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);
+            Operand make_struct_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);
+            Operand make_union_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);
+            Operand merge_offsets(Operand flat_offset, Operand offset, std::shared_ptr<Scope> scope);
 
             // -------- Control flow analysis -> ir/postprocessor/flow_analysis.cpp
             TranslationUnit analyse_flow(std::shared_ptr<Scope> global_scope);
