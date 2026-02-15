@@ -17,6 +17,11 @@ namespace toycc::ir {
             size_t unique_id = 0;
             std::shared_ptr<Type> offset_type;
 
+            // -------- Split indirection levels -> ir/postprocessor/indirection.cpp
+            // After this, multi-index dereferences are from a single pointer
+            void split_indirections(std::shared_ptr<Scope> scope);
+            Operand split_operand_indirections(const Operand& operand, std::shared_ptr<Scope> scope);
+
             // -------- Convert all types to raw storage types -> ir/postprocessor/detype.cpp
             void detype(std::shared_ptr<Scope> scope);
             void detype_operand(Operand& operand);

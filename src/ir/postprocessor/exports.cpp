@@ -6,6 +6,7 @@ namespace toycc::ir {
             offset_type(std::make_shared<IntegerType>(".PToffset", BUILTIN_LOCATION, arch::DATAMODEL->pointer_size(), arch::DATAMODEL->pointer_alignment(), false)){}
 
     TranslationUnit PostProcessor::operator() () {
+        split_indirections(global_scope);
         dereference(global_scope);  // Requires semantic pointer types -> must come before `detype`
         detype(global_scope);
         descope(global_scope);
