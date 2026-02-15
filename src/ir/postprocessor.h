@@ -8,11 +8,13 @@
 namespace toycc::ir {
     class PostProcessor {
         public:
-            // -------- Exported operations -> ir/postprocessor/exports.cpp
-            PostProcessor(std::shared_ptr<Scope> global_scope);
-            TranslationUnit operator() ();
+            static std::shared_ptr<Scope> process(std::shared_ptr<Scope> global_scope);
 
         private:
+            // -------- Exported operations -> ir/postprocessor/exports.cpp
+            PostProcessor(std::shared_ptr<Scope> global_scope);
+            std::shared_ptr<Scope> operator() ();
+
             std::shared_ptr<Scope> global_scope;
             size_t unique_id = 0;
             std::shared_ptr<Type> offset_type;

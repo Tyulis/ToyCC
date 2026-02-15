@@ -30,9 +30,10 @@ enum class SequenceStep : unsigned int {
     SOURCE_MAP = 2,
     PARSE = 3,
     POSTPROCESS = 4,
-    CODEGEN = 5,
-    ASSEMBLY = 6,
-    LINK = 7,
+    FLOW = 5,
+    CODEGEN = 6,
+    ASSEMBLY = 7,
+    LINK = 8,
 };
 
 constexpr static std::string DEFAULT_OBJECT_FILE_NAME = "a.out";
@@ -61,6 +62,7 @@ int main(int argc, char** argv) {
                                   ("parse-xml",      "Output the AST as XML")
                                   ("parse-ir",       "Output the intermediate representation after semantic analysis")
                                   ("process-ir",     "Output the postprocessed intermediate representation")
+                                  ("flow",           "Output the flow graph")
                                   ("codegen,S",      "Output the generated assembly code")
                                   ("compile,c",      "Compile to an object file");
 
@@ -111,6 +113,8 @@ int main(int argc, char** argv) {
         target_step = SequenceStep::PARSE;
     if (options.count("process-ir"))
         target_step = SequenceStep::POSTPROCESS;
+    if (options.count("flow"))
+        target_step = SequenceStep::FLOW;
     if (options.count("codegen"))
         target_step = SequenceStep::CODEGEN;
     if (options.count("compile"))
@@ -167,10 +171,15 @@ int main(int argc, char** argv) {
 
         // -------- Postprocessing
         std::shared_ptr<toycc::ir::Scope> ir = parser.to_ir();
-        toycc::ir::PostProcessor postprocessor(ir);
-        toycc::ir::TranslationUnit unit = postprocessor();
-
+        std::shared_ptr<toycc::ir::Scope> processed_ir = toycc::ir::PostProcessor::process(ir);
         if (target_step == SequenceStep::POSTPROCESS) {
+            output_stream.get() << processed_ir->ir_code() << std::endl;
+            return 0;
+        }
+
+        // -------- Flow analysis
+        toycc::ir::TranslationUnit unit(processed_ir);
+        if (target_step == SequenceStep::FLOW) {
             output_stream.get() << unit.dot_graph() << std::endl;
             return 0;
         }

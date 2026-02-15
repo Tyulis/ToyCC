@@ -36,7 +36,7 @@ for test_source in $(find ${TESTSUITE_DIR} -iname '*.c') ; do
     NOF_TESTS_RUN=$(($NOF_TESTS_RUN + 1))
 
     case $1 in
-        --parse-ir|--process-ir)
+        --parse-ir|--process-ir|--flow)
             CMD="$CC $1 -o ${test_compiled} ${test_source}"
             echo "" >> ${TEST_LOG}
             echo ${CMD} >> ${TEST_LOG}
