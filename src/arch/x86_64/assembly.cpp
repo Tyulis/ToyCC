@@ -120,7 +120,7 @@ namespace toycc::arch::x86_64 {
                 }
 
             case Location::stack:
-                return std::format("-{}(%rbp)", frame.offset(variable));
+                return std::format("-{}(%rbp)", frame.offset(variable) + variable->type->size({}));
 
             case Location::memory:
                 return std::format("{}(%rip)", variable->name);
