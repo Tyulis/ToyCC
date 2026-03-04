@@ -10,10 +10,13 @@ namespace toycc::arch::x86_64 {
     // --------- ADDRESSOF : Necessary because a generated translation model would unnecessarily transfer the operand to the stack
     static void emit_addressof_variable(StackFrame& frame, const ir::Operand& operand, const ir::Operand& output, Location destination) {
         std::shared_ptr<ir::Declaration> variable = operand.declaration();
-        if (variable->storage & ir::StorageClass::GLOBAL)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Taking the address of a global variable is not implemented", operand.location);
+        std::unordered_set<Location> current_locations = frame.locate(operand);
 
-        frame.statement(std::format("leaq {}, {}", emit_operand(frame, operand, Location::stack), emit_operand(frame, output, destination)));
+        Location source_location = Location::stack;
+        if (variable->storage & ir::StorageClass::GLOBAL)
+            source_location = Location::memory;
+
+        frame.statement(std::format("leaq {}, {}", emit_operand(frame, operand, source_location), emit_operand(frame, output, destination)));
         move_operand(frame, output, destination);
     }
 
@@ -75,6 +78,10 @@ namespace toycc::arch::x86_64 {
         // Save caller-saved register contents
         std::deque<std::pair<Location, std::shared_ptr<ir::Declaration>>> saved_registers;
         for (Location saved_register : CALLER_SAVED_REGISTERS) {
+            // Don't save rax if there's a return value, the matcher reserved it for the output operand already and popping would overwrite the return value
+            if (statement.output.has_value() && saved_register == RETURN_VALUE_LOCATION)
+                continue;
+
             std::shared_ptr<ir::Declaration> to_save = frame.content(saved_register);
             if (to_save.get() != nullptr) {
                 frame.statement(std::format("pushq {}", emit_operand(saved_register, 8)));

@@ -12,10 +12,11 @@ namespace toycc::ir {
 
     std::shared_ptr<Scope> PostProcessor::operator() () {
         global_scope->clear_types();  // After semantic analysis, we won't need to resolve type names anymore
+        descope(global_scope);
         split_blocks(global_scope);
         split_indirections(global_scope);
         dereference(global_scope);  // Must go after splitting indirections and block accesses
-        descope(global_scope);
+        extract_strings(global_scope);
         return global_scope;
     }
 }

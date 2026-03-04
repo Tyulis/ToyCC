@@ -41,8 +41,10 @@ namespace toycc::ir {
             Operand make_union_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);
             Operand merge_offsets(Operand flat_offset, Operand offset, std::shared_ptr<Scope> scope);
 
-            // -------- Control flow analysis -> ir/postprocessor/flow_analysis.cpp
-            TranslationUnit analyse_flow(std::shared_ptr<Scope> global_scope);
+            // -------- Extract string literals as global constants -> ir/postprocessor/strings.cpp
+            void extract_strings(std::shared_ptr<Scope> global_scope);
+            std::unordered_map<std::shared_ptr<Declaration>, std::string> extract_string_literals(std::shared_ptr<Scope> scope);
+            void extract_string_literals(std::unordered_map<std::shared_ptr<Declaration>, std::string>& literals, Operand& operand);
 
             // -------- State management -> ir/postprocessor/state.cpp
             std::string anonymous_identifier();

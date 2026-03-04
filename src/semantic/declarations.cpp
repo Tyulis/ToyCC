@@ -467,6 +467,69 @@ namespace toycc::semantic {
         member.type = function_type;
     }
 
+
+    void SemanticAnalyzer::decode_abstract_declarator(Member& member, CParser::AbstractDeclaratorContext* context) {
+        if (context->vcSpecificModifer())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "VC-specific modifiers are not supported", locate(context));
+        if (!context->gccDeclaratorExtension().empty())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
+
+        member.name = anonymous_identifier();
+
+        if (context->pointer())
+            member.type = decode_pointer_spec(context->pointer(), member.type);
+
+        if (context->directAbstractDeclarator())
+            decode_direct_abstract_declarator(member, context->directAbstractDeclarator());
+    }
+
+    void SemanticAnalyzer::decode_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorContext* context) {
+        if (!context->gccDeclaratorExtension().empty())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
+
+        if (context->abstractDeclarator())
+            return decode_abstract_declarator(member, context->abstractDeclarator());
+
+        for (CParser::DirectAbstractDeclaratorExtensionContext* extension : context->directAbstractDeclaratorExtension())
+            decode_direct_abstract_declarator_extension(member, extension);
+    }
+
+    void SemanticAnalyzer::decode_direct_abstract_declarator_extension(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {
+        if (context->LeftBracket() && context->RightBracket())  // Array alternatives
+            return decode_array_direct_abstract_declarator(member, context);
+        else if (context->LeftParen() && context->RightParen())  // Function alternative
+            return decode_function_direct_abstract_declarator(member, context);
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()), locate(context));
+    }
+
+    void SemanticAnalyzer::decode_array_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {
+        if (context->Static())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Static variables as array length are not implemented", locate(context));
+        if (context->Star())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Stars in array lengths are not implemented", locate(context));
+        if (context->typeQualifierList())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Type qualifiers in array lengths are not implemented", locate(context));
+        if (!context->assignmentExpression())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
+
+        std::shared_ptr<ExpressionResult> length = decode_assignment_expression(context->assignmentExpression());
+        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length->operand());
+    }
+
+    void SemanticAnalyzer::decode_function_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {
+        if (!context->gccDeclaratorExtension().empty())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
+
+        std::shared_ptr<FunctionType> function_type = FunctionType::make(anonymous_type(), locate(context), member.type);
+        if (context->parameterTypeList())
+            function_type->parameters = decode_parameter_type_list(context->parameterTypeList());
+        // Otherwise, no parameters
+
+        member.type = function_type;
+    }
+
+
+
     std::vector<Member> SemanticAnalyzer::decode_parameter_type_list(CParser::ParameterTypeListContext* context) {
         if (context->Ellipsis())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Variadic functions are not implemented", locate(context));
@@ -501,7 +564,7 @@ namespace toycc::semantic {
         if (context->declarator())
             decode_declarator(parameter, context->declarator());
         else if (context->abstractDeclarator())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Abstract parameter declarators are not implemented", locate(context));
+            decode_abstract_declarator(parameter, context->abstractDeclarator());
         else return {};
 
         if (name.has_value())

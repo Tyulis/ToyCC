@@ -103,6 +103,57 @@ namespace toycc::semantic {
     }
 
     RValue SemanticAnalyzer::decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "String literals are not implemented", locate(terminals[0]));
+        std::string value;
+        for (antlr4::tree::TerminalNode* terminal : terminals)
+            value += decode_string_part(terminal);
+
+        CodeLocation location = locate(terminals[0]);
+        Constant array_length = Constant {IntegerConstant(value.size() + 1), location, literal_integer_type};
+
+        // String literals are technically char* (not const) even though writing to them is undefined behaviour
+        std::shared_ptr<Type> literal_string_type = ArrayType::make(anonymous_type(), location, character_type, array_length);
+        return Constant {value, locate(terminals[0]), literal_string_type};
+    }
+
+    std::string SemanticAnalyzer::decode_string_part(antlr4::tree::TerminalNode* terminal) {
+        std::string code = terminal->getText();
+
+        std::string quote = "";
+        std::string content = "";
+
+        enum {QUOTE, STRING, ESCAPE} state = QUOTE;
+        for (char character : code) {
+            switch (state) {
+                case QUOTE: {
+                    if (character == '"')
+                        state = STRING;
+                    else if (!WHITESPACE.contains(character))
+                        quote += character;
+                    break;
+                }
+
+                case STRING: {
+                    if (character == '\\') {
+                        content += character;
+                        state = ESCAPE;
+                    } else if (character == '"') {
+                        state = QUOTE;
+                    } else {
+                        content += character;
+                    }
+                    break;
+                }
+
+                case ESCAPE: {
+                    content += character;
+                    state = QUOTE;
+                }
+            }
+        }
+
+        if (!quote.empty())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Wide character strings are not implemented", locate(terminal));
+
+        return unescape(content);
     }
 }

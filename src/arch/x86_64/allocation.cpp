@@ -116,8 +116,12 @@ namespace toycc::arch::x86_64 {
             copy(live, Location::stack);
         }
 
-        for (std::shared_ptr<ir::Declaration> global : block->used_globals)
-            copy(global, Location::memory);
+        for (std::shared_ptr<ir::Declaration> global : block->used_globals) {
+            if (global->type->dequalify()->category == ir::TypeCategory::FUNCTION)
+                copy(global, Location::constant);
+            else
+                copy(global, Location::memory);
+        }
     }
 
     std::string StackFrame::str() const {

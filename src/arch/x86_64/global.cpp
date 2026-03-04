@@ -175,7 +175,7 @@ namespace toycc::arch::x86_64 {
                 break;
 
             case ir::Constant::STRING:
-                output.directive(std::format(".ascii \"{}\"", value.string()));
+                output.directive(std::format(".string \"{}\"", value.string()));
                 break;
         }
     }

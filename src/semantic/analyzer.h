@@ -30,6 +30,7 @@ namespace toycc::semantic {
             std::shared_ptr<Type> void_type;
             std::shared_ptr<Type> enum_underlying_type;
             std::shared_ptr<Type> boolean_type;
+            std::shared_ptr<Type> character_type;
             std::shared_ptr<Type> literal_character_type;
             std::shared_ptr<Type> literal_integer_type;
             std::shared_ptr<Type> literal_floating_type;
@@ -125,6 +126,13 @@ namespace toycc::semantic {
             void decode_direct_declarator_extension(Member& member, CParser::DirectDeclaratorExtensionContext* context);
             void decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorExtensionContext* context);
             void decode_function_direct_declarator(Member& spec, CParser::DirectDeclaratorExtensionContext* context);
+
+            void decode_abstract_declarator(Member& member, CParser::AbstractDeclaratorContext* context);
+            void decode_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorContext* context);
+            void decode_direct_abstract_declarator_extension(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context);
+            void decode_array_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context);
+            void decode_function_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context);
+
             std::vector<Member> decode_parameter_type_list(CParser::ParameterTypeListContext* context);
             std::vector<Member> decode_parameter_list(CParser::ParameterListContext* context);
             std::optional<Member> decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
@@ -180,6 +188,7 @@ namespace toycc::semantic {
             RValue decode_integer_constant(antlr4::tree::TerminalNode* terminal);
             RValue decode_predefined_constant(CParser::PredefinedConstantContext* context);
             RValue decode_string_literal(std::vector<antlr4::tree::TerminalNode*> terminals);
+            std::string decode_string_part(antlr4::tree::TerminalNode* terminal);
 
             // -------- Convenience class to make temporaries of a given type only when necessary -> semantic/temporarygenerator.cpp
             class TemporaryGenerator {

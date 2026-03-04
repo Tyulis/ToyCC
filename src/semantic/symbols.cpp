@@ -12,8 +12,8 @@ namespace toycc::semantic {
         void_type = current_scope()->add_type(std::make_shared<Type> (TypeCategory::VOID, std::string("void"), BUILTIN_LOCATION));
         boolean_type = current_scope()->add_type(std::make_shared<BooleanType> ("bool", BUILTIN_LOCATION, 8 * arch::DATAMODEL->bool_size(), 8 * arch::DATAMODEL->bool_alignment()));
 
-        std::shared_ptr<Type> char_type, int_type, double_type;
-        char_type = add_integer_type("signed char", true,  arch::DATAMODEL->char_size(),        arch::DATAMODEL->char_alignment());
+        std::shared_ptr<Type> int_type, double_type;
+        character_type = add_integer_type("signed char", true,  arch::DATAMODEL->char_size(),        arch::DATAMODEL->char_alignment());
         add_integer_type("unsigned char",           false, arch::DATAMODEL->char_size(),        arch::DATAMODEL->char_alignment());
         add_integer_type("signed short int",        true,  arch::DATAMODEL->short_size(),       arch::DATAMODEL->short_alignment());
         add_integer_type("unsigned short int",      false, arch::DATAMODEL->short_size(),       arch::DATAMODEL->short_alignment());
@@ -27,7 +27,7 @@ namespace toycc::semantic {
         double_type = add_floating_point_type("double",    arch::DATAMODEL->double_size(),      arch::DATAMODEL->double_alignment());
         add_floating_point_type("long double",             arch::DATAMODEL->long_double_size(), arch::DATAMODEL->long_double_alignment());
 
-        literal_character_type = QualifiedType::make("literal char", BUILTIN_LOCATION, char_type, TypeQualifier::CONST);
+        literal_character_type = QualifiedType::make("literal char", BUILTIN_LOCATION, character_type, TypeQualifier::CONST);
         enum_underlying_type = literal_integer_type = QualifiedType::make("literal int", BUILTIN_LOCATION, int_type, TypeQualifier::CONST);
         literal_floating_type = QualifiedType::make("literal double", BUILTIN_LOCATION, double_type, TypeQualifier::CONST);
         void_pointer_type = PointerType::make("void pointer", BUILTIN_LOCATION, void_type);

@@ -51,9 +51,16 @@ namespace toycc::semantic {
 
         if (destination->category == TypeCategory::POINTER) {
             if      (source->category == TypeCategory::POINTER)  return ConversionValidity::EXPLICIT;  // Only implicit when it's the same pointer type
-            else if (source->category == TypeCategory::ARRAY)    return ConversionValidity::EXPLICIT;
             else if (source->category == TypeCategory::INTEGER)  return ConversionValidity::EXPLICIT;
-            else return ConversionValidity::INVALID;
+            else if (source->category == TypeCategory::ARRAY) {
+                std::shared_ptr<PointerType> destination_pointer = std::static_pointer_cast<PointerType> (destination);
+                std::shared_ptr<ArrayType> source_array = std::static_pointer_cast<ArrayType> (source);
+
+                if (*source_array->element_type == *destination_pointer->referenced_type)
+                    return ConversionValidity::IMPLICIT;
+                else
+                    return ConversionValidity::INVALID;
+            } else return ConversionValidity::INVALID;
         }
 
         else if (destination->category == TypeCategory::FLOAT) {
@@ -241,15 +248,23 @@ namespace toycc::semantic {
                                                  CodeLocation location, SemanticAnalyzer::TemporaryGenerator destination_generator)
     {
         switch (source_type->category) {
-            case TypeCategory::ARRAY:  // Those are just pointers, nothing to do
+            case TypeCategory::ARRAY: {
+                // Point to the beginning of the array
+                std::shared_ptr<Declaration> pointer = destination_generator();
+                source.indices.push_back(make_constant_zero(TypeCategory::INTEGER, pointer->location));
+                emit(Statement::make_addressof(pointer->location, source, pointer));
+                return pointer;
+            }
+
             case TypeCategory::POINTER:
                 return source;
 
-            case TypeCategory::INTEGER:
+            case TypeCategory::INTEGER: {
                 if (source_type->size(location) == destination_type->size(location))
                     return source;
                 else
                     return emit_copy_conversion(destination_type, source, location, destination_generator);
+            }
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
         }

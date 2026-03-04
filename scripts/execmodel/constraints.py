@@ -149,6 +149,11 @@ def parse_constraint_anyof(type_names: list[str], context: ConstraintContext) ->
         return context.get_type(type_names)
     return Constraint(ConstraintType.DISJUNCTION, frozenset(context.get_type(name) for name in type_names))
 
+def parse_constraint_allof(type_names: list[str], context: ConstraintContext) -> Constraint:
+    if isinstance(type_names, str):
+        return context.get_type(type_names)
+    return Constraint(ConstraintType.CONJUNCTION, frozenset(context.get_type(name) for name in type_names))
+
 def parse_constraint_storage(storages: str|list[str], context: ConstraintContext) -> Constraint:
     if isinstance(storages, str):
         return Constraint(ConstraintType.STORAGE, storages)
@@ -171,6 +176,7 @@ def parse_constraint_expression(expression, context: ConstraintContext) -> Const
                          "size"      : parse_constraint_size,
                          "value_bits": parse_constraint_value_bits,
                          "anyof"     : parse_constraint_anyof,
+                         "allof"     : parse_constraint_allof,
                          "storage"   : parse_constraint_storage,
                          "signed"    : parse_constraint_signed,
         }[operator](value, context)

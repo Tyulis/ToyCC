@@ -590,16 +590,15 @@ abstractDeclarator
 // ISO C: direct-abstract-declarator (6.7.8)
 directAbstractDeclarator
     : '(' abstractDeclarator ')' gccDeclaratorExtension*
-    | '[' typeQualifierList? assignmentExpression? ']'
+    | directAbstractDeclaratorExtension+
+    ;
+
+directAbstractDeclaratorExtension
+    : '[' typeQualifierList? assignmentExpression? ']'
     | '[' 'static' typeQualifierList? assignmentExpression ']'
     | '[' typeQualifierList 'static' assignmentExpression ']'
     | '[' '*' ']'
     | '(' parameterTypeList ')' gccDeclaratorExtension*
-    | directAbstractDeclarator '[' typeQualifierList? assignmentExpression? ']'
-    | directAbstractDeclarator '[' 'static' typeQualifierList? assignmentExpression ']'
-    | directAbstractDeclarator '[' typeQualifierList 'static' assignmentExpression ']'
-    | directAbstractDeclarator '[' '*' ']'
-    | directAbstractDeclarator '(' parameterTypeList ')' gccDeclaratorExtension*
     ;
 
 // ISO C: array-abstract-declarator (6.7.8) - No ANTLR4 rule

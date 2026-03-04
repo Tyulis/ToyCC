@@ -106,6 +106,7 @@ add_executable(${PROJECT_NAME}
 	src/ir/postprocessor/exports.cpp
 	src/ir/postprocessor/indirection.cpp
 	src/ir/postprocessor/state.cpp
+	src/ir/postprocessor/strings.cpp
 
 	src/parser/CParserBase.cpp
 	src/parser/SymbolTable.cpp

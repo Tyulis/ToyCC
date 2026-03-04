@@ -151,11 +151,13 @@ namespace toycc::arch::x86_64 {
             for (const ir::DependencyGraph::Edge& edge : graph.out_edges(statement)) {
                 if (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT) {
                     std::shared_ptr<ir::Declaration> variable = edge.exit->declaration();
-                    if (variable->storage & ir::StorageClass::GLOBAL)
-                        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Flushing global variable outputs is not supported", statement->statement().location);
-
-                    if (!frame.locate(variable).contains(Location::stack))
+                    std::unordered_set<Location> current_locations = frame.locate(variable);
+                    if (variable->storage & ir::StorageClass::GLOBAL) {
+                        if (!(current_locations.contains(Location::memory) || current_locations.contains(Location::constant)))
+                            transfer(frame, edge.exit->declaration(), Location::memory);
+                    } else if (!current_locations.contains(Location::stack)) {
                         transfer(frame, edge.exit->declaration(), Location::stack);
+                    }
                 }
             }
 
@@ -202,7 +204,7 @@ namespace toycc::arch::x86_64 {
     // After any statement, flush the global variables back to memory
     void CodeGenerator::flush_globals(StackFrame& frame) {
         for (std::shared_ptr<ir::Declaration> variable : frame.allocated_variables())
-            if (variable->storage & ir::StorageClass::GLOBAL && !frame.locate(variable).contains(Location::memory))
+            if (variable->storage & ir::StorageClass::GLOBAL && variable->type->storage_category() != ir::TypeCategory::FUNCTION && !frame.locate(variable).contains(Location::memory))
                 transfer(frame, variable, Location::memory);
     }
 }
