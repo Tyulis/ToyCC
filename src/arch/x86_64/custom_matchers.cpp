@@ -9,7 +9,7 @@ namespace toycc::arch::x86_64 {
     std::optional<TranslationMatch> match_call(const StackFrame& frame, const ir::DependencyGraph&, const GroupMatch& group_match) {
         const ir::Statement& statement = group_match.statements[0]->statement();
         const ir::Operand& function = statement.inputs[0];
-        if (function.type()->dequalify()->category != ir::TypeCategory::FUNCTION)
+        if (function.type()->storage_category() != ir::TypeCategory::FUNCTION)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempting to call an operand that is not a function", function.location);
 
         StatementMatch statement_match = {.input = {{OperandMatch::OK, {Location::constant}}}, .output = {}, .is_inout = false};
@@ -24,7 +24,7 @@ namespace toycc::arch::x86_64 {
         size_t float_argument_index = 0;
         for (auto it = statement.inputs.begin() + 1; it != statement.inputs.end(); it++) {
             const ir::Operand operand = *it;
-            const ir::TypeCategory operand_type = operand.type()->dequalify()->category;
+            const ir::TypeCategory operand_type = operand.type()->storage_category();
             if (operand_type == ir::TypeCategory::INTEGER || operand_type == ir::TypeCategory::BOOL) {
                 if (integer_argument_index >= INTEGER_REGISTER_ARGUMENTS.size())
                     throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Function calls with more than {} integer arguments are not implemented", INTEGER_REGISTER_ARGUMENTS.size()), statement.location);

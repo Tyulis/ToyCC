@@ -12,19 +12,39 @@
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
+    enum IdentifierType {
+        DIRECT,   // Not dereferenced
+        POINTER,  // Dereferenced as a pointer
+        BLOCK,    // Dereferenced as a block (array, struct, ...)
+    };
+
+    static inline IdentifierType to_identifier_type(ir::TypeCategory category) {
+        switch (category) {
+            case ir::TypeCategory::POINTER:  return IdentifierType::POINTER;
+            case ir::TypeCategory::ARRAY:    return IdentifierType::BLOCK;
+            case ir::TypeCategory::STRUCT:   return IdentifierType::BLOCK;
+            case ir::TypeCategory::UNION:    return IdentifierType::BLOCK;
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to take the indirect identifier type for a direct type category");
+        }
+    }
+
     struct StatementOperandIdentifier {
         bool is_input;
-        bool is_pointer;
+        IdentifierType type;
         size_t index;
 
         bool operator== (const StatementOperandIdentifier& rhs) const {
-            return is_input == rhs.is_input && is_pointer == rhs.is_pointer && index == rhs.index;
+            return is_input == rhs.is_input && type == rhs.type && index == rhs.index;
         }
     };
 
     std::ostream& operator<< (std::ostream& stream, const StatementOperandIdentifier& id) {
-        if (id.is_pointer)
-            stream << "ptr ";
+        switch (id.type) {
+            case IdentifierType::DIRECT:                     break;
+            case IdentifierType::POINTER: stream << "ptr ";  break;
+            case IdentifierType::BLOCK:   stream << "blk ";  break;
+        }
+
         if (id.is_input)
             stream << "input[" << id.index << "]";
         else
@@ -54,6 +74,13 @@ namespace toycc::arch::x86_64 {
 
         bool operator== (const TranslationOperandIdentifier& rhs) const {
             return id == rhs.id;
+        }
+
+        IdentifierType type() const {
+            if (std::holds_alternative<Allocation>(id))
+                return IdentifierType::DIRECT;
+            else
+                return std::get<Statement>(id).id.type;
         }
     };
 
@@ -130,7 +157,7 @@ namespace toycc::arch::x86_64 {
     }
 
     static void set_operand_match(StatementMatch& match, const StatementOperandIdentifier& id, const OperandMatch& operand_match) {
-        if (id.is_pointer)
+        if (id.type != IdentifierType::DIRECT)
             return;
 
         if (id.is_input)
@@ -151,10 +178,10 @@ namespace toycc::arch::x86_64 {
 
     static ir::Operand get_operand(const StatementMatch& statement_match, const ir::Statement& statement, const StatementOperandIdentifier& id) {
         const ir::Operand& base_operand = (id.is_input ? statement.inputs[statement_match.input[id.index].input_index.value_or(id.index)] : statement.output.value());
-        if (id.is_pointer)
-            return base_operand.pointer();
-        else
+        if (id.type == IdentifierType::DIRECT)
             return base_operand;
+        else
+            return base_operand.pointer();
     }
 
     static ir::Operand get_operand(const TranslationMatch& match, const TranslationOperandIdentifier& id) {
@@ -167,10 +194,10 @@ namespace toycc::arch::x86_64 {
 
     static void set_operand(ir::Statement& statement, const StatementMatch& statement_match, const StatementOperandIdentifier& id, ir::Operand operand) {
         ir::Operand& target = (id.is_input ? statement.inputs[statement_match.input[id.index].input_index.value_or(id.index)] : statement.output.value());
-        if (id.is_pointer)
-            target.value = operand.value;
-        else
+        if (id.type == IdentifierType::DIRECT)
             target = operand;
+        else
+            target.value = operand.value;
     }
 
     static void set_operand(TranslationMatch& match, const TranslationOperandIdentifier& id, const ir::Operand& operand) {
@@ -184,7 +211,7 @@ namespace toycc::arch::x86_64 {
         if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id))
             return false;
         const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
-        return !statement_id.id.is_input && !statement_id.id.is_pointer;
+        return !statement_id.id.is_input && statement_id.id.type == IdentifierType::DIRECT;
     }
 
     static bool has_output(const AllocatedValue& value) {
@@ -197,7 +224,7 @@ namespace toycc::arch::x86_64 {
     static bool is_pointer(const TranslationOperandIdentifier& id) {
         if (std::holds_alternative<TranslationOperandIdentifier::Allocation>(id.id))
             return false;
-        return std::get<TranslationOperandIdentifier::Statement>(id.id).id.is_pointer;
+        return std::get<TranslationOperandIdentifier::Statement>(id.id).id.type == IdentifierType::POINTER;
     }
 
     static bool has_pointer(const AllocatedValue& value) {
@@ -216,7 +243,7 @@ namespace std {
 
     template<> struct hash<StatementOperandIdentifier> {
         size_t operator() (const StatementOperandIdentifier& key) const {
-            return (key.index << 2) | (key.is_pointer << 1) | key.is_input;
+            return (key.index << 3) | (key.type << 1) | key.is_input;
         }
     };
 
@@ -439,14 +466,14 @@ namespace toycc::arch::x86_64 {
                 const ir::Operand& operand = statement.inputs[input_operand_index];
                 AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
-                                                      .id = {.is_input = true, .is_pointer = false, .index = input_index}}}}};
+                                                      .id = {.is_input = true, .type = IdentifierType::DIRECT, .index = input_index}}}}};
                 weights.add(value);
 
                 if (operand.is_dereference()) {
                     ir::Operand pointer = operand.pointer();
                     AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
                                                     .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
-                                                                  .id = {.is_input = true, .is_pointer = true, .index = input_index}}}}};
+                                                                  .id = {.is_input = true, .type = to_identifier_type(pointer.base_type()->category), .index = input_index}}}}};
                     weights.add(pointer_value);
                 }
             }
@@ -456,14 +483,14 @@ namespace toycc::arch::x86_64 {
                 const ir::Operand& operand = statement.output.value();
                 AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
-                                                      .id = {.is_input = false, .is_pointer = false, .index = {}}}}}};
+                                                      .id = {.is_input = false, .type = IdentifierType::DIRECT, .index = {}}}}}};
                 weights.add(value);
 
                 if (operand.is_dereference()) {
                     ir::Operand pointer = operand.pointer();
                     AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
                                                     .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
-                                                                                                                 .id = {.is_input = false, .is_pointer = true, .index = {}}}}}};
+                                                                                                                 .id = {.is_input = false, .type = to_identifier_type(pointer.base_type()->category), .index = {}}}}}};
                     weights.add(pointer_value);
                 }
             }
@@ -472,10 +499,11 @@ namespace toycc::arch::x86_64 {
         for (const auto& [value, row] : weights.value_rows) {
             std::unordered_set<Location> allowed_locations = toycc::execmodel::x86_64::ALL_LOCATIONS;
             for (const TranslationOperandIdentifier& id : value.operands) {
-                if (is_pointer(id))
-                    allowed_locations = unordered_set_intersection(allowed_locations, POINTER_LOCATIONS);
-                else
-                    allowed_locations = unordered_set_intersection(allowed_locations, get_operand_match(match, id).locations);
+                switch (id.type()) {
+                    case IdentifierType::DIRECT:   allowed_locations = unordered_set_intersection(allowed_locations, get_operand_match(match, id).locations);  break;
+                    case IdentifierType::POINTER:  allowed_locations = unordered_set_intersection(allowed_locations, POINTER_LOCATIONS);                       break;
+                    case IdentifierType::BLOCK:    allowed_locations = unordered_set_intersection(allowed_locations, LOCATION_SETS.at(LocationType::MEMORY));  break;
+                }
             }
 
             if (allowed_locations.empty())
@@ -715,7 +743,10 @@ namespace toycc::arch::x86_64 {
         return allocation;
     }
 
-    // Sort allocations in order of transfer emission : pointers first, then flushes, then dereferences and normal transfers
+    // Sort allocations in order of transfer emission :
+    // - Pointers and flushes : pointers are needed to transfer their dereferences, and flushed variables may be referenced by dereferences
+    // - Dereferences
+    // - Then ormal transfers
     static void sort_transfers(std::vector<std::pair<AllocatedValue, SpecificLocation>>& allocation_map) {
         auto operand_comparator = [](const TranslationOperandIdentifier& left, const TranslationOperandIdentifier& right) {
             if (is_pointer(left))
@@ -732,9 +763,10 @@ namespace toycc::arch::x86_64 {
             const AllocatedValue& left  = left_pair.first;
             const AllocatedValue& right = right_pair.first;
 
-            if (has_pointer(left))
+            // True is left first, false is right first
+            if (has_pointer(left) || left.is_flush)
                 return true;
-            if (has_pointer(right))
+            if (has_pointer(right) || right.is_flush)
                 return false;
             if (left.is_flush)
                 return true;
@@ -786,14 +818,17 @@ namespace toycc::arch::x86_64 {
                     }
                 }
             }
+        }
 
-            // For indirect flushes that are not required as inputs, remove possible other locations
+        // For indirect flushes that are not required as inputs, remove possible other
+        // Do this in a separate loop to avoid ordering problems : a variable may have both an allocation a flush
+        // For instance, (x: di -> di) and (flush x : di -> stack)
+        // If the flush goes through first, the sequence should be (di --flush--> di,stack --alloc--> di,stack --move--> stack)
+        // not (di --flush--> di,stack --move--> stack --alloc--> di,stack) which would trigger an unnecessary transfer and leave `di` valid even though it's not because of the flush
+        for (const auto& [value, specific_location] : allocation_map) {
             if (value.is_flush && indirects.contains(value.variable) && !reads.contains(value.variable))
                 frame.move(value.variable, specific_location.location);
         }
-
-        for (std::shared_ptr<ir::Declaration> variable : unordered_set_difference(indirects, reads))
-            frame.move(variable, Location::stack);
 
         if (toycc::config::debug::with_translation_trace) {
             std::cerr << "        Allocated translation match :\n";

@@ -23,20 +23,28 @@ namespace toycc::arch::x86_64 {
         if (index_constant.tag() != ir::Constant::INTEGER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Array indices must be integer constants", operand.location);
 
-        const size_t index = static_cast<size_t>(index_constant.integer());
+        const ssize_t offset = static_cast<ssize_t>(index_constant.integer());
 
-        std::optional<Location> pointer_location;
+        std::optional<Location> register_location;
+        std::optional<Location> banked_location;
         for (Location location : frame.locate(pointer)) {
-            if (!execmodel::x86_64::BANKED_LOCATIONS.contains(location)) {
-                pointer_location = location;
-                break;
-            }
+            if (execmodel::x86_64::BANKED_LOCATIONS.contains(location))
+                banked_location = location;
+            else
+                register_location = location;
         }
 
-        if (!pointer_location.has_value())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The pointer has no register location", operand.location);
+        if (register_location.has_value()) {  // The pointer is in registers -> trivial case, simple LEA for any case
+            frame.statement(std::format("leaq {}({}), {}", offset, emit_operand(frame, pointer, register_location.value()), location_code(frame, output.declaration(), destination)));
+        } else if (banked_location.has_value() && banked_location.value() == Location::stack) {  // The location is on the stack, a simple LEA with a specific offset works
+            frame.statement(std::format("leaq {}(%rbp), {}", stack_offset(frame, pointer) + offset, location_code(frame, output.declaration(), destination)));
+        } else if (banked_location.has_value() && banked_location.value() == Location::memory) {  // The location is elsewhere in memory, this requires a LEA then possibly an explicit offset
+            std::string output_operand = location_code(frame, output.declaration(), destination);
+            frame.statement(std::format("leaq {}, {}", emit_operand(frame, pointer, banked_location.value()), output_operand));
+            if (offset > 0)
+                frame.statement(std::format("addq ${}, {}", offset, output_operand));
+        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The pointer has no valid location", operand.location);
 
-        frame.statement(std::format("leaq {}({}), {}", index, emit_operand(frame, pointer, pointer_location.value()), location_code(frame, output.declaration(), destination)));
         move_operand(frame, output, destination);
     }
 

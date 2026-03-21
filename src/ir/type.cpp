@@ -97,8 +97,8 @@ namespace toycc::ir {
         return std::make_shared<Type> (*this);
     }
 
-    std::shared_ptr<Type> Type::storage_type() const {
-        return std::make_shared<Type> (*this);
+    TypeCategory Type::storage_category() const {
+        return category;
     }
 
     TypeIdentifier Type::identifier() const {
@@ -172,9 +172,6 @@ namespace toycc::ir {
         return std::make_shared<BooleanType> (*this);
     }
 
-    std::shared_ptr<Type> BooleanType::storage_type() const {
-        return std::make_shared<BooleanType> (*this);
-    }
 
     // -------- IntegerType
     IntegerType::IntegerType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits, bool is_signed)
@@ -196,19 +193,12 @@ namespace toycc::ir {
         return std::make_shared<IntegerType> (*this);
     }
 
-    std::shared_ptr<Type> IntegerType::storage_type() const {
-        return std::make_shared<IntegerType> (*this);
-    }
 
     // -------- FloatingPointType
     FloatingPointType::FloatingPointType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits)
         : PrimitiveType(TypeCategory::FLOAT, name, location, size_bits, alignment_bits) {}
 
     std::shared_ptr<Type> FloatingPointType::dequalify() const {
-        return std::make_shared<FloatingPointType> (*this);
-    }
-
-    std::shared_ptr<Type> FloatingPointType::storage_type() const {
         return std::make_shared<FloatingPointType> (*this);
     }
 }

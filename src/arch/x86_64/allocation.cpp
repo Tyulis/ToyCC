@@ -23,7 +23,7 @@ namespace toycc::arch::x86_64 {
         else if (operand.is_label())
             return {Location::constant};
         else if (operand.is_variable()) {
-            if (operand.type()->dequalify()->category == ir::TypeCategory::FUNCTION)
+            if (operand.type()->storage_category() == ir::TypeCategory::FUNCTION)
                 return {Location::constant};
             else
                 return ir::StackFrame<Location>::locate(operand.declaration());
@@ -87,7 +87,7 @@ namespace toycc::arch::x86_64 {
         size_t integer_index = 0;
 
         for (std::shared_ptr<ir::Declaration> parameter : procedure.parameters) {
-            switch (parameter->type->category) {
+            switch (parameter->type->storage_category()) {
                 case ir::TypeCategory::BOOL:
                 case ir::TypeCategory::INTEGER:
                     if (integer_index < INTEGER_REGISTER_ARGUMENTS.size())
@@ -108,7 +108,7 @@ namespace toycc::arch::x86_64 {
             label(current_block->label->name);
 
         for (std::shared_ptr<ir::Declaration> live : block->live_on_entry()) {
-            if (live->type->dequalify()->category == ir::TypeCategory::FUNCTION)
+            if (live->type->storage_category() == ir::TypeCategory::FUNCTION)
                 continue;
             if (live->storage & ir::StorageClass::GLOBAL)
                 continue;
@@ -125,7 +125,7 @@ namespace toycc::arch::x86_64 {
 
         if (toycc::config::debug::with_comment_trace)
             for (const auto& [variable, offset] : stack_offsets)
-                code.comment(std::format("-{}(%rbp) : {}", offset, variable->name));
+                code.comment(std::format("{}(%rbp) : {}", -static_cast<ssize_t>(offset + variable->type->size({})), variable->name));
 
         // Emit the entry block : setup the stack and push the callee-saved registers
         code.statement("pushq %rbp");

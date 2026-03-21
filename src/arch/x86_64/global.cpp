@@ -94,7 +94,7 @@ namespace toycc::arch::x86_64 {
         for (const auto& [declaration, initializer] : globals) {
             if (declaration->storage & ir::StorageClass::EXTERN)
                 continue;
-            if (declaration->type->dequalify()->category == ir::TypeCategory::FUNCTION)
+            if (declaration->type->storage_category() == ir::TypeCategory::FUNCTION)
                 continue;
 
             if (initializer.has_value()) {

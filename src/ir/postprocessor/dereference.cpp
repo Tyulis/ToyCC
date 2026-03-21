@@ -42,12 +42,12 @@ namespace toycc::ir {
         }
 
         if (flat_offset.is_constant()) {
-            return Operand {operand.value, operand.location, {flat_offset}, operand.type()};
+            return Operand {operand.value, operand.location, {flat_offset}};
         } else {
             // Variable offset -> explicitely add it to the pointer before dereferencing
             std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, PointerType::make(anonymous_type(), operand.location, pointer_type), operand.location);
             scope->add_statement(Statement::make_binary_operation(operand.location, StatementTag::ADD, operand, flat_offset, offset_pointer));
-            return Operand {offset_pointer, operand.location, {Constant {IntegerConstant(0), operand.location, offset_type}}, operand.type()};
+            return Operand {offset_pointer, operand.location, {Constant {IntegerConstant(0), operand.location, offset_type}}};
         }
     }
 

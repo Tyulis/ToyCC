@@ -42,10 +42,6 @@ namespace toycc::ir {
     // -------- Member
     Member::Member(std::string name, std::shared_ptr<Type> type, CodeLocation location) : name(name), type(type), location(location) {}
 
-    Member Member::to_storage_type() const {
-        return {name, type->storage_type(), location};
-    }
-
     std::string Member::ir_code(std::unordered_set<const Type*> parents) const {
         return std::format("{} {}", type->ir_code(parents), name);
     }
@@ -166,8 +162,6 @@ namespace toycc::ir {
     Operand::Operand(std::string label, CodeLocation location, std::vector<Operand> indices) : value(label), location(location), indices(indices) {}
     Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices)
             : value(value), location(location), indices(indices) {}
-    Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices, std::shared_ptr<Type> dereference_type)
-            : value(value), location(location), indices(indices), dereference_type(dereference_type) {}
 
     bool Operand::is_label() const {
         return has_label_base() && !is_dereference();
@@ -204,9 +198,6 @@ namespace toycc::ir {
     }
 
     std::shared_ptr<Type> Operand::type() const {
-        if (!indices.empty() && dereference_type.get() != nullptr)
-            return dereference_type;
-
         std::shared_ptr<Type> type = base_type();
         for (const Operand& index : indices)
             type = type->dereference(index.as_index(), location);

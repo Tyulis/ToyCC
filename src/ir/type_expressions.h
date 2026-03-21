@@ -23,7 +23,7 @@ namespace toycc::ir {
 
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
+            virtual TypeCategory storage_category() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
@@ -45,7 +45,6 @@ namespace toycc::ir {
 
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
@@ -63,7 +62,6 @@ namespace toycc::ir {
             bool operator== (const CompoundType& rhs) const;
 
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
@@ -111,7 +109,7 @@ namespace toycc::ir {
             bool operator== (const EnumType& rhs) const;
 
             virtual std::shared_ptr<Type> dequalify() const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
+            virtual TypeCategory storage_category() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
@@ -132,7 +130,6 @@ namespace toycc::ir {
             bool operator== (const FunctionType& rhs) const;
 
             virtual std::shared_ptr<Type> dequalify() const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
@@ -148,6 +145,7 @@ namespace toycc::ir {
             virtual bool is_const() const override;
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
+            virtual TypeCategory storage_category() const override;
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const TypeModifier& rhs) const;
 
@@ -168,7 +166,6 @@ namespace toycc::ir {
 
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
@@ -188,7 +185,6 @@ namespace toycc::ir {
 
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
@@ -215,7 +211,6 @@ namespace toycc::ir {
 
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
-            virtual std::shared_ptr<Type> storage_type() const override;
 
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 

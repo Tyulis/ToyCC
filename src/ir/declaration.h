@@ -50,7 +50,6 @@ namespace toycc::ir {
         Member() = default;
         Member(std::string name, std::shared_ptr<Type> type, CodeLocation location);
 
-        Member to_storage_type() const;
         std::string ir_code(std::unordered_set<const Type*> parents = {}) const;
     };
 
@@ -96,7 +95,6 @@ namespace toycc::ir {
         std::variant<std::shared_ptr<Declaration>, Constant, std::string> value;
         CodeLocation location;
         std::vector<Operand> indices;
-        std::shared_ptr<Type> dereference_type = nullptr;  // Pre-resolved dereference type, set in the postprocessing > dereference step because pointer types don't exist after it
 
         Operand(const Constant& constant, std::vector<Operand> indices = {});
         Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices = {});
@@ -104,7 +102,6 @@ namespace toycc::ir {
         Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices = {});
         Operand(std::string label, CodeLocation location, std::vector<Operand> indices = {});
         Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices = {});
-        Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices, std::shared_ptr<Type> dereference_type);
 
         bool is_label() const;
         bool is_constant() const;

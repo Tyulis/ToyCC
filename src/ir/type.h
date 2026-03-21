@@ -13,7 +13,8 @@ namespace toycc::ir {
     };
 
     enum class TypeCategory {
-        VOID, BUILTIN, LABEL, BOOL, INTEGER, FLOAT, POINTER, ARRAY, STRUCT, UNION, ENUM, FUNCTION, BITFIELD, QUALIFIED, ALIGNED,
+        /* Valid storage_category() */ BOOL, INTEGER, FLOAT, ARRAY, STRUCT, UNION, FUNCTION,
+        /* Others                   */ VOID, BUILTIN, LABEL, POINTER, ENUM, BITFIELD, QUALIFIED, ALIGNED,
     };
 
     struct TypeIdentifier {
@@ -39,7 +40,7 @@ namespace toycc::ir {
 
         virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const;  // Type emitted by a dereference of this type. Defaults to a throw.
         virtual std::shared_ptr<Type> dequalify() const;                         // Type without modifiers
-        virtual std::shared_ptr<Type> storage_type() const;                      // Physical storage type
+        virtual TypeCategory storage_category() const;                           // Physical storage type category (ex. POINTER -> INTEGER), default to the same category
 
         TypeIdentifier identifier() const;
         bool is_arithmetic() const;
@@ -69,7 +70,6 @@ namespace toycc::ir {
         BooleanType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits);
 
         virtual std::shared_ptr<Type> dequalify() const override;
-        virtual std::shared_ptr<Type> storage_type() const override;
     };
 
     struct IntegerType : public PrimitiveType {
@@ -81,7 +81,6 @@ namespace toycc::ir {
         bool operator== (const IntegerType& rhs) const;
 
         virtual std::shared_ptr<Type> dequalify() const override;
-        virtual std::shared_ptr<Type> storage_type() const override;
 
         virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
     };
@@ -90,7 +89,6 @@ namespace toycc::ir {
         FloatingPointType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits);
 
         virtual std::shared_ptr<Type> dequalify() const override;
-        virtual std::shared_ptr<Type> storage_type() const override;
     };
 }
 

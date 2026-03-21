@@ -11,9 +11,10 @@ namespace toycc::ir {
             offset_type(std::make_shared<IntegerType>(".PToffset", BUILTIN_LOCATION, arch::DATAMODEL->pointer_size(), arch::DATAMODEL->pointer_alignment(), false)){}
 
     std::shared_ptr<Scope> PostProcessor::operator() () {
+        global_scope->clear_types();  // After semantic analysis, we won't need to resolve type names anymore
+        split_blocks(global_scope);
         split_indirections(global_scope);
-        dereference(global_scope);  // Requires semantic pointer types -> must come before `detype`
-        detype(global_scope);
+        dereference(global_scope);  // Must go after splitting indirections and block accesses
         descope(global_scope);
         return global_scope;
     }

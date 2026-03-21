@@ -28,6 +28,10 @@ namespace toycc::arch::x86_64 {
         {Location::r15,  {{1, "%r15b"}, {2, "%r15w"}, {4, "%r15d"}, {8, "%r15"}}},
     };
 
+    ssize_t stack_offset(StackFrame& frame, std::shared_ptr<ir::Declaration> variable) {
+        return -static_cast<ssize_t>(frame.offset(variable) + variable->type->size(variable->location));
+    }
+
     // -------- Intermediate allocation overload
     std::string emit_operand(Location location, size_t size) {
         switch (location) {
@@ -111,7 +115,7 @@ namespace toycc::arch::x86_64 {
             case Location::mm13:
             case Location::mm14:
             case Location::mm15:
-                switch (variable->type->dequalify()->category) {
+                switch (variable->type->storage_category()) {
                     case ir::TypeCategory::ARRAY:
                     case ir::TypeCategory::STRUCT:
                         return REGISTER_NAMES.at(location).at(DATAMODEL->pointer_size());
@@ -120,7 +124,7 @@ namespace toycc::arch::x86_64 {
                 }
 
             case Location::stack:
-                return std::format("-{}(%rbp)", frame.offset(variable) + variable->type->size({}));
+                return std::format("{}(%rbp)", stack_offset(frame, variable));
 
             case Location::memory:
                 return std::format("{}(%rip)", variable->name);
