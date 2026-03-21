@@ -196,14 +196,15 @@ namespace toycc::semantic {
             case TypeCategory::BOOL:
                 if (destination_type->size(location) == source_type->size(location) && destination_type->alignment(location) >= source_type->alignment(location))
                     return source;
-                else
-                    return emit_copy_conversion(destination_type, source, location, destination_generator);
+                else if (destination_type->size(location) >= source_type->size(location))
+                    return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::SIGN_EXTEND);
+                else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unsupported boolean -> integer conversion", location);
 
             case TypeCategory::INTEGER: {
                 std::shared_ptr<IntegerType> source_integer = std::static_pointer_cast<IntegerType>(source_type);
                 if (destination_type->is_signed == source_integer->is_signed) {
                     if (destination_type->size_bits > source_integer->size_bits)
-                        return emit_copy_conversion(destination_type, source, location, destination_generator);
+                        return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::SIGN_EXTEND);
                     else if (destination_type->size_bits == source_integer->size_bits)
                         return source;
                     else  // if (destination_primitive.primitive_size < source_primitive.primitive_size)

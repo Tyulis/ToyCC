@@ -52,11 +52,11 @@ namespace toycc::arch::x86_64 {
     void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
         std::vector<GroupMatch> entry_matches = find_entry_matches(graph, group_matches);
         if (entry_matches.empty())
-            Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No entry group matches");
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No entry group matches");
 
         std::vector<TranslationMatch> translation_matches = toycc::execmodel::x86_64::match_translations(frame, graph, entry_matches);
         if (translation_matches.empty())
-            Diagnostic diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
 
         TranslationMatch selected_match = select_translation(translation_matches);
         if (toycc::config::debug::with_comment_trace)

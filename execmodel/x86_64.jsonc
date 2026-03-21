@@ -142,6 +142,7 @@
         "FLOAT_TO_FLOAT": {"input": ["operand"],             "output": true},
         "INT_TO_FLOAT":   {"input": ["operand"],             "output": true},
         "FLOAT_TO_INT":   {"input": ["operand"],             "output": true},
+        "SIGN_EXTEND":    {"input": ["operand"],             "output": true},
 
         "MUL":            {"input": ["left", "right"],       "output": true, "commutative": true},
         "DIV":            {"input": ["left", "right"],       "output": true},
@@ -195,6 +196,10 @@
 
         // -------- COPY
         {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},
+
+        // -------- SIGN_EXTEND
+        {"ir": {"tag": "SIGN_EXTEND"}, "target": {"instruction": "MOVSX"}},
+        {"ir": {"tag": "SIGN_EXTEND"}, "target": {"instruction": "MOVSXD"}},
 
         // -------- ADDRESSOF
         // The input operand doesn't need to be in memory when the ADDRESSOF operation goes through, don't add a `location` constraint here
