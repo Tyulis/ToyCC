@@ -200,6 +200,9 @@
         // -------- BITWISE_OR
         {"ir": {"tag": "BITWISE_OR"}, "target": {"instruction": "OR"}},
 
+        // -------- BITWISE_XOR
+        {"ir": {"tag": "BITWISE_XOR"}, "target": {"instruction": "XOR"}},
+
         // -------- COPY
         {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},
 

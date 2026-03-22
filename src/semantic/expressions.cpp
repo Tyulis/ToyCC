@@ -94,10 +94,18 @@ namespace toycc::semantic {
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_exclusive_or_expression(CParser::ExclusiveOrExpressionContext* context) {
-        std::shared_ptr<ExpressionResult> result = decode_and_expression(context->andExpression()[0]);
-        if (context->andExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Exclusive OR expressions are not implemented", locate(context));
-        return result;
+        const std::vector<CParser::AndExpressionContext*> operands = context->andExpression();
+        const std::vector<antlr4::tree::TerminalNode*> operators = context->Caret();
+
+        std::shared_ptr<ExpressionResult> left = decode_and_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            std::shared_ptr<ExpressionResult> right = decode_and_expression(operands[operation_index + 1]);
+            if (left->type()->is_integral() && right->type()->is_integral())
+                left = emit_binary_operation(StatementTag::BITWISE_XOR, left, right, location);
+            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise exclusive or operator `^` is only valid on integer operands");
+        }
+        return left;
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_and_expression(CParser::AndExpressionContext* context) {
@@ -110,7 +118,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> right = decode_equality_expression(operands[operation_index + 1]);
             if (left->type()->is_integral() && right->type()->is_integral())
                 left = emit_binary_operation(StatementTag::BITWISE_AND, left, right, location);
-            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise inclusive and operator `&` is only valid on integer operands");
+            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise and operator `&` is only valid on integer operands");
         }
         return left;
     }
