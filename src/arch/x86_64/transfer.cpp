@@ -259,13 +259,6 @@ namespace toycc::arch::x86_64 {
             return false;
         return std::get<TranslationOperandIdentifier::Statement>(id.id).id.type == IdentifierType::POINTER;
     }
-
-    static bool has_pointer(const AllocatedValue& value) {
-        for (const TranslationOperandIdentifier& id : value.operands)
-            if (is_pointer(id))
-                return true;
-        return false;
-    }
 }
 
 namespace std {
@@ -777,11 +770,99 @@ namespace toycc::arch::x86_64 {
         return allocation;
     }
 
-    // Sort allocations in order of transfer emission :
-    // - Pointers and flushes : pointers are needed to transfer their dereferences, and flushed variables may be referenced by dereferences
-    // - Dereferences
-    // - Then normal transfers
-    static void sort_transfers(std::vector<std::pair<AllocatedValue, SpecificLocation>>& allocation_map) {
+    // -------- Transfer ordering
+    using TransferAllocation = std::pair<AllocatedValue, SpecificLocation>;
+    using TransferGraph = Graph<TransferAllocation>;
+
+    static void add_flush_dependencies(TransferGraph& graph, std::shared_ptr<TransferAllocation> flush) {
+        for (std::shared_ptr<TransferAllocation> dependency : graph.nodes()) {
+            const auto& [dep_value, dep_location] = *dependency;
+
+            // Flushes must be done after other transfers of their variable
+            if (flush->first.variable.get() != nullptr && dep_value.variable.get() == flush->first.variable.get() && !dep_value.is_flush)
+                graph.add_edge(dependency, flush);
+        }
+    }
+
+    static void add_direct_dependencies(TransferGraph& graph, const StackFrame& frame, std::shared_ptr<TransferAllocation> allocation, size_t) {
+        // DIRECT allocations only depend on transfers that may overwrite them
+        std::shared_ptr<ir::Declaration> variable = allocation->first.variable;
+        if (variable.get() == nullptr)
+            return;
+
+        std::unordered_set<Location> current_locations = frame.locate(variable);
+        for (std::shared_ptr<TransferAllocation> dependency : graph.nodes()) {
+            if (dependency->first.variable == variable)
+                continue;  // Skip allocations without transfers of this same allocation
+
+            const auto& [dep_value, dep_location] = *dependency;
+            if (current_locations.contains(dep_location.location)) {
+                // Write to a current register or memory location -> must go before
+                if (!toycc::execmodel::x86_64::BANKED_LOCATIONS.contains(dep_location.location) || (dep_location.value.has_value() && dep_location.value.value() == allocation->first))
+                    graph.add_edge(allocation, dependency);
+            }
+        }
+    }
+
+    static void add_dereference_dependencies(TransferGraph& graph, const StackFrame&, std::shared_ptr<TransferAllocation> allocation, size_t index) {
+        const TranslationOperandIdentifier& id = allocation->first.operands[index];
+        const TranslationOperandIdentifier::Statement& statement_id = std::get<TranslationOperandIdentifier::Statement>(id.id);
+
+        for (std::shared_ptr<TransferAllocation> dependency : graph.nodes()) {
+            // Dereferences must go after all flushes
+            if (dependency->first.is_flush) {
+                graph.add_edge(dependency, allocation);
+                continue;
+            }
+
+            for (const TranslationOperandIdentifier& dep_id : dependency->first.operands) {
+                switch (dep_id.type()) {
+                    case IdentifierType::DIRECT:
+                    case IdentifierType::DEREFERENCE:
+                        continue;
+
+                    case IdentifierType::POINTER:
+                    case IdentifierType::BLOCK: {
+                        // Dereferences must go after loading their own pointer
+                        const TranslationOperandIdentifier::Statement& dep_statement_id = std::get<TranslationOperandIdentifier::Statement>(dep_id.id);
+                        if (statement_id.index == dep_statement_id.index && statement_id.id.is_input == dep_statement_id.id.is_input && statement_id.id.index == dep_statement_id.id.index)
+                            graph.add_edge(dependency, allocation);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    static void add_pointer_dependencies(TransferGraph& graph, const StackFrame& frame, std::shared_ptr<TransferAllocation> allocation, size_t) {
+        // POINTER allocations are similar to DIRECT but they can't go after their own dereferences
+        std::shared_ptr<ir::Declaration> variable = allocation->first.variable;
+        if (variable.get() == nullptr)
+            return;
+
+        std::unordered_set<Location> current_locations = frame.locate(variable);
+        for (std::shared_ptr<TransferAllocation> dependency : graph.nodes()) {
+            if (dependency->first.variable == variable)
+                continue;  // Skip allocations without transfers of this same allocation
+
+            // To simplify things, don't generate dependencies of pointers on any dereference -> is this okay / always valid ?
+            if (std::ranges::any_of(dependency->first.operands, [](const TranslationOperandIdentifier& dep_id) { return dep_id.type() == IdentifierType::DEREFERENCE; }))
+                continue;
+
+            const auto& [dep_value, dep_location] = *dependency;
+            if (current_locations.contains(dep_location.location)) {
+                // Write to a current register or memory location -> must go before
+                if (!toycc::execmodel::x86_64::BANKED_LOCATIONS.contains(dep_location.location) || (dep_location.value.has_value() && dep_location.value.value() == allocation->first))
+                    graph.add_edge(dependency, allocation);
+            }
+        }
+    }
+
+    static void add_block_dependencies(TransferGraph& graph, const StackFrame& frame, std::shared_ptr<TransferAllocation> allocation, size_t index) {
+        add_pointer_dependencies(graph, frame, allocation, index);
+    }
+
+    static void sort_transfers(const StackFrame& frame, std::vector<std::pair<AllocatedValue, SpecificLocation>>& allocation_map) {
         auto operand_comparator = [](const TranslationOperandIdentifier& left, const TranslationOperandIdentifier& right) {
             if (is_pointer(left))
                 return true;
@@ -793,36 +874,38 @@ namespace toycc::arch::x86_64 {
         for (auto& [value, location] : allocation_map)
             std::ranges::sort(value.operands, operand_comparator);
 
-        /*// Generate a dependency graph for transfers
-        using Allocation = std::pair<AllocatedValue, SpecificLocation>;
-        using TransferGraph = Graph<Allocation>;
+        // Generate a dependency graph for transfers
         TransferGraph graph;
 
-        for (const Allocation& allocation : allocation_map)
-            graph.add_node(std::make_shared<Allocation>(allocation));
+        for (const TransferAllocation& allocation : allocation_map)
+            graph.add_node(std::make_shared<TransferAllocation>(allocation));
 
-        for (std::shared_ptr<Allocation> allocation : graph.nodes()) {
+        for (std::shared_ptr<TransferAllocation> allocation : graph.nodes()) {
             const auto& [value, location] = *allocation;
-            if (value.operands[0])
-        }*/
 
-        auto value_comparator = [](const std::pair<AllocatedValue, SpecificLocation>& left_pair, const std::pair<AllocatedValue, SpecificLocation>& right_pair) {
-            const AllocatedValue& left  = left_pair.first;
-            const AllocatedValue& right = right_pair.first;
+            if (value.is_flush)
+                add_flush_dependencies(graph, allocation);
 
-            // True is left first, false is right first
-            if (has_pointer(left) || left.is_flush)
-                return true;
-            if (has_pointer(right) || right.is_flush)
-                return false;
-            if (left.is_flush)
-                return true;
-            if (right.is_flush)
-                return false;
-            return false;
-        };
+            for (size_t index = 0; index < value.operands.size(); index++) {
+                switch (value.operands[index].type()) {
+                    case IdentifierType::DIRECT:       add_direct_dependencies     (graph, frame, allocation, index);  break;
+                    case IdentifierType::DEREFERENCE:  add_dereference_dependencies(graph, frame, allocation, index);  break;
+                    case IdentifierType::POINTER:      add_pointer_dependencies    (graph, frame, allocation, index);  break;
+                    case IdentifierType::BLOCK:        add_block_dependencies      (graph, frame, allocation, index);  break;
+                }
+            }
+        }
 
-        std::ranges::sort(allocation_map, value_comparator);
+        if (toycc::config::debug::with_translation_trace) {
+            std::cerr << "        Transfer order dependencies :\n";
+            for (TransferGraph::Edge edge : graph.edges())
+                std::cerr << "            [" << edge.entry->first << " -> " << edge.entry->second.location << "] ----> [" << edge.exit->first << " -> " << edge.exit->second.location << "]";
+        }
+
+        // Then solving the dependencies just involves a topological sort of the resulting directed acyclic graph
+        allocation_map.clear();
+        for (std::shared_ptr<TransferAllocation> node : graph.topological_sort())
+            allocation_map.push_back(*node);
     }
 
     void CodeGenerator::emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match) {
@@ -837,7 +920,7 @@ namespace toycc::arch::x86_64 {
         }
 
         std::vector<std::pair<AllocatedValue, SpecificLocation>> allocation_map = find_matching(weights);
-        sort_transfers(allocation_map);
+        sort_transfers(frame, allocation_map);
 
         if (toycc::config::debug::with_translation_trace) {
             std::cerr << "        Location matching :\n";
@@ -846,16 +929,7 @@ namespace toycc::arch::x86_64 {
         }
 
         for (const auto& [value, specific_location] : allocation_map) {
-            if (value.variable.get() != nullptr) {
-                bool is_only_output = false;
-                for (const TranslationOperandIdentifier& id : value.operands) {
-                    set_operand_match(match, id, {OperandMatch::OK, {specific_location.location}});
-                    is_only_output = is_only_output || is_output_operand(id);
-                }
-
-                if (!is_only_output)
-                    transfer(frame, value.variable, specific_location.location);
-            } else {
+            if (value.variable.get() == nullptr) {
                 for (const TranslationOperandIdentifier& id : value.operands) {
                     set_operand_match(match, id, {OperandMatch::OK, {specific_location.location}});
                     if (std::holds_alternative<TranslationOperandIdentifier::Statement>(id.id) && !is_output_operand(id)) {
@@ -864,6 +938,15 @@ namespace toycc::arch::x86_64 {
                         set_operand(match, id, operand);
                     }
                 }
+            } else {
+                bool is_only_output = false;
+                for (const TranslationOperandIdentifier& id : value.operands) {
+                    set_operand_match(match, id, {OperandMatch::OK, {specific_location.location}});
+                    is_only_output = is_only_output || is_output_operand(id);
+                }
+
+                if (!is_only_output)
+                    transfer(frame, value.variable, specific_location.location);
             }
         }
 
