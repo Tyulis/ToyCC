@@ -45,9 +45,9 @@ if __name__ == "__main__":
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    with open(output_dir / "translation_model.py", "w") as f:
-        pprint.pprint(json.loads(json.dumps(translation_model, default=serialize_model)),
-                      compact=True, stream=f, width=140, sort_dicts=True)
+    #with open(output_dir / "translation_model.py", "w") as f:
+    #    pprint.pprint(json.loads(json.dumps(translation_model, default=serialize_model)),
+    #                  compact=True, stream=f, width=140, sort_dicts=True)
 
     generated_files = generate_execmodel(translation_model, output_dir) | {output_dir / "translation_model.py"}
 

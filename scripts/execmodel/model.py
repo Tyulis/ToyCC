@@ -390,33 +390,37 @@ class TranslationModel:
                 return False
         return True
 
+    # Combine the constraints on the IR operands according to the IR itself and every target
     def combine_operands(self, ir_operands: dict[str, Constraint], operands: list[dict[str, Constraint|str]]) -> dict[str, Constraint|str]:
-        names = tuple(operands[0].keys())
-
-        crossed = {name: set(target[name] for target in operands) for name in names}
+        operand_names = tuple(operands[0].keys())
+        crossed = {operand_name: set(target[operand_name] for target in operands) for operand_name in operand_names}  # crossed[operand_name] = Constraint for each target
 
         references = {}
         constraints = {}
-        for name in names:
-            operand_constraints = set(constraint for constraint in crossed[name] if isinstance(constraint, Constraint))
-            operand_references = set(constraint for constraint in {ir_operands[name]} | crossed[name] if isinstance(constraint, str))
-            if len(operand_references) > 1 or len(operand_references) > 0 and not all(is_true(constraint) for constraint in operand_constraints):
-                raise TranslationModelError(f"Operand `{name}` must be true or the same reference for all targets, found {conjunction}")
+        for operand_name in operand_names:
+            operand_constraints = set(constraint for constraint in crossed[operand_name] if isinstance(constraint, Constraint))
+            operand_references = set(constraint for constraint in {ir_operands[operand_name]} | crossed[operand_name] if isinstance(constraint, str))
 
-            if len(operand_references) == 1:
-                reference = operand_references.pop()
-                references[name] = reference
-                if isinstance(ir_operands[name], Constraint):
-                    if reference in constraints:
-                        constraints[reference].add(ir_operands[name])
-                    else:
-                        constraints[reference] = {ir_operands[name]}
-            else:
-                operand_constraints.add(ir_operands[name])
-                if name in constraints:
-                    constraints[name] |= operand_constraints
+            if len(operand_references) == 0:
+                operand_constraints.add(ir_operands[operand_name])
+                if operand_name in constraints:
+                    constraints[operand_name] |= operand_constraints
                 else:
-                    constraints[name] = operand_constraints
+                    constraints[operand_name] = operand_constraints
+            elif len(operand_references) == 1:
+                if not all(is_true(constraint) for constraint in operand_constraints):
+                    raise TranslationModelError(f"Operand `{operand_name}` must be true or the same reference for all targets")
+
+                reference = operand_references.pop()
+                references[operand_name] = reference
+                if isinstance(ir_operands[operand_name], Constraint):
+                    if reference in constraints:
+                        constraints[reference].add(ir_operands[operand_name])
+                    else:
+                        constraints[reference] = {ir_operands[operand_name]}
+            else:
+                raise TranslationModelError(f"Operand `{operand_name}` must be the same reference for all targets")
+
 
         for name in tuple(references.keys()):
             actual_id = name
@@ -429,12 +433,12 @@ class TranslationModel:
             references[name] = actual_id
 
         combined = {}
-        for name in names:
-            if name in references:
-                combined[name] = references[name]
+        for operand_name in operand_names:
+            if operand_name in references:
+                combined[operand_name] = references[operand_name]
             else:
-                conjunction = constraints.get(name, {CONSTRAINT_TRUE})
-                combined[name] = to_simplified_constraint(Constraint(ConstraintType.CONJUNCTION, frozenset(conjunction)))
+                conjunction = constraints.get(operand_name, {CONSTRAINT_TRUE})
+                combined[operand_name] = to_simplified_constraint(Constraint(ConstraintType.CONJUNCTION, frozenset(conjunction)))
         return combined
 
 
@@ -519,6 +523,7 @@ class TranslationModel:
                 main_id, base_constraint = self.resolve_operand(ir_operands, main_id)
                 conjunction = Constraint(ConstraintType.CONJUNCTION, frozenset({base_constraint, self.operand_types[operand.type]}))
                 ir_operands[main_id] = to_simplified_constraint(conjunction)
+                # These constraints could be simplified all at once in `combine_operands`, but since the algorithm is exponential, it's much more efficient to do it in small parts
 
                 ref, _, ir_name = main_id.partition(".")
                 ir_index = int(ref.strip("$"))
