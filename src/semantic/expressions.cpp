@@ -42,7 +42,7 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", location);
 
         StatementTag op = decode_assignment_operator(context->assignmentOperator());
-        std::shared_ptr<SemanticAnalyzer::ExpressionResult> destination = decode_unary_expression(context->unaryExpression());
+        std::shared_ptr<SemanticAnalyzer::ExpressionResult> destination = decode_prefix_expression(context->prefixExpression());
         if (!destination->is_lvalue())
             throw Diagnostic(DiagnosticLevel::ERROR, "Assignment destination must be an lvalue");
         std::shared_ptr<ExpressionResult> source = decode_assignment_expression(context->assignmentExpression());
@@ -185,16 +185,23 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences as cast expressions are not implemented", locate(context));
         else if (context->typeName())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Cast expressions are not implemented");
-        else if (context->unaryExpression())
-            return decode_unary_expression(context->unaryExpression());
+        else if (context->prefixExpression())
+            return decode_prefix_expression(context->prefixExpression());
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown cast expression `{}`", context->getText()), locate(context));
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_prefix_expression(CParser::PrefixExpressionContext* context) {
+        if (!context->prefixOperator().empty())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Prefix expressions are not implemented", locate(context));
+
+        return decode_unary_expression(context->unaryExpression());
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_unary_expression(CParser::UnaryExpressionContext* context) {
         const CodeLocation location = locate(context);
 
-        if (!context->PlusPlus().empty() || !context->MinusMinus().empty() || !context->Sizeof().empty() || context->Alignof() || context->AndAnd())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary expressions are not implemented", locate(context));
+        if (context->Sizeof() || context->Alignof() || context->AndAnd())
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Extension unary expressions are not implemented", locate(context));
         else if (context->postfixExpression())
             return decode_postfix_expression(context->postfixExpression());
         else if (context->unaryOperator() && context->castExpression())

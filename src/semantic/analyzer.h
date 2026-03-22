@@ -156,6 +156,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> decode_additive_expression(CParser::AdditiveExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_cast_expression(CParser::CastExpressionContext* context);
+            std::shared_ptr<ExpressionResult> decode_prefix_expression(CParser::PrefixExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_unary_expression(CParser::UnaryExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_unary_operation(CParser::UnaryExpressionContext* context);
             std::shared_ptr<ExpressionResult> decode_unary_addressof(CParser::UnaryExpressionContext* context);

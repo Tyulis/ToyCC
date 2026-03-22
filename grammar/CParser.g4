@@ -139,9 +139,9 @@ primaryExpression
     | '__FUNCTION__' //GNU
     | '__PRETTY_FUNCTION__' //GNU
     | '__extension__'? '(' compoundStatement ')' //GNU
-    | '__builtin_va_arg' '(' unaryExpression ',' typeName ')' //GNU
-    | '__builtin_offsetof' '(' typeName ',' unaryExpression ')' //GNU
-    | '__builtin_choose_expr' '(' unaryExpression ',' unaryExpression ',' unaryExpression ')' //GNU
+    | '__builtin_va_arg' '(' prefixExpression ',' typeName ')' //GNU
+    | '__builtin_offsetof' '(' typeName ',' prefixExpression ')' //GNU
+    | '__builtin_choose_expr' '(' prefixExpression ',' prefixExpression ',' prefixExpression ')' //GNU
     | '__builtin_types_compatible_p' '(' typeName ',' typeName ')' //GNU
     | '__builtin_tgmath' '(' exprList ')'
     | '__builtin_complex' '(' assignmentExpression ',' assignmentExpression ')'
@@ -192,12 +192,10 @@ argumentExpressionList
 // ISO C: unary-expression (6.5.4.1)
 // GNU: https://github.com/gcc-mirror/gcc/blob/5d69161a7c36a2da8565967eb0cc2df1322a05a3/gcc/c/c-parser.cc#L10625-L10658
 unaryExpression
-    : ('++' | '--' | 'sizeof')* (
-        postfixExpression
-        | unaryOperator castExpression
-        | ('sizeof' | Alignof) ( '(' typeName ')' | unaryExpression ) //GNU
-        | '&&' Identifier // GCC extension address of label
-    )
+    : postfixExpression
+    | unaryOperator castExpression
+    | ('sizeof' | Alignof) ( '(' typeName ')' | prefixExpression ) //GNU
+    | '&&' Identifier // GCC extension address of label
     ;
 
 unaryOperator
@@ -207,12 +205,24 @@ unaryOperator
     | '__imag__' // GNU
     ;
 
+
+prefixExpression
+    : prefixOperator* unaryExpression
+    ;
+
+prefixOperator
+    : '++'
+    | '--'
+    | 'sizeof'
+    ;
+
+
 // ISO C: unary-operator (6.5.4.1) - No ANTLR4 rule
 
 // ISO C: cast-expression (6.5.5)
 castExpression
     : {this->IsCast()}? '(' typeName ')' castExpression
-    | unaryExpression
+    | prefixExpression
     | DigitSequence // for
     ;
 
@@ -297,7 +307,7 @@ conditionalExpression
 // ISO C: assignment-expression (6.5.17.1)
 assignmentExpression
     : conditionalExpression
-    | unaryExpression assignmentOperator assignmentExpression
+    | prefixExpression assignmentOperator assignmentExpression
     | DigitSequence // for
     ;
 
@@ -786,7 +796,7 @@ jumpStatement
         | 'continue'
         | 'break'
         | 'return' expression?
-        | 'goto' unaryExpression // GCC extension
+        | 'goto' prefixExpression // GCC extension
     ) ';'
     ;
 
