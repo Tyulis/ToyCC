@@ -194,8 +194,11 @@
          "target": [{"instruction": "XOR", "input": ["$0.output", "$0.output"]},  // D makes up the upper part of the dividend, clear it
                     {"instruction": "IDIV", "input": ["right"], "implicit": {"a": "left", "d": "output"}}]},
 
+        // -------- BITWISE_AND
+        {"ir": {"tag": "BITWISE_AND"}, "target": {"instruction": "AND"}},
+
         // -------- BITWISE_OR
-        {"ir"    : {"tag": "BITWISE_OR"}, "target": {"instruction": "OR"}},
+        {"ir": {"tag": "BITWISE_OR"}, "target": {"instruction": "OR"}},
 
         // -------- COPY
         {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},

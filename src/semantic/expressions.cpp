@@ -1,4 +1,5 @@
 #include <memory>
+#include <concepts>
 #include <algorithm>
 
 #include "diagnostic.h"
@@ -90,11 +91,6 @@ namespace toycc::semantic {
             else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise inclusive or operator `|` is only valid on integer operands");
         }
         return left;
-
-        std::shared_ptr<ExpressionResult> result = decode_exclusive_or_expression(context->exclusiveOrExpression()[0]);
-        if (context->exclusiveOrExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inclusive OR expressions are not implemented", locate(context));
-        return result;
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_exclusive_or_expression(CParser::ExclusiveOrExpressionContext* context) {
@@ -105,10 +101,18 @@ namespace toycc::semantic {
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_and_expression(CParser::AndExpressionContext* context) {
-        std::shared_ptr<ExpressionResult> result = decode_equality_expression(context->equalityExpression()[0]);
-        if (context->equalityExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "AND expressions are not implemented", locate(context));
-        return result;
+        const std::vector<CParser::EqualityExpressionContext*> operands = context->equalityExpression();
+        const std::vector<antlr4::tree::TerminalNode*> operators = context->And();
+
+        std::shared_ptr<ExpressionResult> left = decode_equality_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            std::shared_ptr<ExpressionResult> right = decode_equality_expression(operands[operation_index + 1]);
+            if (left->type()->is_integral() && right->type()->is_integral())
+                left = emit_binary_operation(StatementTag::BITWISE_AND, left, right, location);
+            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise inclusive and operator `&` is only valid on integer operands");
+        }
+        return left;
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_equality_expression(CParser::EqualityExpressionContext* context) {
