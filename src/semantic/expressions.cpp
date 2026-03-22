@@ -78,6 +78,19 @@ namespace toycc::semantic {
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_inclusive_or_expression(CParser::InclusiveOrExpressionContext* context) {
+        const std::vector<CParser::ExclusiveOrExpressionContext*> operands = context->exclusiveOrExpression();
+        const std::vector<antlr4::tree::TerminalNode*> operators = context->Or();
+
+        std::shared_ptr<ExpressionResult> left = decode_exclusive_or_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            std::shared_ptr<ExpressionResult> right = decode_exclusive_or_expression(operands[operation_index + 1]);
+            if (left->type()->is_integral() && right->type()->is_integral())
+                left = emit_binary_operation(StatementTag::BITWISE_OR, left, right, location);
+            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise inclusive or operator `|` is only valid on integer operands");
+        }
+        return left;
+
         std::shared_ptr<ExpressionResult> result = decode_exclusive_or_expression(context->exclusiveOrExpression()[0]);
         if (context->exclusiveOrExpression().size() > 1)
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inclusive OR expressions are not implemented", locate(context));
@@ -129,8 +142,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> right = decode_multiplicative_expression(operands[operation_index + 1]);
             if (left->type()->is_arithmetic() && right->type()->is_arithmetic())
                 left = emit_binary_operation(decode_additive_operator(operators[operation_index]), left, right, location);
-            else
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic additive expressions are not implemented");
+            else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic additive expressions are not implemented");
         }
         return left;
     }
@@ -145,8 +157,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> right = decode_cast_expression(operands[operation_index + 1]);
             if (left->type()->is_arithmetic() && right->type()->is_arithmetic())
                 left = emit_binary_operation(decode_multiplicative_operator(operators[operation_index]), left, right, location);
-            else
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic multiplicative expressions are not implemented");
+            else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic multiplicative expressions are not implemented");
         }
         return left;
     }

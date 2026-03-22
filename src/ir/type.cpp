@@ -112,19 +112,19 @@ namespace toycc::ir {
 
     bool Type::is_integral() const {
         const TypeCategory dequalified_category = dequalify()->category;
-        return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER;
+        return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::ENUM;
     }
 
     bool Type::is_comparable() const {
         const TypeCategory dequalified_category = dequalify()->category;
         return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::FLOAT ||
-        dequalified_category == TypeCategory::POINTER;
+        dequalified_category == TypeCategory::POINTER || dequalified_category == TypeCategory::ENUM;
     }
 
     bool Type::has_truth_value() const {
         const TypeCategory dequalified_category = dequalify()->category;
         return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::FLOAT ||
-               dequalified_category == TypeCategory::POINTER;
+               dequalified_category == TypeCategory::POINTER || dequalified_category == TypeCategory::ENUM;
     }
 
     std::string Type::ir_code(std::unordered_set<const Type*>) const {
