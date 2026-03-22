@@ -86,9 +86,7 @@ namespace toycc::semantic {
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
             std::shared_ptr<ExpressionResult> right = decode_exclusive_or_expression(operands[operation_index + 1]);
-            if (left->type()->is_integral() && right->type()->is_integral())
-                left = emit_binary_operation(StatementTag::BITWISE_OR, left, right, location);
-            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise inclusive or operator `|` is only valid on integer operands");
+            left = emit_binary_operation(StatementTag::BITWISE_OR, left, right, location);
         }
         return left;
     }
@@ -101,9 +99,7 @@ namespace toycc::semantic {
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
             std::shared_ptr<ExpressionResult> right = decode_and_expression(operands[operation_index + 1]);
-            if (left->type()->is_integral() && right->type()->is_integral())
-                left = emit_binary_operation(StatementTag::BITWISE_XOR, left, right, location);
-            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise exclusive or operator `^` is only valid on integer operands");
+            left = emit_binary_operation(StatementTag::BITWISE_XOR, left, right, location);
         }
         return left;
     }
@@ -116,25 +112,35 @@ namespace toycc::semantic {
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
             std::shared_ptr<ExpressionResult> right = decode_equality_expression(operands[operation_index + 1]);
-            if (left->type()->is_integral() && right->type()->is_integral())
-                left = emit_binary_operation(StatementTag::BITWISE_AND, left, right, location);
-            else throw Diagnostic(DiagnosticLevel::ERROR, "The bitwise and operator `&` is only valid on integer operands");
+            left = emit_binary_operation(StatementTag::BITWISE_AND, left, right, location);
         }
         return left;
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_equality_expression(CParser::EqualityExpressionContext* context) {
-        std::shared_ptr<ExpressionResult> result = decode_relational_expression(context->relationalExpression()[0]);
-        if (context->relationalExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Equality expressions are not implemented", locate(context));
-        return result;
+        const std::vector<CParser::RelationalExpressionContext*> operands = context->relationalExpression();
+        const std::vector<CParser::EqualityOperatorContext*> operators = context->equalityOperator();
+
+        std::shared_ptr<ExpressionResult> left = decode_relational_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            std::shared_ptr<ExpressionResult> right = decode_relational_expression(operands[operation_index + 1]);
+            left = emit_binary_operation(decode_equality_operator(operators[operation_index]), left, right, location);
+        }
+        return left;
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_relational_expression(CParser::RelationalExpressionContext* context) {
-        std::shared_ptr<ExpressionResult> result = decode_shift_expression(context->shiftExpression()[0]);
-        if (context->shiftExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Relational expressions are not implemented", locate(context));
-        return result;
+        const std::vector<CParser::ShiftExpressionContext*> operands = context->shiftExpression();
+        const std::vector<CParser::RelationalOperatorContext*> operators = context->relationalOperator();
+
+        std::shared_ptr<ExpressionResult> left = decode_shift_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            std::shared_ptr<ExpressionResult> right = decode_shift_expression(operands[operation_index + 1]);
+            left = emit_binary_operation(decode_relational_operator(operators[operation_index]), left, right, location);
+        }
+        return left;
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_shift_expression(CParser::ShiftExpressionContext* context) {
@@ -395,6 +401,20 @@ namespace toycc::semantic {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown assignment operator {}", context->getText()), locate(context));
     }
 
+    StatementTag SemanticAnalyzer::decode_equality_operator(CParser::EqualityOperatorContext* context) {
+        if      (context->Equal())     return StatementTag::EQ;
+        else if (context->NotEqual())  return StatementTag::NE;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown equality operator {}", context->getText()), locate(context));
+    }
+
+    StatementTag SemanticAnalyzer::decode_relational_operator(CParser::RelationalOperatorContext* context) {
+        if      (context->Greater())       return StatementTag::GT;
+        else if (context->GreaterEqual())  return StatementTag::GE;
+        else if (context->Less())          return StatementTag::LT;
+        else if (context->LessEqual())     return StatementTag::LE;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown relational operator {}", context->getText()), locate(context));
+    }
+
     StatementTag SemanticAnalyzer::decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context) {
         if      (context->Star())  return StatementTag::MUL;
         else if (context->Div())   return StatementTag::DIV;
@@ -416,7 +436,8 @@ namespace toycc::semantic {
 
         if (left_type->is_arithmetic() && right_type->is_arithmetic()) {
             auto [converted_left, converted_right] = emit_arithmetic_conversion(left->operand(), right->operand(), location);
-            std::shared_ptr<Declaration> result = declare_temporary(converted_left.type(), location);
+            std::shared_ptr<Type> result_type = operation_result_type(op, converted_left.type(), converted_right.type());
+            std::shared_ptr<Declaration> result = declare_temporary(result_type, location);
             emit(Statement::make_binary_operation(location, op, converted_left, converted_right, result));
             return make_expression(RValue {result}, location);
         } else {
@@ -464,11 +485,40 @@ namespace toycc::semantic {
             case StatementTag::GT:
             case StatementTag::EQ:
             case StatementTag::NE:
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Relational operators are not implemented");
+                return left_unqualified->is_comparable() && right_unqualified->is_comparable();
 
             case StatementTag::LOGICAL_AND:
             case StatementTag::LOGICAL_OR:
                 return left_unqualified->has_truth_value() && right_unqualified->has_truth_value();
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown binary operator");
+        }
+    }
+
+    std::shared_ptr<Type> SemanticAnalyzer::operation_result_type(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right) {
+        std::shared_ptr<Type> left_unqualified = left->dequalify(), right_unqualified = right->dequalify();
+        switch (op) {
+            case StatementTag::MUL:
+            case StatementTag::DIV:
+            case StatementTag::MOD:
+            case StatementTag::ADD:
+            case StatementTag::SUB:
+            case StatementTag::LSHIFT:
+            case StatementTag::RSHIFT:
+            case StatementTag::BITWISE_AND:
+            case StatementTag::BITWISE_XOR:
+            case StatementTag::BITWISE_OR:
+                return left_unqualified;
+
+            case StatementTag::LT:
+            case StatementTag::LE:
+            case StatementTag::GE:
+            case StatementTag::GT:
+            case StatementTag::EQ:
+            case StatementTag::NE:
+            case StatementTag::LOGICAL_AND:
+            case StatementTag::LOGICAL_OR:
+                return boolean_type;
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown binary operator");
         }

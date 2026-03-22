@@ -173,6 +173,8 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> decode_indirect_member_access(std::shared_ptr<ExpressionResult> structure, const std::string& member_name, CodeLocation location);
 
             StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
+            StatementTag decode_equality_operator(CParser::EqualityOperatorContext* context);
+            StatementTag decode_relational_operator(CParser::RelationalOperatorContext* context);
             StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
             StatementTag decode_additive_operator(CParser::AdditiveOperatorContext* context);
 
@@ -180,6 +182,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
+            std::shared_ptr<Type> operation_result_type(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
 
             // -------- Literals -> semantic/literals.cpp
             RValue decode_constant(CParser::ConstantContext* context);

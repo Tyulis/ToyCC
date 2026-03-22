@@ -244,12 +244,24 @@ shiftExpression
 
 // ISO C: relational-expression (6.5.9)
 relationalExpression
-    : shiftExpression (('<' | '>' | '<=' | '>=') shiftExpression)*
+    : shiftExpression (relationalOperator shiftExpression)*
+    ;
+
+relationalOperator
+    : '<'
+    | '>'
+    | '<='
+    | '>='
     ;
 
 // ISO C: equality-expression (6.5.10)
 equalityExpression
-    : relationalExpression (('==' | '!=') relationalExpression)*
+    : relationalExpression (equalityOperator relationalExpression)*
+    ;
+
+equalityOperator
+    : '=='
+    | '!='
     ;
 
 // ISO C: AND-expression (6.5.11)
