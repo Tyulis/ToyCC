@@ -177,10 +177,14 @@
 
         // -------- MUL
         // Signed integer multiplication
-        {"ir"      : {"tag": "MUL", "left": "sint", "right": "sint"}, "allocate": {"mulhi": {"anyof": "sint"}},
-         "target"  : {"instruction": "IMUL", "input": ["right"], "implicit": {"a": ["left", "output"], "d": "$mulhi"}}},
-        {"ir"      : {"tag": "MUL", "left": "sint", "right": "sint"}, "target": {"instruction": "IMUL", "input": ["left", "right"]}},
-        {"ir"      : {"tag": "MUL", "left": "sint", "right": "sint", "output": "sint"}, "target": {"instruction": "IMUL", "input": ["left", "right"], "output": "output"}},
+        {"ir"    : {"tag": "MUL", "left": "sint", "right": "sint"}, "allocate": {"mulhi": {"anyof": "sint"}},
+         "target": {"instruction": "IMUL", "input": ["right"], "implicit": {"a": ["left", "output"], "d": "$mulhi"}}},
+        {"ir"    : {"tag": "MUL", "left": "sint", "right": "sint"}, "target": {"instruction": "IMUL", "input": ["left", "right"]}},
+        {"ir"    : {"tag": "MUL", "left": "sint", "right": "sint", "output": "sint"}, "target": {"instruction": "IMUL", "input": ["left", "right"], "output": "output"}},
+
+        // Unsigned integer multiplication
+        {"ir"    : {"tag": "MUL", "left": "uint", "right": "uint"}, "allocate": {"mulhi": {"anyof": "uint"}},
+         "target": {"instruction": "MUL", "input": ["right"], "implicit": {"a": ["left", "output"], "d": "$mulhi"}}},
 
         // -------- DIV
         // Signed integer division

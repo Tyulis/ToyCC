@@ -22,7 +22,7 @@ namespace toycc::semantic {
         add_integer_type("signed long int",         true,  arch::DATAMODEL->long_size(),        arch::DATAMODEL->long_alignment());
         add_integer_type("unsigned long int",       false, arch::DATAMODEL->long_size(),        arch::DATAMODEL->long_alignment());
         add_integer_type("signed long long int",    true,  arch::DATAMODEL->long_long_size(),   arch::DATAMODEL->long_long_alignment());
-        add_integer_type("unsigned long long int",  false, arch::DATAMODEL->long_long_size(),   arch::DATAMODEL->long_long_alignment());
+        size_type = add_integer_type("unsigned long long int",  false, arch::DATAMODEL->long_long_size(),   arch::DATAMODEL->long_long_alignment());
         add_floating_point_type("float",                   arch::DATAMODEL->float_size(),       arch::DATAMODEL->float_alignment());
         double_type = add_floating_point_type("double",    arch::DATAMODEL->double_size(),      arch::DATAMODEL->double_alignment());
         add_floating_point_type("long double",             arch::DATAMODEL->long_double_size(), arch::DATAMODEL->long_double_alignment());

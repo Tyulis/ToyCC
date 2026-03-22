@@ -31,6 +31,7 @@ namespace toycc::semantic {
             std::shared_ptr<Type> enum_underlying_type;
             std::shared_ptr<Type> boolean_type;
             std::shared_ptr<Type> character_type;
+            std::shared_ptr<Type> size_type;
             std::shared_ptr<Type> literal_character_type;
             std::shared_ptr<Type> literal_integer_type;
             std::shared_ptr<Type> literal_floating_type;
@@ -181,6 +182,8 @@ namespace toycc::semantic {
 
             std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
             std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location);
+            std::shared_ptr<SemanticAnalyzer::ExpressionResult> emit_arithmetic_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
+            std::shared_ptr<SemanticAnalyzer::ExpressionResult> emit_pointer_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
             std::shared_ptr<ExpressionResult> emit_prefix_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);

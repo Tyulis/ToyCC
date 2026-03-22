@@ -209,8 +209,24 @@ namespace toycc::semantic {
                         return source;
                     else  // if (destination_primitive.primitive_size < source_primitive.primitive_size)
                         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Narrowing integer conversions are not implemented", location);
-                } else {
-                    throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Signed -> unsigned conversions are not implemented", location);
+                } else if (destination_type->is_signed && !source_integer->is_signed) {  // unsigned to signed
+                    // 6.3.1.3.1 : If the source value can be represented by the destination type if the destination type has at least one more bit, so that conversion is okay
+                    // 6.3.1.3.3 : If the destination type is signed but the source value can't be represented in it, the result is implementation-defined
+                    //             Here, go through the same operation, whatever happens happens
+                    // Unsigned values are always positive regardless of the "sign" bit, so zero-extend
+                    if (destination_type->size_bits >= source_integer->size_bits)
+                        return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::ZERO_EXTEND);
+                    else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Narrowing integer conversions are not implemented", location);
+                } else /* if (!destination_type->is_signed && source_integer->is_signed) */ {  // signed to unsigned
+                    // 6.3.1.3.1 : If the source value can be represented by the destination type if the destination type has at least one more bit, so that conversion is okay
+                    // 6.3.1.3.2 : If the destination type is unsigned but the source value can't be represented in it, wrap around
+                    // Ex. 8(-120) + 256 -> 8(136) <=> 0b10001000 -> nothing to do
+                    // Ex. 16(-1000) + 1024 = 8(24) <=> 0b[11111100]00011000 -> nothing to do
+                    // Ex. 8(+120) -> 16(120) <=> 0b[00000000]01111000 -> sign-extend
+                    // Ex. 8(-120) + 65536 -> 16(65416) <=> 0b[11111111]10001000 -> sign-extend
+                    if (destination_type->size_bits >= source_integer->size_bits)
+                        return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::SIGN_EXTEND);
+                    else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Narrowing integer conversions are not implemented", location);
                 }
             }
 

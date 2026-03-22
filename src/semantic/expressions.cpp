@@ -444,21 +444,45 @@ namespace toycc::semantic {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown additive operator `{}`", context->getText()), locate(context));
     }
 
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_arithmetic_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location) {
+        auto [converted_left, converted_right] = emit_arithmetic_conversion(left->operand(), right->operand(), location);
+        std::shared_ptr<Type> result_type = operation_result_type(op, converted_left.type(), converted_right.type());
+        std::shared_ptr<Declaration> result = declare_temporary(result_type, location);
+        emit(Statement::make_binary_operation(location, op, converted_left, converted_right, result));
+        return make_expression(RValue {result}, location);
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_pointer_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location) {
+        std::shared_ptr<Type> left_type = left->type(), right_type = right->type();
+
+        if (left_type->dequalify()->category == TypeCategory::POINTER) {
+            RValue item_size = Constant {IntegerConstant(left_type->dereference({}, location)->size(location)), location, size_type};
+            std::shared_ptr<ExpressionResult> increment = emit_binary_operation(StatementTag::MUL, right, make_expression(item_size, location), location);
+            std::shared_ptr<Declaration> result = declare_temporary(left_type, location);
+            emit(Statement::make_binary_operation(location, op, left->operand(), increment->operand(), result));
+            return make_expression(RValue {result}, location);
+        } else if (right_type->dequalify()->category == TypeCategory::POINTER) {
+            RValue item_size = Constant {IntegerConstant(right_type->dereference({}, location)->size(location)), location, size_type};
+            std::shared_ptr<ExpressionResult> increment = emit_binary_operation(StatementTag::MUL, left, make_expression(item_size, location), location);
+            std::shared_ptr<Declaration> result = declare_temporary(right_type, location);
+            emit(Statement::make_binary_operation(location, op, increment->operand(), right->operand(), result));
+            return make_expression(RValue {result}, location);
+        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted pointer arithmetic without a pointer operand", location);
+    }
+
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location) {
         std::shared_ptr<Type> left_type = left->type(), right_type = right->type();
 
         if (!is_operator_valid(op, left_type, right_type))
             throw Diagnostic(DiagnosticLevel::ERROR, "This operator is not valid on these operands", location);
 
-        if (left_type->is_arithmetic() && right_type->is_arithmetic()) {
-            auto [converted_left, converted_right] = emit_arithmetic_conversion(left->operand(), right->operand(), location);
-            std::shared_ptr<Type> result_type = operation_result_type(op, converted_left.type(), converted_right.type());
-            std::shared_ptr<Declaration> result = declare_temporary(result_type, location);
-            emit(Statement::make_binary_operation(location, op, converted_left, converted_right, result));
-            return make_expression(RValue {result}, location);
-        } else {
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic operations are not implemented", location);
-        }
+        if (left_type->is_arithmetic() && right_type->is_arithmetic())
+            return emit_arithmetic_binary_operation(op, left, right, location);
+        else if (left_type->dequalify()->category == TypeCategory::POINTER && right_type->is_arithmetic())
+            return emit_pointer_binary_operation(op, left, right, location);
+        else if (left_type->is_arithmetic() && right_type->dequalify()->category == TypeCategory::POINTER)
+            return emit_pointer_binary_operation(op, left, right, location);
+        else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown operation configuration", location);
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location) {
@@ -472,12 +496,11 @@ namespace toycc::semantic {
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_prefix_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location) {
-        if (!operand->type()->is_arithmetic())
-            throw Diagnostic(DiagnosticLevel::ERROR, "Prefix increment operators are only valid on arithmetic types", location);
-        else if (!operand->is_lvalue())
+        if (!operand->is_lvalue())
             throw Diagnostic(DiagnosticLevel::ERROR, "Prefix increment operators are only valid on lvalues", location);
 
-        const RValue one = make_constant_one(operand->type(), location);
+        RValue one = (operand->type()->is_arithmetic() ? make_constant_one(operand->type(), location)
+                                                       : make_constant_one(TypeCategory::INTEGER, location));  // For pointer arithmetic
         return emit_binary_operation(op, operand, make_expression(one, location), operand, location);
     }
 

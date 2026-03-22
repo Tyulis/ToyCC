@@ -25,6 +25,7 @@ namespace toycc::ir {
             case StatementTag::INT_TO_FLOAT:    return "INT_TO_FLOAT";
             case StatementTag::FLOAT_TO_INT:    return "FLOAT_TO_INT";
             case StatementTag::SIGN_EXTEND:     return "SIGN_EXTEND";
+            case StatementTag::ZERO_EXTEND:     return "ZERO_EXTEND";
             case StatementTag::MUL:             return "MUL";
             case StatementTag::DIV:             return "DIV";
             case StatementTag::MOD:             return "MOD";
