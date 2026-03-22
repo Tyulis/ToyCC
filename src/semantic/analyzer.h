@@ -181,6 +181,7 @@ namespace toycc::semantic {
 
             std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
             std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location);
+            std::shared_ptr<ExpressionResult> emit_prefix_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
             std::shared_ptr<Type> operation_result_type(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
@@ -237,6 +238,10 @@ namespace toycc::semantic {
             void emit_copy(Operand destination, Operand source, CodeLocation location, bool initialize);
 
             RValue make_constant_zero(TypeCategory category, CodeLocation location);
+            RValue make_constant_one(TypeCategory category, CodeLocation location);
+
+            RValue make_constant_zero(std::shared_ptr<Type> type, CodeLocation location);
+            RValue make_constant_one(std::shared_ptr<Type> type, CodeLocation location);
 
             // -------- State management -> semantic/state.cpp
             std::string anonymous_identifier();

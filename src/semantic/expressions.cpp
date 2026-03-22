@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "diagnostic.h"
+#include "gen/parser/CParser.h"
 #include "ir/type_expressions.h"
 #include "ir/statement.h"
 #include "semantic/analyzer.h"
@@ -191,10 +192,18 @@ namespace toycc::semantic {
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_prefix_expression(CParser::PrefixExpressionContext* context) {
-        if (!context->prefixOperator().empty())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Prefix expressions are not implemented", locate(context));
+        std::shared_ptr<ExpressionResult> result = decode_unary_expression(context->unaryExpression());
+        for (CParser::PrefixOperatorContext* op : context->prefixOperator()) {
+            if (op->Sizeof())
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "The sizeof operator is not implemented", locate(context));
+            else if (op->PlusPlus())
+                result = emit_prefix_increment(result, StatementTag::ADD, locate(context));
+            else if (op->MinusMinus())
+                result = emit_prefix_increment(result, StatementTag::SUB, locate(context));
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown prefix operator `{}`", op->getText()), locate(context));
+        }
 
-        return decode_unary_expression(context->unaryExpression());
+        return result;
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_unary_expression(CParser::UnaryExpressionContext* context) {
@@ -460,6 +469,16 @@ namespace toycc::semantic {
 
         emit_copy(destination->operand(), result->operand(), location, false);
         return destination;
+    }
+
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_prefix_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location) {
+        if (!operand->type()->is_arithmetic())
+            throw Diagnostic(DiagnosticLevel::ERROR, "Prefix increment operators are only valid on arithmetic types", location);
+        else if (!operand->is_lvalue())
+            throw Diagnostic(DiagnosticLevel::ERROR, "Prefix increment operators are only valid on lvalues", location);
+
+        const RValue one = make_constant_one(operand->type(), location);
+        return emit_binary_operation(op, operand, make_expression(one, location), operand, location);
     }
 
     bool SemanticAnalyzer::is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right) {

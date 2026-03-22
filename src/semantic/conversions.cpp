@@ -328,4 +328,46 @@ namespace toycc::semantic {
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a constant zero", location);
         }
     }
+
+    RValue SemanticAnalyzer::make_constant_zero(std::shared_ptr<Type> type, CodeLocation location) {
+        switch (type->category) {
+            case TypeCategory::BOOL:
+            case TypeCategory::INTEGER:
+            case TypeCategory::POINTER:
+                return Constant {IntegerConstant(0), location, type};
+
+            case TypeCategory::FLOAT:
+                return Constant {FloatingPointConstant(0.0), location, type};
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a constant zero", location);
+        }
+    }
+
+    RValue SemanticAnalyzer::make_constant_one(TypeCategory category, CodeLocation location) {
+        switch (category) {
+            case TypeCategory::BOOL:
+            case TypeCategory::INTEGER:
+            case TypeCategory::POINTER:
+                return Constant {IntegerConstant(1), location, literal_integer_type};
+
+            case TypeCategory::FLOAT:
+                return Constant {FloatingPointConstant(1.0), location, literal_floating_type};
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a constant one", location);
+        }
+    }
+
+    RValue SemanticAnalyzer::make_constant_one(std::shared_ptr<Type> type, CodeLocation location) {
+        switch (type->category) {
+            case TypeCategory::BOOL:
+            case TypeCategory::INTEGER:
+            case TypeCategory::POINTER:
+                return Constant {IntegerConstant(1), location, type};
+
+            case TypeCategory::FLOAT:
+                return Constant {FloatingPointConstant(1.0), location, type};
+
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a constant one", location);
+        }
+    }
 }
