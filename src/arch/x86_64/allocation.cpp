@@ -132,13 +132,17 @@ namespace toycc::arch::x86_64 {
                 code.comment(std::format("{}(%rbp) : {}", -static_cast<ssize_t>(offset + variable->type->size({})), variable->name));
 
         // Emit the entry block : setup the stack and push the callee-saved registers
+        code.directive(".cfi_startproc");
         code.statement("pushq %rbp");
+        code.directive(".cfi_def_cfa_offset 16");
+        code.directive(".cfi_offset 6, -16");  // Push %rbp = %r6 to the stack
 
         for (Location reg : CALLEE_SAVED_REGISTERS)
             if (used_locations.contains(reg))
                 code.statement(std::format("pushq {}", emit_operand(reg, 8)));
 
         code.statement("movq %rsp, %rbp");
+        code.directive(".cfi_def_cfa_register 6");  // The CFA register is now %rbp = %r6
 
         if (current_offset > 0)
             code.statement(std::format("subq ${}, %rsp", align_offset(current_offset, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
@@ -153,7 +157,10 @@ namespace toycc::arch::x86_64 {
                 code.statement(std::format("popq {}", emit_operand(reg, 8)));
 
         code.statement("leave");
+        code.directive(".cfi_def_cfa 7, 8");  // The Canonical Frame Address is at %rsp+8 = %r7+8
         code.statement("ret");
+        code.directive(".cfi_endproc");
+        code.directive(std::format(".size {}, .-{}", name, name));
         return code.str();
     }
 
