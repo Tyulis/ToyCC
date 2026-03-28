@@ -197,9 +197,9 @@ namespace toycc::semantic {
             if (op->Sizeof())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "The sizeof operator is not implemented", locate(context));
             else if (op->PlusPlus())
-                result = emit_prefix_increment(result, StatementTag::ADD, locate(context));
+                result = emit_increment(result, StatementTag::ADD, locate(context));
             else if (op->MinusMinus())
-                result = emit_prefix_increment(result, StatementTag::SUB, locate(context));
+                result = emit_increment(result, StatementTag::SUB, locate(context));
             else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown prefix operator `{}`", op->getText()), locate(context));
         }
 
@@ -253,8 +253,7 @@ namespace toycc::semantic {
         if (operand->type()->category != TypeCategory::POINTER)
             throw Diagnostic(DiagnosticLevel::ERROR, "Attempted to dereference a non-pointer object", location);
 
-        std::shared_ptr<ExpressionResult> source = std::make_shared<ExpressionResult>(*operand);
-        return source->dereference(make_constant_zero(TypeCategory::INTEGER, location), location);
+        return operand->dereference(make_constant_zero(TypeCategory::INTEGER, location), location);
     }
 
     std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_unary_plus(CParser::UnaryExpressionContext* context) {
@@ -287,10 +286,8 @@ namespace toycc::semantic {
                 result = decode_function_call(result, postfix);
             else if (postfix->Dot() || postfix->Arrow())
                 result = decode_member_access(result, postfix);
-            else if (postfix->PlusPlus())
-                result->postfix_increments.push_back(1);
-            else if (postfix->MinusMinus())
-                result->postfix_increments.push_back(-1);
+            else if (postfix->PlusPlus() || postfix->MinusMinus())
+                result = decode_postfix_increment(result, postfix);
             else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown postfix operator `{}`", postfix->getText()));
         }
         return result;
@@ -401,6 +398,25 @@ namespace toycc::semantic {
         return decode_direct_member_access(dereference, member_name, location);
     }
 
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::decode_postfix_increment(std::shared_ptr<ExpressionResult> target, CParser::PostfixOperatorContext* postfix) {
+        const CodeLocation location = locate(postfix);
+        if (!target->is_lvalue())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("The `{}` operator is only valid on lvalues", postfix->getText()), location);
+
+        // Save the old value to a temporary variable, that's what is returned by this expression
+        std::shared_ptr<Declaration> old_value = declare_temporary(target->type(), location);
+        emit_copy(old_value, target->operand(), location, true);
+
+        // Then increment the variable
+        StatementTag op;
+        if      (postfix->PlusPlus())    op = StatementTag::ADD;
+        else if (postfix->MinusMinus())  op = StatementTag::SUB;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid postfix increment {}", postfix->getText()), location);
+        emit_increment(target, op, location);
+
+        return make_expression(LValue {old_value}, location);
+    }
+
 
     StatementTag SemanticAnalyzer::decode_assignment_operator(CParser::AssignmentOperatorContext* context) {
         if      (context->Assign())            return StatementTag::COPY;
@@ -495,7 +511,7 @@ namespace toycc::semantic {
         return destination;
     }
 
-    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_prefix_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location) {
+    std::shared_ptr<SemanticAnalyzer::ExpressionResult> SemanticAnalyzer::emit_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location) {
         if (!operand->is_lvalue())
             throw Diagnostic(DiagnosticLevel::ERROR, "Prefix increment operators are only valid on lvalues", location);
 

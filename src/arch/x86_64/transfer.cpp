@@ -286,14 +286,15 @@ namespace std {
 }
 
 namespace toycc::arch::x86_64 {
-    enum class LocationType : size_t {
-        CONSTANT = 0, MEMORY = 1, MAIN_REGISTER = 2, EXT_REGISTER = 3, MM_REGISTER = 4,
+    enum class LocationType {
+        CONSTANT = 0, MEMORY = 1, MAIN_REGISTER = 2, STACK_REGISTER = 3, EXT_REGISTER = 4, MM_REGISTER = 5,  // Indices are used in the weight matrices below
     };
 
     static const std::unordered_map<LocationType, std::unordered_set<Location>> LOCATION_SETS = {
         {LocationType::CONSTANT, {Location::constant}},
         {LocationType::MEMORY, {Location::stack, Location::memory}},
-        {LocationType::MAIN_REGISTER, {Location::a, Location::b, Location::c, Location::d, Location::si, Location::di, Location::sp, Location::bp}},
+        {LocationType::MAIN_REGISTER, {Location::a, Location::b, Location::c, Location::d, Location::si, Location::di}},
+        {LocationType::STACK_REGISTER, {Location::sp, Location::bp}},
         {LocationType::EXT_REGISTER,  {Location::r8, Location::r9, Location::r10, Location::r11, Location::r12, Location::r13, Location::r14, Location::r15}},
         {LocationType::MM_REGISTER,   {Location::mm0, Location::mm1, Location::mm2,  Location::mm3,  Location::mm4,  Location::mm5,  Location::mm6,  Location::mm7,
                                        Location::mm8, Location::mm9, Location::mm10, Location::mm11, Location::mm12, Location::mm13, Location::mm14, Location::mm15}},
@@ -307,8 +308,8 @@ namespace toycc::arch::x86_64 {
         {Location::d,        LocationType::MAIN_REGISTER},
         {Location::si,       LocationType::MAIN_REGISTER},
         {Location::di,       LocationType::MAIN_REGISTER},
-        {Location::sp,       LocationType::MAIN_REGISTER},
-        {Location::bp,       LocationType::MAIN_REGISTER},
+        {Location::sp,       LocationType::STACK_REGISTER},
+        {Location::bp,       LocationType::STACK_REGISTER},
         {Location::r8,       LocationType::EXT_REGISTER},
         {Location::r9,       LocationType::EXT_REGISTER},
         {Location::r10,      LocationType::EXT_REGISTER},
@@ -340,21 +341,27 @@ namespace toycc::arch::x86_64 {
     static const std::unordered_set<Location> POINTER_LOCATIONS = {Location::a,  Location::b,  Location::c,   Location::d,   Location::si,  Location::di,
                                                                    Location::r8, Location::r9, Location::r10, Location::r11, Location::r12, Location::r13, Location::r14, Location::r15};
 
+    // NOTE : In practice transfers to and from stack registers have the same cost as main registers,
+    //        but since they are not allowed as variable locations they must be discouraged as transfer destinations
+    //        For now their cost is INFINITY to make them completely unusable, but technically they're still valid as allocations,
+    //        if that becomes necessary change the costs to a very high number
     static const arma::fmat TRANSFER_COSTS = {
-        /* from / to           CONSTANT |   MEMORY | MAIN_REGISTER | EXT_REGISTER | MM_REGISTER */
-        /* CONSTANT      */ {         0,       100,             10,            11,     INFINITY},
-        /* MEMORY        */ {  INFINITY,  INFINITY,            100,           101,     INFINITY},
-        /* MAIN_REGISTER */ {  INFINITY,       100,             10,            11,     INFINITY},
-        /* EXT_REGISTER  */ {  INFINITY,       101,             11,            11,     INFINITY},
-        /* MM_REGISTER   */ {  INFINITY,  INFINITY,       INFINITY,      INFINITY,     INFINITY},
+        /* from / to           CONSTANT |   MEMORY | MAIN_REGISTER | STACK_REGISTER | EXT_REGISTER | MM_REGISTER */
+        /* CONSTANT       */ {         0,       100,             10,        INFINITY,            11,     INFINITY},
+        /* MEMORY         */ {  INFINITY,  INFINITY,            100,        INFINITY,           101,     INFINITY},
+        /* MAIN_REGISTER  */ {  INFINITY,       100,             10,        INFINITY,            11,     INFINITY},
+        /* STACK_REGISTER */ {  INFINITY,  INFINITY,       INFINITY,        INFINITY,      INFINITY,     INFINITY},
+        /* EXT_REGISTER   */ {  INFINITY,       101,             11,        INFINITY,            11,     INFINITY},
+        /* MM_REGISTER    */ {  INFINITY,  INFINITY,       INFINITY,        INFINITY,      INFINITY,     INFINITY},
     };
 
     static const std::unordered_map<LocationType, float> OUTPUT_COSTS = {
-        {LocationType::CONSTANT,    INFINITY},
-        {LocationType::MEMORY,           100},
-        {LocationType::MAIN_REGISTER,      0},
-        {LocationType::EXT_REGISTER,       1},
-        {LocationType::MM_REGISTER, INFINITY},
+        {LocationType::CONSTANT,       INFINITY},
+        {LocationType::MEMORY,              100},
+        {LocationType::MAIN_REGISTER,         0},
+        {LocationType::STACK_REGISTER, INFINITY},
+        {LocationType::EXT_REGISTER,          1},
+        {LocationType::MM_REGISTER,    INFINITY},
     };
 
     struct WeightsMatrix {

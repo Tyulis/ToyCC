@@ -173,6 +173,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> decode_member_access(std::shared_ptr<ExpressionResult> structure, CParser::PostfixOperatorContext* access);
             std::shared_ptr<ExpressionResult> decode_direct_member_access(std::shared_ptr<ExpressionResult> structure, const std::string& member_name, CodeLocation location);
             std::shared_ptr<ExpressionResult> decode_indirect_member_access(std::shared_ptr<ExpressionResult> structure, const std::string& member_name, CodeLocation location);
+            std::shared_ptr<ExpressionResult> decode_postfix_increment(std::shared_ptr<ExpressionResult> target, CParser::PostfixOperatorContext* postfix);
 
             StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
             StatementTag decode_equality_operator(CParser::EqualityOperatorContext* context);
@@ -184,7 +185,7 @@ namespace toycc::semantic {
             std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location);
             std::shared_ptr<SemanticAnalyzer::ExpressionResult> emit_arithmetic_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
             std::shared_ptr<SemanticAnalyzer::ExpressionResult> emit_pointer_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
-            std::shared_ptr<ExpressionResult> emit_prefix_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location);
+            std::shared_ptr<ExpressionResult> emit_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
             std::shared_ptr<Type> operation_result_type(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
