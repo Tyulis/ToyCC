@@ -49,16 +49,11 @@ namespace toycc::semantic {
             void decode_function_definition(CParser::FunctionDefinitionContext* context);
             void decode_function_body(CParser::FunctionBodyContext* context, std::shared_ptr<Scope> function_scope);
 
-            // -------- RAII expression result to keep track of lvalues and lingering effects -> semantic/expressionresult.cpp
+            // -------- Expression result to keep track of the lvalue/rvalue distinction during semantic analysis -> semantic/expressionresult.cpp
             struct ExpressionResult {
                 public:
-                    std::variant<LValue, RValue> result;
-                    CodeLocation location;
-                    std::vector<int> postfix_increments;
-
-                    ExpressionResult(LValue result, CodeLocation location, SemanticAnalyzer& analyzer);
-                    ExpressionResult(RValue result, CodeLocation location, SemanticAnalyzer& analyzer);
-                    ~ExpressionResult();
+                    ExpressionResult(LValue result, CodeLocation location);
+                    ExpressionResult(RValue result, CodeLocation location);
 
                     std::shared_ptr<Type> type() const;
                     bool is_lvalue() const;
@@ -72,8 +67,8 @@ namespace toycc::semantic {
                     std::shared_ptr<ExpressionResult> dereference(RValue index, CodeLocation location) const;
 
                 private:
-                    SemanticAnalyzer& analyzer;
-                    void apply_postfix_operations();
+                    std::variant<LValue, RValue> result;
+                    CodeLocation location;
             };
 
             std::shared_ptr<ExpressionResult> make_expression(LValue lvalue, CodeLocation location);
