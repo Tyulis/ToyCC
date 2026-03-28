@@ -47,8 +47,8 @@ namespace toycc::semantic {
                         throw Diagnostic(DiagnosticLevel::ERROR, "Initializers are not allowed in typedef declarations", locate(declarator->initializer()));
 
                     const CodeLocation initializer_location = locate(declarator->initializer());
-                    std::shared_ptr<ExpressionResult> initializer = decode_initializer(declarator->initializer());
-                    emit_copy(declaration, initializer->operand(), initializer_location, true);
+                    ExpressionResult initializer = decode_initializer(declarator->initializer());
+                    emit_copy(declaration, initializer.operand(), initializer_location, true);
                 }
             }
         }
@@ -451,8 +451,8 @@ namespace toycc::semantic {
         if (!context->assignmentExpression())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
 
-        std::shared_ptr<ExpressionResult> length = decode_assignment_expression(context->assignmentExpression());
-        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length->operand());
+        ExpressionResult length = decode_assignment_expression(context->assignmentExpression());
+        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length.operand());
     }
 
     void SemanticAnalyzer::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorExtensionContext* context) {
@@ -512,8 +512,8 @@ namespace toycc::semantic {
         if (!context->assignmentExpression())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
 
-        std::shared_ptr<ExpressionResult> length = decode_assignment_expression(context->assignmentExpression());
-        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length->operand());
+        ExpressionResult length = decode_assignment_expression(context->assignmentExpression());
+        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length.operand());
     }
 
     void SemanticAnalyzer::decode_function_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {

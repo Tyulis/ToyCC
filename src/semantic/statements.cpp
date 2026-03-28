@@ -61,7 +61,7 @@ namespace toycc::semantic {
 
     void SemanticAnalyzer::decode_if_statement(CParser::SelectionStatementContext* context) {
         const CodeLocation predicate_location = locate(context->expression());
-        std::shared_ptr<ExpressionResult> predicate_expression = decode_expression(context->expression());
+        ExpressionResult predicate_expression = decode_expression(context->expression());
 
         const std::string label_after_if = anonymous_label();
         emit_conditional_jump(predicate_expression, label_after_if, false, locate(context));
@@ -100,7 +100,7 @@ namespace toycc::semantic {
 
         // First evaluation of the predicate right before the loop : when already false, don't enter
         const CodeLocation predicate_location = locate(context->expression());
-        std::shared_ptr<ExpressionResult> entry_predicate_expression = decode_expression(context->expression());
+        ExpressionResult entry_predicate_expression = decode_expression(context->expression());
         emit_conditional_jump(entry_predicate_expression, exit_label, false, predicate_location);
 
         // Then the loop body
@@ -108,7 +108,7 @@ namespace toycc::semantic {
         decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
         // Second evaluation of the predicate into the loop : when true, jump back to the beginning of the loop
-        std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
+        ExpressionResult loop_predicate_expression = decode_expression(context->expression());
         emit_conditional_jump(loop_predicate_expression, entry_label, true, predicate_location);
         emit_label(LabelType::INTERNAL, exit_label, locate(context));
     }
@@ -122,7 +122,7 @@ namespace toycc::semantic {
         decode_statement(context->statement(), ScopeType::LOOP, entry_label, exit_label);
 
         // Evaluate the predicate at the end : when true, jump back to the beginning of the loop, otherwise fall through to exit
-        std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_expression(context->expression());
+        ExpressionResult loop_predicate_expression = decode_expression(context->expression());
         emit_conditional_jump(loop_predicate_expression, entry_label, true, locate(context->expression()));
         emit_label(LabelType::INTERNAL, exit_label, locate(context));
     }
@@ -151,7 +151,7 @@ namespace toycc::semantic {
             // NOTE : No predicate means an infinite loop. Here, skipping the predicate means there is no exit condition
             if (predicate_context) {
                 // First evaluation of the predicate right before the loop : when already false, don't enter
-                std::shared_ptr<ExpressionResult> entry_predicate_expression = decode_for_expression(predicate_context);
+                ExpressionResult entry_predicate_expression = decode_for_expression(predicate_context);
                 emit_conditional_jump(entry_predicate_expression, exit_label, false, locate(predicate_context));
             }
 
@@ -161,7 +161,7 @@ namespace toycc::semantic {
 
             if (predicate_context) {
                 // Second evaluation of the predicate into the loop : when false, exit
-                std::shared_ptr<ExpressionResult> loop_predicate_expression = decode_for_expression(predicate_context);
+                ExpressionResult loop_predicate_expression = decode_for_expression(predicate_context);
 
                 if (increment_context)  // With increment: predicate == true : fall through to the increment, jump afterwards | predicate == false : jump out of the loop
                     emit_conditional_jump(loop_predicate_expression, exit_label, false, locate(predicate_context));
@@ -213,8 +213,8 @@ namespace toycc::semantic {
             if (function_type->return_type->category == TypeCategory::VOID)
                 throw Diagnostic(DiagnosticLevel::ERROR, "Can't return a value in a function returning void", location);
 
-            std::shared_ptr<ExpressionResult> expression_result = decode_expression(context->expression());
-            Operand return_value = emit_implicit_conversion(function_type->return_type, expression_result->operand(), location);
+            ExpressionResult expression_result = decode_expression(context->expression());
+            Operand return_value = emit_implicit_conversion(function_type->return_type, expression_result.operand(), location);
             emit(Statement::make_return(location, return_value));
         } else {
             if (function_type->return_type->category != TypeCategory::VOID)
@@ -235,8 +235,8 @@ namespace toycc::semantic {
     }
 
 
-    void SemanticAnalyzer::emit_conditional_jump(std::shared_ptr<ExpressionResult> predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location) {
-        Operand predicate = emit_implicit_conversion(boolean_type, predicate_expression->operand(), location);
+    void SemanticAnalyzer::emit_conditional_jump(const ExpressionResult& predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location) {
+        Operand predicate = emit_implicit_conversion(boolean_type, predicate_expression.operand(), location);
         emit(Statement::make_conditional_jump(location, predicate, destination_label, jump_if_is));
     }
 }

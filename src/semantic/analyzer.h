@@ -49,31 +49,6 @@ namespace toycc::semantic {
             void decode_function_definition(CParser::FunctionDefinitionContext* context);
             void decode_function_body(CParser::FunctionBodyContext* context, std::shared_ptr<Scope> function_scope);
 
-            // -------- Expression result to keep track of the lvalue/rvalue distinction during semantic analysis -> semantic/expressionresult.cpp
-            struct ExpressionResult {
-                public:
-                    ExpressionResult(LValue result, CodeLocation location);
-                    ExpressionResult(RValue result, CodeLocation location);
-
-                    std::shared_ptr<Type> type() const;
-                    bool is_lvalue() const;
-
-                    LValue lvalue() const;
-                    RValue rvalue() const;
-                    Operand operand() const;
-                    RValue base() const;
-                    std::vector<RValue> indices() const;
-
-                    std::shared_ptr<ExpressionResult> dereference(RValue index, CodeLocation location) const;
-
-                private:
-                    std::variant<LValue, RValue> result;
-                    CodeLocation location;
-            };
-
-            std::shared_ptr<ExpressionResult> make_expression(LValue lvalue, CodeLocation location);
-            std::shared_ptr<ExpressionResult> make_expression(RValue rvalue, CodeLocation location);
-
             // -------- Statements -> semantic/statements.cpp
             std::shared_ptr<Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type, std::string entry_label = {}, std::string exit_label = {});
             void decode_compound_statement(CParser::CompoundStatementContext* context, std::shared_ptr<Scope> scope);
@@ -93,7 +68,7 @@ namespace toycc::semantic {
             void decode_return_statement(CParser::JumpStatementContext* context);
             void decode_labeled_statement(CParser::LabeledStatementContext* context);
 
-            void emit_conditional_jump(std::shared_ptr<ExpressionResult> predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location);
+            void emit_conditional_jump(const ExpressionResult& predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location);
 
             // -------- Declarations -> semantic/declarations.cpp
             void decode_declaration(CParser::DeclarationContext* context);
@@ -135,40 +110,40 @@ namespace toycc::semantic {
             std::shared_ptr<Type> decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> base_type);
 
             // -------- Expressions -> semantic/expressions.cpp
-            std::shared_ptr<ExpressionResult> decode_initializer(CParser::InitializerContext* context);
-            std::shared_ptr<ExpressionResult> decode_expression(CParser::ExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_for_expression(CParser::ForExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_expression_list(std::vector<CParser::AssignmentExpressionContext*> context);
-            std::shared_ptr<ExpressionResult> decode_assignment_expression(CParser::AssignmentExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_conditional_expression(CParser::ConditionalExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_logical_or_expression(CParser::LogicalOrExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_logical_and_expression(CParser::LogicalAndExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_inclusive_or_expression(CParser::InclusiveOrExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_exclusive_or_expression(CParser::ExclusiveOrExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_and_expression(CParser::AndExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_equality_expression(CParser::EqualityExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_relational_expression(CParser::RelationalExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_shift_expression(CParser::ShiftExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_additive_expression(CParser::AdditiveExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_cast_expression(CParser::CastExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_prefix_expression(CParser::PrefixExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_expression(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_operation(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_addressof(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_dereference(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_plus(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_minus(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_bitwise_not(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_unary_logical_not(CParser::UnaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_postfix_expression(CParser::PostfixExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_array_index(std::shared_ptr<ExpressionResult> array, CParser::PostfixOperatorContext* postfix);
-            std::shared_ptr<ExpressionResult> decode_primary_expression(CParser::PrimaryExpressionContext* context);
-            std::shared_ptr<ExpressionResult> decode_function_call(std::shared_ptr<ExpressionResult> function, CParser::PostfixOperatorContext* call);
-            std::shared_ptr<ExpressionResult> decode_member_access(std::shared_ptr<ExpressionResult> structure, CParser::PostfixOperatorContext* access);
-            std::shared_ptr<ExpressionResult> decode_direct_member_access(std::shared_ptr<ExpressionResult> structure, const std::string& member_name, CodeLocation location);
-            std::shared_ptr<ExpressionResult> decode_indirect_member_access(std::shared_ptr<ExpressionResult> structure, const std::string& member_name, CodeLocation location);
-            std::shared_ptr<ExpressionResult> decode_postfix_increment(std::shared_ptr<ExpressionResult> target, CParser::PostfixOperatorContext* postfix);
+            ExpressionResult decode_initializer(CParser::InitializerContext* context);
+            ExpressionResult decode_expression(CParser::ExpressionContext* context);
+            ExpressionResult decode_for_expression(CParser::ForExpressionContext* context);
+            ExpressionResult decode_expression_list(std::vector<CParser::AssignmentExpressionContext*> context);
+            ExpressionResult decode_assignment_expression(CParser::AssignmentExpressionContext* context);
+            ExpressionResult decode_conditional_expression(CParser::ConditionalExpressionContext* context);
+            ExpressionResult decode_logical_or_expression(CParser::LogicalOrExpressionContext* context);
+            ExpressionResult decode_logical_and_expression(CParser::LogicalAndExpressionContext* context);
+            ExpressionResult decode_inclusive_or_expression(CParser::InclusiveOrExpressionContext* context);
+            ExpressionResult decode_exclusive_or_expression(CParser::ExclusiveOrExpressionContext* context);
+            ExpressionResult decode_and_expression(CParser::AndExpressionContext* context);
+            ExpressionResult decode_equality_expression(CParser::EqualityExpressionContext* context);
+            ExpressionResult decode_relational_expression(CParser::RelationalExpressionContext* context);
+            ExpressionResult decode_shift_expression(CParser::ShiftExpressionContext* context);
+            ExpressionResult decode_additive_expression(CParser::AdditiveExpressionContext* context);
+            ExpressionResult decode_multiplicative_expression(CParser::MultiplicativeExpressionContext* context);
+            ExpressionResult decode_cast_expression(CParser::CastExpressionContext* context);
+            ExpressionResult decode_prefix_expression(CParser::PrefixExpressionContext* context);
+            ExpressionResult decode_unary_expression(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_unary_operation(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_unary_addressof(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_unary_dereference(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_unary_plus(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_unary_minus(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_unary_bitwise_not(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_unary_logical_not(CParser::UnaryExpressionContext* context);
+            ExpressionResult decode_postfix_expression(CParser::PostfixExpressionContext* context);
+            ExpressionResult decode_array_index(const ExpressionResult& array, CParser::PostfixOperatorContext* postfix);
+            ExpressionResult decode_primary_expression(CParser::PrimaryExpressionContext* context);
+            ExpressionResult decode_function_call(const ExpressionResult& function, CParser::PostfixOperatorContext* call);
+            ExpressionResult decode_member_access(const ExpressionResult& structure, CParser::PostfixOperatorContext* access);
+            ExpressionResult decode_direct_member_access(const ExpressionResult& structure, const std::string& member_name, CodeLocation location);
+            ExpressionResult decode_indirect_member_access(const ExpressionResult& structure, const std::string& member_name, CodeLocation location);
+            ExpressionResult decode_postfix_increment(const ExpressionResult& target, CParser::PostfixOperatorContext* postfix);
 
             StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
             StatementTag decode_equality_operator(CParser::EqualityOperatorContext* context);
@@ -176,11 +151,11 @@ namespace toycc::semantic {
             StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
             StatementTag decode_additive_operator(CParser::AdditiveOperatorContext* context);
 
-            std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
-            std::shared_ptr<ExpressionResult> emit_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, std::shared_ptr<ExpressionResult> destination, CodeLocation location);
-            std::shared_ptr<SemanticAnalyzer::ExpressionResult> emit_arithmetic_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
-            std::shared_ptr<SemanticAnalyzer::ExpressionResult> emit_pointer_binary_operation(StatementTag op, std::shared_ptr<ExpressionResult> left, std::shared_ptr<ExpressionResult> right, CodeLocation location);
-            std::shared_ptr<ExpressionResult> emit_increment(std::shared_ptr<ExpressionResult> operand, StatementTag op, CodeLocation location);
+            ExpressionResult emit_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
+            ExpressionResult emit_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, const ExpressionResult& destination, CodeLocation location);
+            ExpressionResult emit_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
+            ExpressionResult emit_pointer_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
+            ExpressionResult emit_increment(const ExpressionResult& operand, StatementTag op, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
             std::shared_ptr<Type> operation_result_type(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);

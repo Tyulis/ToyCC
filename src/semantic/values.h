@@ -11,7 +11,7 @@
 namespace toycc::semantic {
     using namespace toycc::ir;
 
-    // -------- Structures to represent expression results -> ir/generator/expressionresult.cpp
+    // -------- Structures to represent expression results -> ir/generator/values.cpp
     struct RValue {
         std::variant<std::shared_ptr<Declaration>, Constant> value;
 
@@ -42,5 +42,27 @@ namespace toycc::semantic {
 
         std::shared_ptr<Type> type() const;
         std::string ir_code() const;
+    };
+
+    // -------- Expression result to keep track of the lvalue/rvalue distinction during semantic analysis while preserving an unified interface -> semantic/expressionresult.cpp
+    struct ExpressionResult {
+    public:
+        ExpressionResult(LValue result, CodeLocation location);
+        ExpressionResult(RValue result, CodeLocation location);
+
+        std::shared_ptr<Type> type() const;
+        bool is_lvalue() const;
+
+        LValue lvalue() const;
+        RValue rvalue() const;
+        Operand operand() const;
+        RValue base() const;
+        std::vector<RValue> indices() const;
+
+        ExpressionResult dereference(RValue index, CodeLocation location) const;
+
+    private:
+        std::variant<LValue, RValue> result;
+        CodeLocation location;
     };
 }
