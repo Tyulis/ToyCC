@@ -127,6 +127,13 @@ namespace toycc::arch::x86_64 {
     std::string StackFrame::str() const {
         CodeOutput code;
 
+        // Generate the function symbol
+        if (!(procedure.declaration->storage & ir::StorageClass::STATIC))
+            code.directive(std::format(".globl {}", procedure.declaration->name));
+
+        code.directive(std::format(".type {}, @function", procedure.declaration->name));
+        code.label(procedure.declaration->name);
+
         if (toycc::config::debug::with_comment_trace)
             for (const auto& [variable, offset] : stack_offsets)
                 code.comment(std::format("{}(%rbp) : {}", -static_cast<ssize_t>(offset + variable->type->size({})), variable->name));
@@ -190,6 +197,10 @@ namespace toycc::arch::x86_64 {
 
     void StackFrame::comment(std::string code) {
         output.comment(code);
+    }
+
+    void StackFrame::debug(std::string content) {
+        output.debug(content);
     }
 
     std::string StackFrame::dump_allocations() const {

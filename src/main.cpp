@@ -46,6 +46,8 @@ void read_config(const boost::program_options::variables_map& options) {
         toycc::config::optimization::split_intermediates = false;
 
     // Debug options
+    if (options.count("debug"))
+        toycc::config::debug::enable = true;
     if (options.count("translation-trace"))
         toycc::config::debug::with_translation_trace = true;
     if (options.count("comment-trace"))
@@ -67,7 +69,8 @@ int main(int argc, char** argv) {
                                   ("compile,c",      "Compile to an object file");
 
     boost::program_options::options_description debug_options("Debug options");
-    debug_options.add_options()("translation-trace", "Log all translation model steps")
+    debug_options.add_options()("debug,g",           "Emit debugging information in 64-bits DWARF5 format")
+                               ("translation-trace", "Log all translation model steps")
                                ("comment-trace",     "Add comments with the translation process in the assembly code output");
 
     boost::program_options::options_description optimization_options("Optimization options");

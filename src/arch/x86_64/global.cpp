@@ -1,3 +1,4 @@
+#include "debug/unit.h"
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/allocation.h"
@@ -7,20 +8,20 @@
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_translation_unit(CodeOutput& output, const ir::TranslationUnit& unit) {
-        generate_global_declarations(output, unit.globals);
+        debug::CompilationUnit debuginfo;
 
-        output.directive(".text");  // Now that the data has been handled, all that remains is code
+        CodeOutput code;
+        generate_global_declarations(code, unit.globals);
+
+        code.directive(".text");  // Now that the data has been handled, all that remains is code
         for (const auto& [name, procedure] : unit.procedures)
-            generate_procedure(output, procedure);
+            generate_procedure(code, procedure, debuginfo);
+
+        debuginfo.emit_filenos(output);
+        output << code.str();
     }
 
-    void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure) {
-        // Generate the function symbol
-        output.directive(std::format(".globl {}", procedure.declaration->name));
-        output.directive(std::format(".type {}, @function", procedure.declaration->name));
-        output.label(procedure.declaration->name);
-
-        // Then the actual code
+    void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::CompilationUnit& debuginfo) {
         StackFrame frame(procedure);
 
         ir::FlowGraph remaining_blocks = procedure.blocks;
@@ -30,7 +31,7 @@ namespace toycc::arch::x86_64 {
             remaining_blocks.pop_node(current_block);
 
             frame.enter_block(current_block, remaining_blocks.nof_nodes() <= 1);
-            generate_basic_block(frame, current_block);
+            generate_basic_block(frame, current_block, debuginfo);
 
             // Only the exit block remains -> exit
             if (remaining_blocks.nof_nodes() <= 1)

@@ -58,6 +58,7 @@ add_executable(${PROJECT_NAME}
 	src/diagnostic.cpp
 	src/linker.cpp
 	src/main.cpp
+	src/output.cpp
 	src/parser.cpp
 	src/preprocess.cpp
 	src/source_map.cpp
@@ -75,9 +76,10 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/execmodel.cpp
 	src/arch/x86_64/exports.cpp
 	src/arch/x86_64/global.cpp
-	src/arch/x86_64/output.cpp
 	src/arch/x86_64/symbols.cpp
 	src/arch/x86_64/transfer.cpp
+
+	src/debug/unit.cpp
 
 	src/ir/declaration.cpp
 	src/ir/flow.cpp

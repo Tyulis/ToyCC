@@ -1,10 +1,11 @@
 #pragma once
 
+#include "output.h"
 #include "ir/flow.h"
 #include "arch/codegen.h"
-#include "arch/x86_64/output.h"
 #include "arch/x86_64/execmodel.h"
 #include "arch/x86_64/allocation.h"
+#include "debug/unit.h"
 
 namespace toycc::arch::x86_64 {
     class CodeGenerator : public toycc::arch::CodeGenerator {
@@ -22,14 +23,15 @@ namespace toycc::arch::x86_64 {
             void generate_readonly_globals(CodeOutput& output, const ir::GlobalMap& globals);
             void generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable);
             void generate_global_value(CodeOutput& output, const ir::Constant& value);
-            void generate_procedure(CodeOutput& output, const ir::Procedure& procedure);
+            void generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::CompilationUnit& debuginfo);
 
             // -------- Basic block generation -> arch/x86_64/block.cpp
-            void generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block);
-            void code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches);
+            void generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, debug::CompilationUnit& debuginfo);
+            void code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches, debug::CompilationUnit& debuginfo);
 
             std::vector<GroupMatch> find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches);
             const TranslationMatch& select_translation(const std::vector<TranslationMatch>& matches);
+            void emit_location_info(StackFrame& frame, const TranslationMatch& match, debug::CompilationUnit& debuginfo);
             void clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match);
             void clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const ir::DependencyGraph& graph);
             void flush_globals(StackFrame& frame);

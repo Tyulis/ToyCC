@@ -10,7 +10,7 @@
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
-    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block) {
+    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, debug::CompilationUnit& debuginfo) {
         ir::DependencyGraph graph = block->dependencies;
         ir::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);
@@ -36,7 +36,7 @@ namespace toycc::arch::x86_64 {
             }
 
             try {
-                code_generation_iteration(frame, graph, group_matches);
+                code_generation_iteration(frame, graph, group_matches, debuginfo);
                 clear_obsolete_matches(group_matches, graph);
             } catch (Diagnostic& diagnostic) {
                 if (diagnostic.level() == DiagnosticLevel::INTERNAL_ERROR || diagnostic.level() == DiagnosticLevel::NOT_IMPLEMENTED) {
@@ -49,7 +49,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
+    void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches, debug::CompilationUnit& debuginfo) {
         std::vector<GroupMatch> entry_matches = find_entry_matches(graph, group_matches);
         if (entry_matches.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No entry group matches");
@@ -63,6 +63,7 @@ namespace toycc::arch::x86_64 {
             frame.comment(dump(selected_match));
 
         try {
+            emit_location_info(frame, selected_match, debuginfo);
             emit_transfers(frame, graph, selected_match);
             toycc::execmodel::x86_64::emit_code(frame, selected_match);
             clear_processed_statements(frame, graph, selected_match.group_match);
@@ -140,6 +141,11 @@ namespace toycc::arch::x86_64 {
         }
 
         return matches.at(selected_index.value());
+    }
+
+    void CodeGenerator::emit_location_info(StackFrame& frame, const TranslationMatch& match, debug::CompilationUnit& debuginfo) {
+        const CodeLocation& location = match.group_match.statements[0]->statement().location;
+        frame.debug(std::format(".loc {} {} {}", debuginfo.fileno(location.filename), location.line, location.character));
     }
 
     void CodeGenerator::clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match) {

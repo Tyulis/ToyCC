@@ -2,9 +2,9 @@
 
 #include <string>
 
+#include "output.h"
 #include "ir/flow.h"
 #include "ir/allocation.h"
-#include "arch/x86_64/output.h"
 #include "gen/execmodel/x86_64/location.h"
 
 namespace toycc::arch::x86_64 {
@@ -33,6 +33,7 @@ namespace toycc::arch::x86_64 {
             void statement(std::string code);
             void directive(std::string code);
             void comment(std::string content);
+            void debug(std::string content);
             std::string str() const;
             std::string dump() const;
 

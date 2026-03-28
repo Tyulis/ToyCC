@@ -1,7 +1,8 @@
-#include "arch/x86_64/output.h"
+#include "config.h"
+#include "output.h"
 #include "util/strings.h"
 
-namespace toycc::arch::x86_64 {
+namespace toycc {
     // -------- CodeOutput
     void CodeOutput::label(std::string name) {
         output << name << ":\n";
@@ -19,6 +20,11 @@ namespace toycc::arch::x86_64 {
         std::vector<std::string> lines = split(content, "\n");
         for (const std::string& line : lines)
             output << "\t" << "# " << line << "\n";
+    }
+
+    void CodeOutput::debug(std::string content) {
+        if (config::debug::enable)
+            output << "\t" << content << "\n";
     }
 
     std::string CodeOutput::str() const {

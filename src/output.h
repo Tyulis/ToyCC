@@ -3,7 +3,7 @@
 #include <string>
 #include <sstream>
 
-namespace toycc::arch::x86_64 {
+namespace toycc {
     // x86_64 assembly code formatting helper
     class CodeOutput {
         public:
@@ -11,6 +11,7 @@ namespace toycc::arch::x86_64 {
             void statement(std::string code);
             void directive(std::string code);
             void comment(std::string content);
+            void debug(std::string content);
 
             std::string str() const;
 
