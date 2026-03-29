@@ -67,16 +67,50 @@ namespace toycc::semantic {
     }
 
     ExpressionResult SemanticAnalyzer::decode_logical_or_expression(CParser::LogicalOrExpressionContext* context) {
+        const std::vector<CParser::LogicalAndExpressionContext*> operands = context->logicalAndExpression();
+        const std::vector<antlr4::tree::TerminalNode*> operators = context->OrOr();
+
         ExpressionResult result = decode_logical_and_expression(context->logicalAndExpression()[0]);
-        if (context->logicalAndExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Logical OR expressions are not implemented", locate(context));
+
+        if (operators.size() > 0) {
+            const std::string evaluation_finished = anonymous_label();
+            for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+                const CodeLocation location = locate(operators[operation_index]);
+
+                // Short-circuit evaluation : first `true` result skips the rest
+                emit_conditional_jump(result, evaluation_finished, true, location);
+
+                // If it gets to this point, the previous `result` is false
+                // So no need for an explicit operation, just replace the result with the new value
+                result = decode_logical_and_expression(operands[operation_index + 1]);
+            }
+            emit_label(LabelType::INTERNAL, evaluation_finished, locate(context));
+        }
+
         return result;
     }
 
     ExpressionResult SemanticAnalyzer::decode_logical_and_expression(CParser::LogicalAndExpressionContext* context) {
+        const std::vector<CParser::InclusiveOrExpressionContext*> operands = context->inclusiveOrExpression();
+        const std::vector<antlr4::tree::TerminalNode*> operators = context->AndAnd();
+
         ExpressionResult result = decode_inclusive_or_expression(context->inclusiveOrExpression()[0]);
-        if (context->inclusiveOrExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Logical AND expressions are not implemented", locate(context));
+
+        if (operators.size() > 0) {
+            const std::string evaluation_finished = anonymous_label();
+            for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+                const CodeLocation location = locate(operators[operation_index]);
+
+                // Short-circuit evaluation : first `false` result skips the rest
+                emit_conditional_jump(result, evaluation_finished, false, location);
+
+                // If it gets to this point, the previous `result` is true
+                // So no need for an explicit operation, just replace the result with the new value
+                result = decode_inclusive_or_expression(operands[operation_index + 1]);
+            }
+            emit_label(LabelType::INTERNAL, evaluation_finished, locate(context));
+        }
+
         return result;
     }
 
