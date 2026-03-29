@@ -18,6 +18,8 @@
 #include "ir/scope.h"
 #include "ir/postprocessor.h"
 #include "util/log.h"
+#include <filesystem>
+
 #include "util/tempfile.h"
 
 #include "arch/datamodel.h"
@@ -181,7 +183,7 @@ int main(int argc, char** argv) {
         }
 
         // -------- Flow analysis
-        toycc::ir::TranslationUnit unit(processed_ir);
+        toycc::ir::TranslationUnit unit(processed_ir, std::filesystem::current_path().string(), input_file_name);
         if (target_step == SequenceStep::FLOW) {
             output_stream.get() << unit.dot_graph() << std::endl;
             return 0;

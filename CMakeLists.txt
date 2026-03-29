@@ -79,6 +79,9 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/symbols.cpp
 	src/arch/x86_64/transfer.cpp
 
+	src/debug/dwarf.cpp
+	src/debug/encoder.cpp
+	src/debug/generation.cpp
 	src/debug/unit.cpp
 
 	src/ir/declaration.cpp

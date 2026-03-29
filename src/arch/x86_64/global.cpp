@@ -1,3 +1,5 @@
+#include <filesystem>
+
 #include "debug/unit.h"
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
@@ -8,7 +10,7 @@
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_translation_unit(CodeOutput& output, const ir::TranslationUnit& unit) {
-        debug::CompilationUnit debuginfo;
+        debug::CompilationUnit debuginfo(unit.working_directory, unit.filename);
 
         CodeOutput code;
         generate_global_declarations(code, unit.globals);
@@ -17,8 +19,12 @@ namespace toycc::arch::x86_64 {
         for (const auto& [name, procedure] : unit.procedures)
             generate_procedure(code, procedure, debuginfo);
 
+        output.directive(std::format(".file \"{}\"", std::filesystem::path(unit.filename).filename().string()));
         debuginfo.emit_filenos(output);
+        debuginfo.begin_text(output);
         output << code.str();
+        debuginfo.end_text(output);
+        debuginfo.emit_debug_sections(output);
     }
 
     void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::CompilationUnit& debuginfo) {

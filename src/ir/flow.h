@@ -120,12 +120,14 @@ namespace toycc::ir {
     };
 
     struct TranslationUnit {
+        std::string working_directory;
+        std::string filename;
         GlobalMap globals;
         std::unordered_map<std::string, Procedure> procedures;
         std::shared_ptr<size_t> unique_id = 0;
 
         TranslationUnit() = default;
-        TranslationUnit(std::shared_ptr<Scope> global_scope);
+        TranslationUnit(std::shared_ptr<Scope> global_scope, std::string working_directory, std::string filename);
 
         std::string dot_graph() const;
     };

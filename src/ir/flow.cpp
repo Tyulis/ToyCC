@@ -623,7 +623,9 @@ namespace toycc::ir {
     }
 
     // -------- TranslationUnit
-    TranslationUnit::TranslationUnit(std::shared_ptr<Scope> global_scope) : unique_id(std::make_shared<size_t>(0)) {
+    TranslationUnit::TranslationUnit(std::shared_ptr<Scope> global_scope, std::string working_directory, std::string filename)
+        : working_directory(working_directory), filename(filename), unique_id(std::make_shared<size_t>(0))
+    {
         // After descoping, only procedures and static declarations remain
         for (std::shared_ptr<Declaration> declaration : global_scope->locals_list()) {
             declaration->storage = StorageClass::GLOBAL;
