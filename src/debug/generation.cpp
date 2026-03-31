@@ -38,13 +38,13 @@ namespace toycc::debug {
             case Form::DW_FORM_data8:       encoder.int64 (expression);  break;
             case Form::DW_FORM_strp:        encoder.offset(expression);  break;
             case Form::DW_FORM_sec_offset:  encoder.offset(expression);  break;
+            case Form::DW_FORM_flag:        encoder.int8  (expression);  break;
 
             case Form::DW_FORM_block2:
             case Form::DW_FORM_block4:
             case Form::DW_FORM_string:
             case Form::DW_FORM_block:
             case Form::DW_FORM_block1:
-            case Form::DW_FORM_flag:
             case Form::DW_FORM_sdata:
             case Form::DW_FORM_udata:
             case Form::DW_FORM_ref_addr:

@@ -14,6 +14,13 @@
 namespace toycc::debug {
     class CompilationUnit {
         public:
+            // RAII object to automatically release debug info stack entries
+            struct EntryLifespan {
+                ~EntryLifespan();
+                CompilationUnit& unit;
+            };
+
+        public:
             CompilationUnit(std::string working_directory, std::string filename);
 
             // To emit debugging directives at the beginning and end of the .text section
@@ -22,10 +29,12 @@ namespace toycc::debug {
 
             size_t fileno(std::string filename);  // Get the fileno for the given filename, add it if it's not known yet
             void emit_filenos(CodeOutput& assembly);
+            std::string string(std::string value);  // Add a string to the debug info, return a label to it
 
             std::shared_ptr<DebugInfoRecord> push(Tag tag, const std::vector<AttributeValue>& attributes);    // Push an entry as a node with children
             std::shared_ptr<DebugInfoRecord> append(Tag tag, const std::vector<AttributeValue>& attributes);  // Append an entry to the children list of the current node
             std::shared_ptr<DebugInfoRecord> pop();                                                           // Pop the last entry with children
+            EntryLifespan push_auto(Tag tag, const std::vector<AttributeValue>& attributes);                  // Push an entry which gets automatically popped when it goes out of scope
 
             void emit_debug_sections(CodeOutput& assembly);
 

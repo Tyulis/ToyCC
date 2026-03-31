@@ -49,6 +49,10 @@ namespace toycc::debug {
         return std::to_string(value);
     }
 
+    inline std::string asm_expression(bool value) {
+        return std::to_string(static_cast<int>(value));
+    }
+
     template <typename T> requires(std::is_enum_v<T>)
     std::string asm_expression(T value) {
         return std::to_string(std::to_underlying(value));

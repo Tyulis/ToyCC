@@ -9,6 +9,10 @@ namespace toycc::debug {
     const static std::string END_TEXT_LABEL   = ".WL.text.end";
     const static std::string BEGIN_DEBUG_ABBREV_LABEL = ".WL.debug_abbrev.begin";
 
+    CompilationUnit::EntryLifespan::~EntryLifespan() {
+        unit.pop();
+    }
+
     CompilationUnit::CompilationUnit(std::string working_directory, std::string filename) {
         debug_info_root = push(Tag::DW_TAG_compile_unit, {
             {Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,       BEGIN_TEXT_LABEL},                                         // DWARF5 3.1.1.1
@@ -46,10 +50,20 @@ namespace toycc::debug {
             assembly.debug(std::format(".file {} \"{}\"", fileno, filename));
     }
 
+    std::string CompilationUnit::string(std::string value) {
+        return debug_str[value];
+    }
+
     std::shared_ptr<DebugInfoRecord> CompilationUnit::push(Tag tag, const std::vector<AttributeValue>& attributes) {
         std::shared_ptr<DebugInfoRecord> record = append(tag, attributes);
         debug_info_stack.push_back(record);
         return record;
+    }
+
+    CompilationUnit::EntryLifespan CompilationUnit::push_auto(Tag tag, const std::vector<AttributeValue>& attributes) {
+        std::shared_ptr<DebugInfoRecord> record = append(tag, attributes);
+        debug_info_stack.push_back(record);
+        return {*this};
     }
 
     std::shared_ptr<DebugInfoRecord> CompilationUnit::append(Tag tag, const std::vector<AttributeValue>& attributes) {

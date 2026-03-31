@@ -1,5 +1,6 @@
 #include <filesystem>
 
+#include "debug/dwarf.h"
 #include "debug/unit.h"
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
@@ -29,6 +30,17 @@ namespace toycc::arch::x86_64 {
 
     void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::CompilationUnit& debuginfo) {
         StackFrame frame(procedure);
+        std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
+        const std::string end_label = std::format(".{}.BB.__end", declaration->name);
+
+        // FIXME : Add the return type and prototype
+        auto debug_entry = debuginfo.push_auto(debug::Tag::DW_TAG_subprogram, {
+            {debug::Attribute::DW_AT_name,            debug::Form::DW_FORM_strp,  debuginfo.string(declaration->name)},
+            {debug::Attribute::DW_AT_external,        debug::Form::DW_FORM_flag,  !(declaration->storage & ir::StorageClass::STATIC)},
+            {debug::Attribute::DW_AT_main_subprogram, debug::Form::DW_FORM_flag,  declaration->name == "main"},
+            {debug::Attribute::DW_AT_low_pc,          debug::Form::DW_FORM_addr,  declaration->name},
+            {debug::Attribute::DW_AT_high_pc,         debug::Form::DW_FORM_data8, std::format("{}-{}", end_label, declaration->name)},
+        });
 
         ir::FlowGraph remaining_blocks = procedure.blocks;
         std::shared_ptr<ir::BasicBlock> current_block = procedure.entry_block;
@@ -91,6 +103,7 @@ namespace toycc::arch::x86_64 {
         }
 
         output << frame;
+        output.label(end_label);
     }
 
     void CodeGenerator::generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals) {
