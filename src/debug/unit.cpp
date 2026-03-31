@@ -73,6 +73,7 @@ namespace toycc::debug {
 
         AbbreviationMap abbreviations;
         emit_debug_record(debug_info, debug_abbrev, abbreviations, debug_info_root);
+        debug_abbrev.uleb128(0);  // The .debug_abbrev section must be null-terminated
 
         // Fill the .debug_info section
         assembly.directive(".section .debug_info,\"\",@progbits");
