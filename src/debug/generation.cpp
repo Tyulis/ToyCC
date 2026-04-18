@@ -39,6 +39,10 @@ namespace toycc::debug {
             case Form::DW_FORM_strp:        encoder.offset(expression);  break;
             case Form::DW_FORM_sec_offset:  encoder.offset(expression);  break;
             case Form::DW_FORM_flag:        encoder.int8  (expression);  break;
+            case Form::DW_FORM_ref1:        encoder.int8  (expression);  break;
+            case Form::DW_FORM_ref2:        encoder.int16 (expression);  break;
+            case Form::DW_FORM_ref4:        encoder.int32 (expression);  break;
+            case Form::DW_FORM_ref8:        encoder.int64 (expression);  break;
 
             case Form::DW_FORM_block2:
             case Form::DW_FORM_block4:
@@ -48,10 +52,6 @@ namespace toycc::debug {
             case Form::DW_FORM_sdata:
             case Form::DW_FORM_udata:
             case Form::DW_FORM_ref_addr:
-            case Form::DW_FORM_ref1:
-            case Form::DW_FORM_ref2:
-            case Form::DW_FORM_ref4:
-            case Form::DW_FORM_ref8:
             case Form::DW_FORM_ref_udata:
             case Form::DW_FORM_indirect:
             case Form::DW_FORM_exprloc:

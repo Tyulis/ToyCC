@@ -585,6 +585,15 @@ namespace toycc::ir {
             block->finish();
     }
 
+    std::string Procedure::start_label() const {
+        return declaration->name;
+    }
+
+    std::string Procedure::end_label() const {
+        return std::format(".{}.BB.__end", declaration->name);
+    }
+
+
     std::unordered_set<std::shared_ptr<Declaration>> Procedure::locals() const {
         std::unordered_set<std::shared_ptr<Declaration>> declarations;
         for (std::shared_ptr<BasicBlock> block : blocks.nodes())

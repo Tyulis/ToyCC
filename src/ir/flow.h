@@ -108,6 +108,9 @@ namespace toycc::ir {
             Procedure() = default;
             Procedure(const Statement& function, const GlobalMap& globals, std::shared_ptr<size_t> unique_id);
 
+            std::string start_label() const;
+            std::string end_label() const;
+
             std::string dot_subgraph(std::stringstream& dot) const;
 
             std::unordered_set<std::shared_ptr<Declaration>> locals() const;

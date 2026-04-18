@@ -1,6 +1,8 @@
+#include "diagnostic.h"
 #include "debug/unit.h"
 #include "debug/dwarf.h"
 #include "debug/generation.h"
+#include "ir/type.h"
 
 namespace toycc::debug {
     const static std::string PRODUCER_IDENTIFICATION = "ToyCC";
@@ -58,6 +60,17 @@ namespace toycc::debug {
         return debug_str[value];
     }
 
+    size_t CompilationUnit::type(std::shared_ptr<ir::Type> type) {
+        auto it = types.find(type);
+        if (it != types.end())
+            return it->second;
+
+        const size_t offset = debug_info.length();
+        types[type] = offset;
+        emit_type(type);
+        return offset;
+    }
+
     // -------- Debug info entries
     void CompilationUnit::push(const DebugInfoEntry& entry) {
         emit_debug_entry(entry, true);
@@ -81,8 +94,6 @@ namespace toycc::debug {
 
         // Fill the .debug_info section
         assembly.directive(".section .debug_info,\"\",@progbits");
-        assembly.directive(".int 0xFFFFFFFF");  // Length field : set 64-bit DWARF
-        assembly.directive(std::format(".quad {}", debug_info.length()));
         assembly << debug_info;
 
         // Fill the .debug_abbrev section
@@ -95,7 +106,7 @@ namespace toycc::debug {
         debug_str.emit(assembly);
     }
 
-    // Internal : Emit the debug info entry
+    // -------- Debug info emission internals
     void CompilationUnit::emit_debug_entry(const DebugInfoEntry& entry, bool has_children) {
         AbbreviationKey key = entry.abbrev_key(has_children);
 
@@ -118,5 +129,34 @@ namespace toycc::debug {
 
         abbreviations[entry.abbrev_key(has_children)] = abbreviation;
         abbreviation.emit(debug_abbrev);
+    }
+
+    void CompilationUnit::emit_type(std::shared_ptr<ir::Type> type) {
+        switch (type->category) {
+            case ir::TypeCategory::INTEGER:  emit_integer_type(std::static_pointer_cast<ir::IntegerType>(type));  break;
+
+            case ir::TypeCategory::BOOL:
+            case ir::TypeCategory::FLOAT:
+            case ir::TypeCategory::ARRAY:
+            case ir::TypeCategory::STRUCT:
+            case ir::TypeCategory::UNION:
+            case ir::TypeCategory::FUNCTION:
+            case ir::TypeCategory::VOID:
+            case ir::TypeCategory::BUILTIN:
+            case ir::TypeCategory::LABEL:
+            case ir::TypeCategory::POINTER:
+            case ir::TypeCategory::ENUM:
+            case ir::TypeCategory::BITFIELD:
+            case ir::TypeCategory::QUALIFIED:
+            case ir::TypeCategory::ALIGNED:
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Debug info emission is not implemented for type `{}`", type->ir_code()));
+        }
+    }
+
+    void CompilationUnit::emit_integer_type(std::shared_ptr<ir::IntegerType> type) {
+        append(DebugInfoEntry(Tag::DW_TAG_base_type)
+            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp,  string(type->name))
+            .add(Attribute::DW_AT_encoding, Form::DW_FORM_data1, (type->is_signed ? BaseTypeEncoding::DW_ATE_signed : BaseTypeEncoding::DW_ATE_unsigned))
+            .add(Attribute::DW_AT_bit_size, Form::DW_FORM_data1, type->size_bits));
     }
 }

@@ -9,6 +9,8 @@ namespace toycc::debug {
     // More convenient encoder of DWARF debug information fields
     class Encoder {
         public:
+            Encoder(size_t size = 0);
+
             Encoder& int8(std::string expression);
             Encoder& int8(uint8_t value);
             Encoder& int8(int8_t value);
@@ -35,15 +37,23 @@ namespace toycc::debug {
             Encoder& uleb128(Attribute value);
             Encoder& uleb128(Form value);
 
-            Encoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
-
             size_t length() const;
             std::string str() const;
 
-        private:
+        protected:
             CodeOutput assembly;
-            size_t size = 0;
+            size_t size;
+    };
+
+    // Specialization for the .debug_info section
+    class DebugInfoEncoder : public Encoder {
+        public:
+            DebugInfoEncoder();
+            DebugInfoEncoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
+
+            std::string str() const;
     };
 
     CodeOutput& operator<< (CodeOutput& output, const Encoder& encoder);
+    CodeOutput& operator<< (CodeOutput& output, const DebugInfoEncoder& encoder);
 }

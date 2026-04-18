@@ -50,8 +50,11 @@ for test_source in $(find ${TESTSUITE_DIR} -iname '*.c') ; do
             fi
             ;;
 
-        --compile)
-            CMD="$CC -o ${test_compiled} ${test_source}"
+        --compile|--debug)
+	    if [ "$1" == "--debug" ]; then
+                debug_flag="-g"
+            fi
+            CMD="$CC ${debug_flag} -o ${test_compiled} ${test_source}"
             echo "" >> ${TEST_LOG}
             echo ${CMD} >> ${TEST_LOG}
             if ! ${CMD} >> ${TEST_LOG} 2>&1 || ! [ -f ${test_compiled} ] ; then

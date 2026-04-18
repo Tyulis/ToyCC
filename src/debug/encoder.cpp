@@ -20,6 +20,7 @@ namespace toycc::debug {
     }
 
     // -------- Encoder
+    Encoder::Encoder(size_t size) : size(size) {}
 
     Encoder& Encoder::int8(std::string expression) {
         assembly.directive(std::format(".byte {}", expression));
@@ -71,14 +72,6 @@ namespace toycc::debug {
     Encoder& Encoder::uleb128(Attribute value) {  return uleb128(std::to_underlying(value));  }
     Encoder& Encoder::uleb128(Form value)      {  return uleb128(std::to_underlying(value));  }
 
-    Encoder& Encoder::header(const CompilationUnitHeader& header) {
-        int16 (header.version);
-        int8  (header.unit_type);
-        int8  (header.address_size);
-        offset(header.debug_abbrev_label);
-        return *this;
-    }
-
     size_t Encoder::length() const {
         return size;
     }
@@ -87,7 +80,34 @@ namespace toycc::debug {
         return assembly.str();
     }
 
+    // -------- DebugInfoEncoder
+    DebugInfoEncoder::DebugInfoEncoder() : Encoder(12) {}  // Reserved for the length header (0xFFFFFFFF + 64-bits length)
+
+    DebugInfoEncoder& DebugInfoEncoder::header(const CompilationUnitHeader& header) {
+        int16 (header.version);
+        int8  (header.unit_type);
+        int8  (header.address_size);
+        offset(header.debug_abbrev_label);
+        return *this;
+    }
+
+    std::string DebugInfoEncoder::str() const {
+        CodeOutput output;
+
+        // Prepend the length header
+        output.directive(".int 0xFFFFFFFF");  // Length field : set 64-bit DWARF
+        output.directive(std::format(".quad {}", length() - 12));  // Length field excluded
+        output << assembly.str();
+        return output.str();
+    }
+
+    // -------- Stream operators
     CodeOutput& operator<< (CodeOutput& output, const Encoder& encoder) {
+        output << encoder.str();
+        return output;
+    }
+
+    CodeOutput& operator<< (CodeOutput& output, const DebugInfoEncoder& encoder) {
         output << encoder.str();
         return output;
     }
