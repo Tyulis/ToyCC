@@ -31,10 +31,10 @@ namespace toycc::debug {
             void emit_filenos(CodeOutput& assembly);
             std::string string(std::string value);  // Add a string to the debug info, return a label to it
 
-            std::shared_ptr<DebugInfoRecord> push(Tag tag, const std::vector<AttributeValue>& attributes);    // Push an entry as a node with children
-            std::shared_ptr<DebugInfoRecord> append(Tag tag, const std::vector<AttributeValue>& attributes);  // Append an entry to the children list of the current node
-            std::shared_ptr<DebugInfoRecord> pop();                                                           // Pop the last entry with children
-            EntryLifespan push_auto(Tag tag, const std::vector<AttributeValue>& attributes);                  // Push an entry which gets automatically popped when it goes out of scope
+            void push(const DebugInfoEntry& entry);                // Push an entry as a node with children
+            void append(const DebugInfoEntry& entry);              // Append an entry to the children list of the current node
+            void pop();                                            // Pop the last entry with children
+            EntryLifespan push_auto(const DebugInfoEntry& entry);  // Push an entry with children which gets automatically popped when it goes out of scope
 
             void emit_debug_sections(CodeOutput& assembly);
 
@@ -42,11 +42,13 @@ namespace toycc::debug {
             std::unordered_map<std::string, size_t> filenos;  // File numbers for the `.loc` directives
             size_t current_fileno = 0;
 
-            std::shared_ptr<DebugInfoRecord> debug_info_root;
-            std::deque<std::shared_ptr<DebugInfoRecord>> debug_info_stack;
             StringTable debug_str;
+            AbbreviationMap abbreviations;
 
-            void emit_debug_record(Encoder& debug_info, Encoder& debug_abbrev, AbbreviationMap& abbreviations, std::shared_ptr<DebugInfoRecord> record);
-            void emit_abbreviation_record(Encoder& debug_abbrev, AbbreviationMap& abbreviations, std::shared_ptr<DebugInfoRecord> record);
+            Encoder debug_info;
+            Encoder debug_abbrev;
+
+            void emit_debug_entry(const DebugInfoEntry& entry, bool has_children);
+            void emit_abbreviation_entry(AbbreviationMap& abbreviations, const DebugInfoEntry& entry, bool has_children);
     };
 }

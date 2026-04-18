@@ -82,17 +82,19 @@ namespace toycc::debug {
     }
 
     // -------- DebugInfoRecord
-    AbbreviationKey DebugInfoRecord::abbrev_key() const {
-        ChildDetermination has_children = (children.empty() ? ChildDetermination::DW_CHILDREN_no : ChildDetermination::DW_CHILDREN_yes);
+    DebugInfoEntry::DebugInfoEntry(Tag tag) : tag(tag) {}
+
+    AbbreviationKey DebugInfoEntry::abbrev_key(bool has_children) const {
+        ChildDetermination child_determination = (has_children ? ChildDetermination::DW_CHILDREN_yes : ChildDetermination::DW_CHILDREN_no);
 
         std::set<Attribute> keyset;
         for (const AttributeValue& value : values)
             keyset.insert(value.attribute);
 
-        return {tag, has_children, keyset};
+        return {tag, child_determination, keyset};
     }
 
-    Encoder& DebugInfoRecord::emit(Encoder& encoder, const AbbreviationEntry& abbreviation) const {
+    Encoder& DebugInfoEntry::emit(Encoder& encoder, const AbbreviationEntry& abbreviation) const {
         encoder.uleb128(abbreviation.index);
         for (const auto& [attribute, form] : abbreviation.attributes) {
             auto value = std::ranges::find_if(values, [attribute](const AttributeValue& value) { return value.attribute == attribute; });

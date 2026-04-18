@@ -34,13 +34,12 @@ namespace toycc::arch::x86_64 {
         const std::string end_label = std::format(".{}.BB.__end", declaration->name);
 
         // FIXME : Add the return type and prototype
-        auto debug_entry = debuginfo.push_auto(debug::Tag::DW_TAG_subprogram, {
-            {debug::Attribute::DW_AT_name,            debug::Form::DW_FORM_strp,  debuginfo.string(declaration->name)},
-            {debug::Attribute::DW_AT_external,        debug::Form::DW_FORM_flag,  !(declaration->storage & ir::StorageClass::STATIC)},
-            {debug::Attribute::DW_AT_main_subprogram, debug::Form::DW_FORM_flag,  declaration->name == "main"},
-            {debug::Attribute::DW_AT_low_pc,          debug::Form::DW_FORM_addr,  declaration->name},
-            {debug::Attribute::DW_AT_high_pc,         debug::Form::DW_FORM_data8, std::format("{}-{}", end_label, declaration->name)},
-        });
+        auto debug_entry = debuginfo.push_auto(debug::DebugInfoEntry(debug::Tag::DW_TAG_subprogram)
+            .add(debug::Attribute::DW_AT_name,            debug::Form::DW_FORM_strp,  debuginfo.string(declaration->name))
+            .add(debug::Attribute::DW_AT_external,        debug::Form::DW_FORM_flag,  !(declaration->storage & ir::StorageClass::STATIC))
+            .add(debug::Attribute::DW_AT_main_subprogram, debug::Form::DW_FORM_flag,  declaration->name == "main")
+            .add(debug::Attribute::DW_AT_low_pc,          debug::Form::DW_FORM_addr,  declaration->name)
+            .add(debug::Attribute::DW_AT_high_pc,         debug::Form::DW_FORM_data8, std::format("{}-{}", end_label, declaration->name)));
 
         ir::FlowGraph remaining_blocks = procedure.blocks;
         std::shared_ptr<ir::BasicBlock> current_block = procedure.entry_block;

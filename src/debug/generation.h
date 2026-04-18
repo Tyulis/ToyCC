@@ -70,21 +70,19 @@ namespace toycc::debug {
         Encoder& emit(Encoder& encoder) const;
     };
 
-    struct DebugInfoRecord {
+    struct DebugInfoEntry {
         Tag tag;
         std::vector<AttributeValue> values;
-        std::vector<std::shared_ptr<DebugInfoRecord>> children;
 
-        AbbreviationKey abbrev_key() const;
+        DebugInfoEntry(Tag tag);
+
+        template <typename T>
+        DebugInfoEntry& add(Attribute attribute, Form form, T value) {
+            values.push_back(AttributeValue {attribute, form, value});
+            return *this;
+        }
+
+        AbbreviationKey abbrev_key(bool has_children) const;
         Encoder& emit(Encoder& encoder, const AbbreviationEntry& abbreviation) const;
-    };
-
-
-    // Actual .debug_info entry
-    struct DebugInfoEntry {
-        size_t abbrev_index;
-        std::map<Attribute, std::any> values;
-
-        size_t emit(CodeOutput& assembly, const AbbreviationEntry& abbrev) const;
     };
 }

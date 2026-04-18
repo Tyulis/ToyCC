@@ -14,16 +14,19 @@ namespace toycc::debug {
     }
 
     CompilationUnit::CompilationUnit(std::string working_directory, std::string filename) {
-        debug_info_root = push(Tag::DW_TAG_compile_unit, {
-            {Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,       BEGIN_TEXT_LABEL},                                         // DWARF5 3.1.1.1
-            {Attribute::DW_AT_high_pc,         Form::DW_FORM_data8,      std::format("{}-{}", END_TEXT_LABEL, BEGIN_TEXT_LABEL)},   // DWARF5 3.1.1.1
-            {Attribute::DW_AT_name,            Form::DW_FORM_strp,       debug_str[filename]},                                      // DWARF5 3.1.1.2
-            {Attribute::DW_AT_comp_dir,        Form::DW_FORM_strp,       debug_str[working_directory]},                             // DWARF5 3.1.1.6
-            {Attribute::DW_AT_language,        Form::DW_FORM_data1,      Language::DW_LANG_C11},                                    // DWARF5 3.1.1.3
-            {Attribute::DW_AT_stmt_list,       Form::DW_FORM_sec_offset, 0 /* FIXME ? */},                                          // DWARF5 3.1.1.4
-            {Attribute::DW_AT_producer,        Form::DW_FORM_strp,       debug_str[PRODUCER_IDENTIFICATION]},                       // DWARF5 3.1.1.7
-            {Attribute::DW_AT_identifier_case, Form::DW_FORM_data1,      IdentifierCase::DW_ID_case_sensitive},                     // DWARF5 3.1.1.8
-        });
+        // Emit the compilation unit header
+        debug_info.header({.debug_abbrev_label = BEGIN_DEBUG_ABBREV_LABEL});
+
+        // Emit the compilation unit root entry
+        push(DebugInfoEntry(Tag::DW_TAG_compile_unit)
+            .add(Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,       BEGIN_TEXT_LABEL)                                         // DWARF5 3.1.1.1
+            .add(Attribute::DW_AT_high_pc,         Form::DW_FORM_data8,      std::format("{}-{}", END_TEXT_LABEL, BEGIN_TEXT_LABEL))   // DWARF5 3.1.1.1
+            .add(Attribute::DW_AT_name,            Form::DW_FORM_strp,       debug_str[filename])                                      // DWARF5 3.1.1.2
+            .add(Attribute::DW_AT_comp_dir,        Form::DW_FORM_strp,       debug_str[working_directory])                             // DWARF5 3.1.1.6
+            .add(Attribute::DW_AT_language,        Form::DW_FORM_data1,      Language::DW_LANG_C11)                                    // DWARF5 3.1.1.3
+            .add(Attribute::DW_AT_stmt_list,       Form::DW_FORM_sec_offset, 0 /* FIXME ? */)                                          // DWARF5 3.1.1.4
+            .add(Attribute::DW_AT_producer,        Form::DW_FORM_strp,       debug_str[PRODUCER_IDENTIFICATION])                       // DWARF5 3.1.1.7
+            .add(Attribute::DW_AT_identifier_case, Form::DW_FORM_data1,      IdentifierCase::DW_ID_case_sensitive));                   // DWARF5 3.1.1.8
     }
 
     void CompilationUnit::begin_text(CodeOutput& assembly) const {
@@ -34,6 +37,7 @@ namespace toycc::debug {
         assembly.label(END_TEXT_LABEL);
     }
 
+    // -------- Debug info tables management and query
     size_t CompilationUnit::fileno(std::string filename) {
         auto it = filenos.find(filename);
         if (it == filenos.end()) {
@@ -54,39 +58,25 @@ namespace toycc::debug {
         return debug_str[value];
     }
 
-    std::shared_ptr<DebugInfoRecord> CompilationUnit::push(Tag tag, const std::vector<AttributeValue>& attributes) {
-        std::shared_ptr<DebugInfoRecord> record = append(tag, attributes);
-        debug_info_stack.push_back(record);
-        return record;
+    // -------- Debug info entries
+    void CompilationUnit::push(const DebugInfoEntry& entry) {
+        emit_debug_entry(entry, true);
     }
 
-    CompilationUnit::EntryLifespan CompilationUnit::push_auto(Tag tag, const std::vector<AttributeValue>& attributes) {
-        std::shared_ptr<DebugInfoRecord> record = append(tag, attributes);
-        debug_info_stack.push_back(record);
+    CompilationUnit::EntryLifespan CompilationUnit::push_auto(const DebugInfoEntry& entry) {
+        push(entry);
         return {*this};
     }
 
-    std::shared_ptr<DebugInfoRecord> CompilationUnit::append(Tag tag, const std::vector<AttributeValue>& attributes) {
-        std::shared_ptr<DebugInfoRecord> record = std::make_shared<DebugInfoRecord>(tag, attributes);
-        if (!debug_info_stack.empty())
-            debug_info_stack.back()->children.push_back(record);
-        return record;
+    void CompilationUnit::append(const DebugInfoEntry& entry) {
+        emit_debug_entry(entry, false);
     }
 
-    std::shared_ptr<DebugInfoRecord> CompilationUnit::pop() {
-        std::shared_ptr<DebugInfoRecord> record = debug_info_stack.back();
-        debug_info_stack.pop_back();
-        return record;
+    void CompilationUnit::pop() {
+        debug_info.uleb128(0);  // Emit a null record to terminate the list of children
     }
 
     void CompilationUnit::emit_debug_sections(CodeOutput& assembly) {
-        Encoder debug_info;
-        Encoder debug_abbrev;
-
-        debug_info.header({.debug_abbrev_label = BEGIN_DEBUG_ABBREV_LABEL});
-
-        AbbreviationMap abbreviations;
-        emit_debug_record(debug_info, debug_abbrev, abbreviations, debug_info_root);
         debug_abbrev.uleb128(0);  // The .debug_abbrev section must be null-terminated
 
         // Fill the .debug_info section
@@ -105,36 +95,28 @@ namespace toycc::debug {
         debug_str.emit(assembly);
     }
 
-    void CompilationUnit::emit_debug_record(Encoder& debug_info, Encoder& debug_abbrev, AbbreviationMap& abbreviations, std::shared_ptr<DebugInfoRecord> record) {
-        AbbreviationKey key = record->abbrev_key();
+    // Internal : Emit the debug info entry
+    void CompilationUnit::emit_debug_entry(const DebugInfoEntry& entry, bool has_children) {
+        AbbreviationKey key = entry.abbrev_key(has_children);
 
         auto it = abbreviations.find(key);
         if (it == abbreviations.end())
-            emit_abbreviation_record(debug_abbrev, abbreviations, record);
+            emit_abbreviation_entry(abbreviations, entry, has_children);
 
         const AbbreviationEntry& abbreviation = abbreviations[key];
-        record->emit(debug_info, abbreviation);
-
-        // Emit children of this record
-        if (!record->children.empty()) {
-            for (std::shared_ptr<DebugInfoRecord> child : record->children)
-                emit_debug_record(debug_info, debug_abbrev, abbreviations, child);
-
-            // Emit a null record to terminate the list of children
-            debug_info.uleb128(0);
-        }
+        entry.emit(debug_info, abbreviation);
     }
 
-    void CompilationUnit::emit_abbreviation_record(Encoder& debug_abbrev, AbbreviationMap& abbreviations, std::shared_ptr<DebugInfoRecord> record) {
+    void CompilationUnit::emit_abbreviation_entry(AbbreviationMap& abbreviations, const DebugInfoEntry& entry, bool has_children) {
         AbbreviationEntry abbreviation = {.index = 1 + abbreviations.size(),  // Abbreviation 0 is reserved for null record
-                                          .tag = record->tag,
-                                          .has_children = (record->children.empty() ? ChildDetermination::DW_CHILDREN_no : ChildDetermination::DW_CHILDREN_yes),
+                                          .tag = entry.tag,
+                                          .has_children = (has_children ? ChildDetermination::DW_CHILDREN_yes : ChildDetermination::DW_CHILDREN_no),
                                           .attributes = {}};
 
-        for (const AttributeValue& attribute : record->values)
+        for (const AttributeValue& attribute : entry.values)
             abbreviation.attributes.push_back({attribute.attribute, attribute.form});
 
-        abbreviations[record->abbrev_key()] = abbreviation;
+        abbreviations[entry.abbrev_key(has_children)] = abbreviation;
         abbreviation.emit(debug_abbrev);
     }
 }
