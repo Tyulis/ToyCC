@@ -5,13 +5,6 @@
 #include "semantic/values.h"
 
 namespace toycc::semantic {
-    static std::shared_ptr<Type> _index_type = nullptr;
-    std::shared_ptr<Type> index_type() {
-        if (_index_type.get() == nullptr)
-            _index_type = std::make_shared<IntegerType>(".GTindex", BUILTIN_LOCATION, arch::DATAMODEL->pointer_size(), arch::DATAMODEL->pointer_alignment(), false);
-        return _index_type;
-    }
-
     // -------- ExpressionResult
     ExpressionResult::ExpressionResult(LValue result, CodeLocation location) : result(result), location(location) {}
     ExpressionResult::ExpressionResult(RValue result, CodeLocation location) : result(result), location(location) {}
@@ -58,7 +51,7 @@ namespace toycc::semantic {
             return ExpressionResult {lvalue, location};
         } else {
             RValue pointer = std::get<RValue>(result);
-            LValue dereferenced(pointer, location, {Constant {IntegerConstant(0), location, index_type()}});
+            LValue dereferenced(pointer, location, {Constant {IntegerConstant(0), location, arch::DATAMODEL->offset_type}});
             return ExpressionResult {dereferenced, location};
         }
     }

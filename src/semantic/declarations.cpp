@@ -1,6 +1,7 @@
 #include "code_location.h"
 #include "diagnostic.h"
 #include "ir/type_expressions.h"
+#include "arch/datamodel.h"
 #include "semantic/analyzer.h"
 
 namespace toycc::semantic {
@@ -83,9 +84,9 @@ namespace toycc::semantic {
         const bool is_typedef = declaration.storage & StorageClass::TYPEDEF;
         declaration.type = resolve_type_specifiers(type_specifiers, is_typedef);
         if (qualifiers)
-            declaration.type = QualifiedType::make(anonymous_type(), declaration.location, declaration.type, qualifiers);
+            declaration.type = QualifiedType::make(declaration.location, declaration.type, qualifiers);
         if (custom_alignment_bits.has_value())
-            declaration.type = AlignedType::make(anonymous_type(), declaration.location, declaration.type, custom_alignment_bits.value());
+            declaration.type = AlignedType::make(declaration.location, declaration.type, custom_alignment_bits.value());
     }
 
     std::shared_ptr<Type> SemanticAnalyzer::decode_specifier_qualifier_list(CParser::SpecifierQualifierListContext* context) {
@@ -113,9 +114,9 @@ namespace toycc::semantic {
 
         std::shared_ptr<Type> type = resolve_type_specifiers(type_specifiers, false);
         if (qualifiers)
-            type = QualifiedType::make(anonymous_type(), location, type, qualifiers);
+            type = QualifiedType::make(location, type, qualifiers);
         if (custom_alignment_bits.has_value())
-            type = AlignedType::make(anonymous_type(), location, type, custom_alignment_bits.value());
+            type = AlignedType::make(location, type, custom_alignment_bits.value());
         return type;
     }
 
@@ -166,9 +167,9 @@ namespace toycc::semantic {
         // Declare incomplete types in typedefs
         if (type.get() == nullptr && is_typedef && (identifier.tag == TypeTag::STRUCT || identifier.tag == TypeTag::UNION || identifier.tag == TypeTag::ENUM)) {
             switch (identifier.tag) {
-                case TypeTag::STRUCT:  type = current_scope()->add_type(StructType::make(identifier.name, location, false));                 break;
-                case TypeTag::UNION:   type = current_scope()->add_type(UnionType::make (identifier.name, location, false));                 break;
-                case TypeTag::ENUM:    type = current_scope()->add_type(EnumType::make  (identifier.name, location, enum_underlying_type));  break;
+                case TypeTag::STRUCT:  type = current_scope()->add_type(StructType::make(identifier.name, location, false));                                  break;
+                case TypeTag::UNION:   type = current_scope()->add_type(UnionType::make (identifier.name, location, false));                                  break;
+                case TypeTag::ENUM:    type = current_scope()->add_type(EnumType::make  (identifier.name, location, arch::DATAMODEL->enum_underlying_type));  break;
                 default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type tag in incomplete typedef push", location);
             }
         }
@@ -452,14 +453,14 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
 
         ExpressionResult length = decode_assignment_expression(context->assignmentExpression());
-        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length.operand());
+        member.type = ArrayType::make(locate(context), member.type, length.operand());
     }
 
     void SemanticAnalyzer::decode_function_direct_declarator(Member& member, CParser::DirectDeclaratorExtensionContext* context) {
         if (context->attributeSpecifierSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Attribute specifiers are not implemented", locate(context));
 
-        std::shared_ptr<FunctionType> function_type = FunctionType::make(anonymous_type(), locate(context), member.type);
+        std::shared_ptr<FunctionType> function_type = FunctionType::make(locate(context), member.type);
         if (context->parameterTypeList())
             function_type->parameters = decode_parameter_type_list(context->parameterTypeList());
         // Otherwise, no parameters
@@ -513,14 +514,14 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
 
         ExpressionResult length = decode_assignment_expression(context->assignmentExpression());
-        member.type = ArrayType::make(anonymous_type(), locate(context), member.type, length.operand());
+        member.type = ArrayType::make(locate(context), member.type, length.operand());
     }
 
     void SemanticAnalyzer::decode_function_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {
         if (!context->gccDeclaratorExtension().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
 
-        std::shared_ptr<FunctionType> function_type = FunctionType::make(anonymous_type(), locate(context), member.type);
+        std::shared_ptr<FunctionType> function_type = FunctionType::make(locate(context), member.type);
         if (context->parameterTypeList())
             function_type->parameters = decode_parameter_type_list(context->parameterTypeList());
         // Otherwise, no parameters
@@ -578,9 +579,9 @@ namespace toycc::semantic {
             if (level->Caret())
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Carets in pointer specification are not supported", locate(level));
 
-            type = PointerType::make(anonymous_type(), locate(level), type);
+            type = PointerType::make(locate(level), type);
             if (level->typeQualifierList())
-                type = QualifiedType::make(anonymous_type(), locate(level), type, decode_type_qualifier_list(level->typeQualifierList()));
+                type = QualifiedType::make(locate(level), type, decode_type_qualifier_list(level->typeQualifierList()));
         }
 
         return type;

@@ -2,7 +2,6 @@
 
 #include <memory>
 
-#include "ir/flow.h"
 #include "ir/scope.h"
 
 namespace toycc::ir {
@@ -17,7 +16,6 @@ namespace toycc::ir {
 
             std::shared_ptr<Scope> global_scope;
             size_t unique_id = 0;
-            std::shared_ptr<Type> offset_type;
 
             // -------- Split indirection levels -> ir/postprocessor/indirection.cpp
             // After this, multi-index dereferences are from a single pointer
@@ -49,7 +47,6 @@ namespace toycc::ir {
             // -------- State management -> ir/postprocessor/state.cpp
             std::string anonymous_identifier();
             std::string anonymous_label();
-            std::string anonymous_type();
             std::string make_scope_prefix();
             std::string make_scope_prefix(std::string name);
             std::shared_ptr<Declaration> declare_temporary(std::shared_ptr<Scope> scope, std::shared_ptr<Type> type, CodeLocation location);

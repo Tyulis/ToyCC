@@ -1,5 +1,6 @@
 #include "diagnostic.h"
 #include "ir/statement.h"
+#include "arch/datamodel.h"
 #include "semantic/analyzer.h"
 
 namespace toycc::semantic {
@@ -236,7 +237,7 @@ namespace toycc::semantic {
 
 
     void SemanticAnalyzer::emit_conditional_jump(const ExpressionResult& predicate_expression, std::string destination_label, bool jump_if_is, CodeLocation location) {
-        Operand predicate = emit_implicit_conversion(boolean_type, predicate_expression.operand(), location);
+        Operand predicate = emit_implicit_conversion(arch::DATAMODEL->boolean_type, predicate_expression.operand(), location);
         emit(Statement::make_conditional_jump(location, predicate, destination_label, jump_if_is));
     }
 }

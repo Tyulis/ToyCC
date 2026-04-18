@@ -1,5 +1,4 @@
 #include "ir/postprocessor.h"
-#include "arch/datamodel.h"
 
 namespace toycc::ir {
     std::shared_ptr<Scope> PostProcessor::process(std::shared_ptr<Scope> global_scope) {
@@ -7,8 +6,7 @@ namespace toycc::ir {
         return postprocessor();
     }
 
-    PostProcessor::PostProcessor(std::shared_ptr<Scope> global_scope) : global_scope(global_scope), unique_id(0),
-            offset_type(std::make_shared<IntegerType>(".PToffset", BUILTIN_LOCATION, arch::DATAMODEL->pointer_size(), arch::DATAMODEL->pointer_alignment(), false)){}
+    PostProcessor::PostProcessor(std::shared_ptr<Scope> global_scope) : global_scope(global_scope), unique_id(0) {}
 
     std::shared_ptr<Scope> PostProcessor::operator() () {
         global_scope->clear_types();  // After semantic analysis, we won't need to resolve type names anymore

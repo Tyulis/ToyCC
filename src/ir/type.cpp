@@ -67,7 +67,7 @@ namespace toycc::ir {
     }
 
     // -------- Type
-    Type::Type(TypeCategory category, std::string name, CodeLocation location) : category(category), name(name), location(location) {}
+    Type::Type(TypeCategory category, CodeLocation location) : category(category), location(location) {}
 
     bool Type::complete() const {
         return true;
@@ -102,7 +102,7 @@ namespace toycc::ir {
     }
 
     TypeIdentifier Type::identifier() const {
-        return {.tag = to_tag(category), .name = name};
+        return {.tag = to_tag(category), .name = repr()};
     }
 
     bool Type::is_arithmetic() const {
@@ -127,6 +127,10 @@ namespace toycc::ir {
                dequalified_category == TypeCategory::POINTER || dequalified_category == TypeCategory::ENUM;
     }
 
+    std::string Type::repr() const {
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Can't represent type `{}`", text()), location);
+    }
+
     std::string Type::ir_code(std::unordered_set<const Type*>) const {
         return category_repr(category);
     }
@@ -137,7 +141,7 @@ namespace toycc::ir {
 
     // -------- PrimitiveType
     PrimitiveType::PrimitiveType(TypeCategory category, std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits)
-        : Type(category, name, location), size_bits(size_bits), alignment_bits(alignment_bits) {}
+        : Type(category, location), name(name), size_bits(size_bits), alignment_bits(alignment_bits) {}
 
     size_t PrimitiveType::size(CodeLocation) const {
         return size_bits_to_bytes(size_bits);
@@ -145,6 +149,10 @@ namespace toycc::ir {
 
     size_t PrimitiveType::alignment(CodeLocation) const {
         return alignment_bits_to_bytes(alignment_bits);
+    }
+
+    std::string PrimitiveType::repr() const {
+        return name;
     }
 
     std::string PrimitiveType::ir_code(std::unordered_set<const Type*>) const {

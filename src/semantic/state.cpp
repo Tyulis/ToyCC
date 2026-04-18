@@ -9,10 +9,6 @@ namespace toycc::semantic {
         return std::format(".GL{}", unique_id++);
     }
 
-    std::string SemanticAnalyzer::anonymous_type() {
-        return std::format(".GT{}", unique_id++);
-    }
-
     std::shared_ptr<Scope> SemanticAnalyzer::current_scope() {
         return scope_stack.back();
     }

@@ -27,16 +27,6 @@ namespace toycc::semantic {
 
             size_t unique_id = 0;
 
-            std::shared_ptr<Type> void_type;
-            std::shared_ptr<Type> enum_underlying_type;
-            std::shared_ptr<Type> boolean_type;
-            std::shared_ptr<Type> character_type;
-            std::shared_ptr<Type> size_type;
-            std::shared_ptr<Type> literal_character_type;
-            std::shared_ptr<Type> literal_integer_type;
-            std::shared_ptr<Type> literal_floating_type;
-            std::shared_ptr<Type> void_pointer_type;
-
         public:
             SemanticAnalyzer(const SourceMap& source_map, CParser::CompilationUnitContext* context);
             std::shared_ptr<Scope> get();
@@ -220,7 +210,6 @@ namespace toycc::semantic {
             // -------- State management -> semantic/state.cpp
             std::string anonymous_identifier();
             std::string anonymous_label();
-            std::string anonymous_type();
 
             std::shared_ptr<Scope> current_scope();
             ScopeFrame in_scope(std::shared_ptr<Scope> scope);
@@ -234,8 +223,6 @@ namespace toycc::semantic {
             // -------- Symbol management -> semantic/symbols.cpp
             void init_global_scope();
             std::shared_ptr<Type> add_builtin_type(std::string name);
-            std::shared_ptr<Type> add_integer_type(std::string name, bool is_signed, size_t size, size_t alignment);
-            std::shared_ptr<Type> add_floating_point_type(std::string name, size_t size, size_t alignment);
 
             std::shared_ptr<Scope> create_function_scope(std::shared_ptr<Declaration> declaration);
 

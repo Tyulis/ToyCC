@@ -3,6 +3,7 @@
 #include "ir/type_expressions.h"
 #include "ir/statement.h"
 #include "ir/type.h"
+#include "arch/datamodel.h"
 #include "semantic/analyzer.h"
 
 namespace toycc::semantic {
@@ -336,10 +337,10 @@ namespace toycc::semantic {
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
             case TypeCategory::POINTER:
-                return Constant {IntegerConstant(0), location, literal_integer_type};
+                return Constant {IntegerConstant(0), location, arch::DATAMODEL->literal_integer_type};
 
             case TypeCategory::FLOAT:
-                return Constant {FloatingPointConstant(0.0), location, literal_floating_type};
+                return Constant {FloatingPointConstant(0.0), location, arch::DATAMODEL->literal_floating_type};
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a constant zero", location);
         }
@@ -364,10 +365,10 @@ namespace toycc::semantic {
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
             case TypeCategory::POINTER:
-                return Constant {IntegerConstant(1), location, literal_integer_type};
+                return Constant {IntegerConstant(1), location, arch::DATAMODEL->literal_integer_type};
 
             case TypeCategory::FLOAT:
-                return Constant {FloatingPointConstant(1.0), location, literal_floating_type};
+                return Constant {FloatingPointConstant(1.0), location, arch::DATAMODEL->literal_floating_type};
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category for a constant one", location);
         }

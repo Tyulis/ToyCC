@@ -1,4 +1,5 @@
 #include "diagnostic.h"
+#include "arch/datamodel.h"
 #include "ir/postprocessor.h"
 #include "ir/type_expressions.h"
 
@@ -33,7 +34,7 @@ namespace toycc::ir {
             return operand;
 
         std::shared_ptr<Type> pointer_type = operand.base_type();
-        Operand flat_offset = Constant {IntegerConstant(0), operand.location, offset_type};
+        Operand flat_offset = Constant {IntegerConstant(0), operand.location, arch::DATAMODEL->offset_type};
         for (const Operand& index : operand.indices) {
             std::shared_ptr<Type> referenced_type = pointer_type->dereference(index.as_index(), index.location);
             Operand offset = make_offset(pointer_type, index, scope);
@@ -45,9 +46,9 @@ namespace toycc::ir {
             return Operand {operand.value, operand.location, {flat_offset}};
         } else {
             // Variable offset -> explicitely add it to the pointer before dereferencing
-            std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, PointerType::make(anonymous_type(), operand.location, pointer_type), operand.location);
+            std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, PointerType::make(operand.location, pointer_type), operand.location);
             scope->add_statement(Statement::make_binary_operation(operand.location, StatementTag::ADD, operand, flat_offset, offset_pointer));
-            return Operand {offset_pointer, operand.location, {Constant {IntegerConstant(0), operand.location, offset_type}}};
+            return Operand {offset_pointer, operand.location, {Constant {IntegerConstant(0), operand.location, arch::DATAMODEL->offset_type}}};
         }
     }
 
@@ -92,11 +93,11 @@ namespace toycc::ir {
 
             // Fold constants immediately
             IntegerConstant offset = index.constant().integer() * size;
-            return Constant {offset, index.location, offset_type};
+            return Constant {offset, index.location, arch::DATAMODEL->offset_type};
         } else {
             // Insert a multiplication to convert the index to an offset
-            Operand size_operand = Constant {IntegerConstant(size), index.location, offset_type};
-            Operand offset = declare_temporary(scope, offset_type, index.location);
+            Operand size_operand = Constant {IntegerConstant(size), index.location, arch::DATAMODEL->offset_type};
+            Operand offset = declare_temporary(scope, arch::DATAMODEL->offset_type, index.location);
             scope->add_statement(Statement::make_binary_operation(index.location, StatementTag::MUL, index, size_operand, offset));
             return offset;
         }
@@ -108,7 +109,7 @@ namespace toycc::ir {
 
         std::shared_ptr<StructType> struct_type = std::static_pointer_cast<StructType>(pointer_type);
         const size_t offset = struct_type->member_offset(index.as_index().value());
-        return Constant {IntegerConstant(offset), index.location, offset_type};
+        return Constant {IntegerConstant(offset), index.location, arch::DATAMODEL->offset_type};
     }
 
     Operand PostProcessor::make_union_offset(std::shared_ptr<Type>, Operand index, std::shared_ptr<Scope>) {
@@ -120,10 +121,10 @@ namespace toycc::ir {
         if (flat_offset.is_constant() && offset.is_constant()) {
             // Fold constants immediately
             IntegerConstant result = flat_offset.constant().integer() + offset.constant().integer();
-            return Constant {result, offset.location, offset_type};
+            return Constant {result, offset.location, arch::DATAMODEL->offset_type};
         } else {
             // For variable indices, insert an addition
-            Operand result = declare_temporary(scope, offset_type, offset.location);
+            Operand result = declare_temporary(scope, arch::DATAMODEL->offset_type, offset.location);
             scope->add_statement(Statement::make_binary_operation(offset.location, StatementTag::ADD, flat_offset, offset, result));
             return result;
         }

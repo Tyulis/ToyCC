@@ -1,5 +1,6 @@
 #include "diagnostic.h"
 #include "ir/declaration.h"
+#include "arch/datamodel.h"
 #include "semantic/analyzer.h"
 #include "util/strings.h"
 
@@ -45,7 +46,7 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Character literal must resolve to a single character"), location);
 
         // Declare the character constant
-        return Constant {IntegerConstant(text[0]), location, literal_character_type};
+        return Constant {IntegerConstant(text[0]), location, arch::DATAMODEL->literal_character_type};
     }
 
     RValue SemanticAnalyzer::decode_floating_constant(antlr4::tree::TerminalNode* terminal) {
@@ -94,11 +95,11 @@ namespace toycc::semantic {
 
     RValue SemanticAnalyzer::decode_predefined_constant(CParser::PredefinedConstantContext* context) {
         if (context->True())
-            return Constant {.value = IntegerConstant(1), .location = locate(context), .type = boolean_type};
+            return Constant {.value = IntegerConstant(1), .location = locate(context), .type = arch::DATAMODEL->boolean_type};
         else if (context->False())
-            return Constant {.value = IntegerConstant(0), .location = locate(context), .type = boolean_type};
+            return Constant {.value = IntegerConstant(0), .location = locate(context), .type = arch::DATAMODEL->boolean_type};
         else if (context->Nullptr())
-            return Constant {.value = IntegerConstant(0), .location = locate(context), .type = void_pointer_type};
+            return Constant {.value = IntegerConstant(0), .location = locate(context), .type = arch::DATAMODEL->void_pointer_type};
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown predefined constant `{}`", context->getText()), locate(context));
     }
 
@@ -108,10 +109,10 @@ namespace toycc::semantic {
             value += decode_string_part(terminal);
 
         CodeLocation location = locate(terminals[0]);
-        Constant array_length = Constant {IntegerConstant(value.size() + 1), location, literal_integer_type};
+        Constant array_length = Constant {IntegerConstant(value.size() + 1), location, arch::DATAMODEL->literal_integer_type};
 
         // String literals are technically char* (not const) even though writing to them is undefined behaviour
-        std::shared_ptr<Type> literal_string_type = ArrayType::make(anonymous_type(), location, character_type, array_length);
+        std::shared_ptr<Type> literal_string_type = ArrayType::make(location, arch::DATAMODEL->signed_char_type, array_length);
         return Constant {value, locate(terminals[0]), literal_string_type};
     }
 

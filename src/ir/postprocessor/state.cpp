@@ -9,10 +9,6 @@ namespace toycc::ir {
         return std::format(".PL{}", unique_id++);
     }
 
-    std::string PostProcessor::anonymous_type() {
-        return std::format(".PT{}", unique_id++);
-    }
-
     std::string PostProcessor::make_scope_prefix(std::string name) {
         return std::format(".PS{}", name);
     }

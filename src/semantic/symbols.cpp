@@ -8,45 +8,15 @@ namespace toycc::semantic {
         scope_stack.push_back(std::make_shared<Scope>(ScopeType::GLOBAL, nullptr));
         current_scope()->function = nullptr;
 
-        using namespace toycc::arch;
-        void_type = current_scope()->add_type(std::make_shared<Type> (TypeCategory::VOID, std::string("void"), BUILTIN_LOCATION));
-        boolean_type = current_scope()->add_type(std::make_shared<BooleanType> ("bool", BUILTIN_LOCATION, 8 * arch::DATAMODEL->bool_size(), 8 * arch::DATAMODEL->bool_alignment()));
-
-        std::shared_ptr<Type> int_type, double_type;
-        character_type = add_integer_type("signed char", true,  arch::DATAMODEL->char_size(),        arch::DATAMODEL->char_alignment());
-        add_integer_type("unsigned char",           false, arch::DATAMODEL->char_size(),        arch::DATAMODEL->char_alignment());
-        add_integer_type("signed short int",        true,  arch::DATAMODEL->short_size(),       arch::DATAMODEL->short_alignment());
-        add_integer_type("unsigned short int",      false, arch::DATAMODEL->short_size(),       arch::DATAMODEL->short_alignment());
-        int_type = add_integer_type("signed int",   true,  arch::DATAMODEL->int_size(),         arch::DATAMODEL->int_alignment());
-        add_integer_type("unsigned int",            false, arch::DATAMODEL->int_size(),         arch::DATAMODEL->int_alignment());
-        add_integer_type("signed long int",         true,  arch::DATAMODEL->long_size(),        arch::DATAMODEL->long_alignment());
-        add_integer_type("unsigned long int",       false, arch::DATAMODEL->long_size(),        arch::DATAMODEL->long_alignment());
-        add_integer_type("signed long long int",    true,  arch::DATAMODEL->long_long_size(),   arch::DATAMODEL->long_long_alignment());
-        size_type = add_integer_type("unsigned long long int",  false, arch::DATAMODEL->long_long_size(),   arch::DATAMODEL->long_long_alignment());
-        add_floating_point_type("float",                   arch::DATAMODEL->float_size(),       arch::DATAMODEL->float_alignment());
-        double_type = add_floating_point_type("double",    arch::DATAMODEL->double_size(),      arch::DATAMODEL->double_alignment());
-        add_floating_point_type("long double",             arch::DATAMODEL->long_double_size(), arch::DATAMODEL->long_double_alignment());
-
-        literal_character_type = QualifiedType::make("literal char", BUILTIN_LOCATION, character_type, TypeQualifier::CONST);
-        enum_underlying_type = literal_integer_type = QualifiedType::make("literal int", BUILTIN_LOCATION, int_type, TypeQualifier::CONST);
-        literal_floating_type = QualifiedType::make("literal double", BUILTIN_LOCATION, double_type, TypeQualifier::CONST);
-        void_pointer_type = PointerType::make("void pointer", BUILTIN_LOCATION, void_type);
+        for (std::shared_ptr<Type> type : arch::DATAMODEL->builtin_types())
+            current_scope()->add_type(type);
 
         add_builtin_type("__builtin_va_list");
     }
 
     std::shared_ptr<Type> SemanticAnalyzer::add_builtin_type(std::string name) {
-        return current_scope()->add_type(std::make_shared<Type>(TypeCategory::BUILTIN, name, BUILTIN_LOCATION));
+        return current_scope()->add_type(std::make_shared<PrimitiveType>(TypeCategory::BUILTIN, name, BUILTIN_LOCATION, 0, 0));
     }
-
-    std::shared_ptr<Type> SemanticAnalyzer::add_integer_type(std::string name, bool is_signed, size_t size, size_t alignment) {
-        return current_scope()->add_type(std::make_shared<IntegerType>(name, BUILTIN_LOCATION, size * 8, alignment * 8, is_signed));
-    }
-
-    std::shared_ptr<Type> SemanticAnalyzer::add_floating_point_type(std::string name, size_t size, size_t alignment) {
-        return current_scope()->add_type(std::make_shared<FloatingPointType>(name, BUILTIN_LOCATION, size * 8, alignment * 8));
-    }
-
 
     std::shared_ptr<Scope> SemanticAnalyzer::create_function_scope(std::shared_ptr<Declaration> declaration) {
         std::shared_ptr<Scope> scope = std::make_shared<Scope>(ScopeType::FUNCTION, declaration);

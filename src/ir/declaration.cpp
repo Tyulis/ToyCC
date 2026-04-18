@@ -2,6 +2,7 @@
 #include <sstream>
 #include <variant>
 
+#include "arch/datamodel.h"
 #include "diagnostic.h"
 #include "ir/declaration.h"
 
@@ -194,7 +195,7 @@ namespace toycc::ir {
     std::shared_ptr<Type> Operand::base_type() const {
         if      (has_constant_base())  return std::get<Constant>(value).type;
         else if (has_variable_base())  return std::get<std::shared_ptr<Declaration>>(value)->type;
-        else                           return std::make_shared<Type>(TypeCategory::LABEL, ".Tlabel", location);
+        else                           return arch::DATAMODEL->label_type;
     }
 
     std::shared_ptr<Type> Operand::type() const {

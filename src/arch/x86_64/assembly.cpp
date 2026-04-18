@@ -118,7 +118,7 @@ namespace toycc::arch::x86_64 {
                 switch (variable->type->storage_category()) {
                     case ir::TypeCategory::ARRAY:
                     case ir::TypeCategory::STRUCT:
-                        return REGISTER_NAMES.at(location).at(DATAMODEL->pointer_size());
+                        return REGISTER_NAMES.at(location).at(DATAMODEL->pointer_size);
                     default:
                         return REGISTER_NAMES.at(location).at(variable->type->size({}));
                 }

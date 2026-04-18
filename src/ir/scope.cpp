@@ -11,7 +11,7 @@ namespace toycc::ir {
     std::string Scope::ir_code() const {
         std::stringstream code;
         for (std::pair<TypeIdentifier, std::shared_ptr<Type>> item : types)
-            code << "#type " << item.second->ir_code() << " " << item.second->name << ";\n";
+            code << "#type " << item.second->ir_code() << " " << item.second->repr() << ";\n";
         for (std::shared_ptr<Declaration> item : typedefs)
             code << item->ir_code() << ";\n";
         for (std::shared_ptr<Declaration> item : locals)

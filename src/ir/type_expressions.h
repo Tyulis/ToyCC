@@ -14,7 +14,7 @@ namespace toycc::ir {
         public:
             std::shared_ptr<Type> referenced_type;
 
-            static std::shared_ptr<PointerType> make(std::string name, CodeLocation location, std::shared_ptr<Type> referenced_type);
+            static std::shared_ptr<PointerType> make(CodeLocation location, std::shared_ptr<Type> referenced_type);
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
@@ -25,10 +25,11 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual TypeCategory storage_category() const override;
 
+            virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
-            PointerType(std::string name, CodeLocation location, std::shared_ptr<Type> referenced_type);
+            PointerType(CodeLocation location, std::shared_ptr<Type> referenced_type);
     };
 
     struct ArrayType : public Type {
@@ -36,7 +37,7 @@ namespace toycc::ir {
             std::shared_ptr<Type> element_type;
             Operand length;
 
-            static std::shared_ptr<ArrayType> make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length);
+            static std::shared_ptr<ArrayType> make(CodeLocation location, std::shared_ptr<Type> element_type, Operand length);
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
@@ -46,15 +47,17 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
 
+            virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
-            ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length);
+            ArrayType(CodeLocation location, std::shared_ptr<Type> element_type, Operand length);
     };
 
     struct CompoundType : public Type {
         public:
             bool is_complete = false;
+            std::string name;
             std::vector<Member> members;
 
             virtual bool complete() const override;
@@ -79,6 +82,9 @@ namespace toycc::ir {
             size_t member_offset(size_t member_index) const;
 
             virtual std::shared_ptr<Type> dequalify() const override;
+            virtual TypeIdentifier identifier() const override;
+
+            virtual std::string repr() const override;
         protected:
             StructType(std::string name, CodeLocation location, bool is_complete = false, std::vector<Member> members = {});
     };
@@ -91,12 +97,16 @@ namespace toycc::ir {
             virtual size_t alignment(CodeLocation location) const override;
 
             virtual std::shared_ptr<Type> dequalify() const override;
+            virtual TypeIdentifier identifier() const override;
+
+            virtual std::string repr() const override;
         protected:
             UnionType(std::string name, CodeLocation location, bool is_complete = false, std::vector<Member> members = {});
     };
 
     struct EnumType : public Type {
         public:
+            std::string name;
             std::shared_ptr<Type> underlying_type;
             std::unordered_map<std::string, ssize_t> values;
 
@@ -110,7 +120,9 @@ namespace toycc::ir {
 
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual TypeCategory storage_category() const override;
+            virtual TypeIdentifier identifier() const override;
 
+            virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
@@ -122,7 +134,7 @@ namespace toycc::ir {
             std::shared_ptr<Type> return_type;
             std::vector<Member> parameters;
 
-            static std::shared_ptr<FunctionType> make(std::string name, CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters = {});
+            static std::shared_ptr<FunctionType> make(CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters = {});
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
@@ -131,10 +143,11 @@ namespace toycc::ir {
 
             virtual std::shared_ptr<Type> dequalify() const override;
 
+            virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
-            FunctionType(std::string name, CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters = {});
+            FunctionType(CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters = {});
     };
 
     struct TypeModifier : public Type {
@@ -150,14 +163,14 @@ namespace toycc::ir {
             bool operator== (const TypeModifier& rhs) const;
 
         protected:
-            TypeModifier(TypeCategory category, std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type);
+            TypeModifier(TypeCategory category, CodeLocation location, std::shared_ptr<Type> underlying_type);
     };
 
     struct BitfieldType : public TypeModifier {
         public:
             size_t size_bits;
 
-            static std::shared_ptr<BitfieldType> make(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits);
+            static std::shared_ptr<BitfieldType> make(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits);
 
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
@@ -167,17 +180,18 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
 
+            virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
-            BitfieldType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits);
+            BitfieldType(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits);
     };
 
     struct AlignedType : public TypeModifier {
         public:
             size_t alignment_bits;
 
-            static std::shared_ptr<Type> make(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits);
+            static std::shared_ptr<Type> make(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits);
 
             virtual size_t alignment(CodeLocation location) const override;
             virtual bool operator== (const Type& rhs) const override;
@@ -186,10 +200,11 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
 
+            virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
-            AlignedType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits);
+            AlignedType(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits);
     };
 
     enum class TypeQualifier {
@@ -203,7 +218,7 @@ namespace toycc::ir {
         public:
             Flags<TypeQualifier> qualifiers;
 
-            static std::shared_ptr<QualifiedType> make(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers);
+            static std::shared_ptr<QualifiedType> make(CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers);
 
             virtual bool is_const() const override;
             virtual bool operator== (const Type& rhs) const override;
@@ -212,9 +227,10 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
 
+            virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 
         protected:
-            QualifiedType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers);
+            QualifiedType(CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers);
     };
 }

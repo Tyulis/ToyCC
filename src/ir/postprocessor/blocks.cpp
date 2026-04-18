@@ -1,3 +1,4 @@
+#include "arch/datamodel.h"
 #include "ir/postprocessor.h"
 #include "ir/type_expressions.h"
 
@@ -41,12 +42,12 @@ namespace toycc::ir {
                 case TypeCategory::ARRAY:
                 case TypeCategory::STRUCT:
                 case TypeCategory::UNION: {
-                    std::shared_ptr<PointerType> pointer_type = PointerType::make(anonymous_type(), index.location, referenced_type);
+                    std::shared_ptr<PointerType> pointer_type = PointerType::make(index.location, referenced_type);
                     std::shared_ptr<Declaration> member_pointer = declare_temporary(scope, pointer_type, index.location);
                     const Operand reference = Operand {block.value, block.location, {operand.indices.begin() + top_level, operand.indices.begin() + level + 1}};
                     scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::ADDRESSOF, reference, member_pointer));
                     std::vector<Operand> new_indices(operand.indices.begin() + level + 1, operand.indices.end());
-                    new_indices.insert(new_indices.begin(), Constant {IntegerConstant(0), index.location, offset_type});
+                    new_indices.insert(new_indices.begin(), Constant {IntegerConstant(0), index.location, arch::DATAMODEL->offset_type});
                     block = Operand {member_pointer, operand.location, new_indices};
                     top_level = level;
                     break;

@@ -23,21 +23,21 @@ namespace toycc::ir {
     }
 
     // -------- PointerType
-    PointerType::PointerType(std::string name, CodeLocation location, std::shared_ptr<Type> referenced_type)
-        : Type(TypeCategory::POINTER, name, location), referenced_type(referenced_type) {}
+    PointerType::PointerType(CodeLocation location, std::shared_ptr<Type> referenced_type)
+        : Type(TypeCategory::POINTER, location), referenced_type(referenced_type) {}
 
-    std::shared_ptr<PointerType> PointerType::make(std::string name, CodeLocation location, std::shared_ptr<Type> referenced_type) {
+    std::shared_ptr<PointerType> PointerType::make(CodeLocation location, std::shared_ptr<Type> referenced_type) {
         if (referenced_type->category == TypeCategory::BITFIELD)
             throw Diagnostic(DiagnosticLevel::ERROR, "Pointers to bitfield types are not allowed", location);
-        return std::make_shared<PointerType> (PointerType {name, location, referenced_type});
+        return std::make_shared<PointerType> (PointerType {location, referenced_type});
     }
 
     size_t PointerType::size(CodeLocation) const {
-        return arch::DATAMODEL->pointer_size();
+        return arch::DATAMODEL->pointer_size;
     }
 
     size_t PointerType::alignment(CodeLocation) const {
-        return arch::DATAMODEL->pointer_alignment();
+        return arch::DATAMODEL->pointer_alignment;
     }
 
     bool PointerType::operator== (const Type& rhs) const {
@@ -60,6 +60,10 @@ namespace toycc::ir {
         return TypeCategory::INTEGER;
     }
 
+    std::string PointerType::repr() const {
+        return std::format("{}*", referenced_type->repr());
+    }
+
     std::string PointerType::ir_code(std::unordered_set<const Type*> parents) const {
         if (parents.contains(this))
             return "(...)";
@@ -69,13 +73,13 @@ namespace toycc::ir {
     }
 
     // -------- ArrayType
-    ArrayType::ArrayType(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length)
-        : Type(TypeCategory::ARRAY, name, location), element_type(element_type), length(length) {}
+    ArrayType::ArrayType(CodeLocation location, std::shared_ptr<Type> element_type, Operand length)
+        : Type(TypeCategory::ARRAY, location), element_type(element_type), length(length) {}
 
-    std::shared_ptr<ArrayType> ArrayType::make(std::string name, CodeLocation location, std::shared_ptr<Type> element_type, Operand length) {
+    std::shared_ptr<ArrayType> ArrayType::make(CodeLocation location, std::shared_ptr<Type> element_type, Operand length) {
         if (element_type->category == TypeCategory::VOID)
             throw Diagnostic(DiagnosticLevel::ERROR, "Can't make arrays of void", location);
-        return std::make_shared<ArrayType> (ArrayType {name, location, element_type, length});
+        return std::make_shared<ArrayType> (ArrayType {location, element_type, length});
     }
 
 
@@ -108,6 +112,10 @@ namespace toycc::ir {
         return std::make_shared<ArrayType> (*this);
     }
 
+    std::string ArrayType::repr() const {
+        return std::format("{}[{}]", element_type->repr(), length.ir_code());
+    }
+
     std::string ArrayType::ir_code(std::unordered_set<const Type*> parents) const {
         if (parents.contains(this))
             return std::format("(...)[{}]", length.ir_code());
@@ -118,7 +126,7 @@ namespace toycc::ir {
 
     // -------- CompoundType
     CompoundType::CompoundType(TypeCategory category, std::string name, CodeLocation location, bool is_complete, std::vector<Member> members)
-        : Type(category, name, location), is_complete(is_complete), members(members) {}
+        : Type(category, location), is_complete(is_complete), name(name), members(members) {}
 
     bool CompoundType::complete() const {
         return is_complete;
@@ -219,6 +227,14 @@ namespace toycc::ir {
         return std::make_shared<StructType> (*this);
     }
 
+    TypeIdentifier StructType::identifier() const {
+        return TypeIdentifier {.tag = TypeTag::STRUCT, .name = name};
+    }
+
+    std::string StructType::repr() const {
+        return std::format("struct {}", name);
+    }
+
 
     // -------- UnionType
     UnionType::UnionType(std::string name, CodeLocation location, bool is_complete, std::vector<Member> members)
@@ -253,10 +269,18 @@ namespace toycc::ir {
         return std::make_shared<UnionType> (*this);
     }
 
+    TypeIdentifier UnionType::identifier() const {
+        return TypeIdentifier {.tag = TypeTag::UNION, .name = name};
+    }
+
+    std::string UnionType::repr() const {
+        return std::format("union {}", name);
+    }
+
 
     // -------- EnumType
     EnumType::EnumType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, std::unordered_map<std::string, ssize_t> values)
-        : Type(TypeCategory::ENUM, name, location), underlying_type(underlying_type), values(values) {}
+        : Type(TypeCategory::ENUM, location), name(name), underlying_type(underlying_type), values(values) {}
 
     std::shared_ptr<EnumType> EnumType::make(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, std::unordered_map<std::string, ssize_t> values) {
         if (underlying_type->category != TypeCategory::INTEGER)
@@ -284,12 +308,20 @@ namespace toycc::ir {
         return underlying_type->storage_category();
     }
 
+    TypeIdentifier EnumType::identifier() const {
+        return TypeIdentifier {.tag = TypeTag::ENUM, .name = name};
+    }
+
     bool EnumType::operator== (const Type& rhs) const {
         return (category == rhs.category) && *this == static_cast<const EnumType&>(rhs);
     }
 
     bool EnumType::operator== (const EnumType& rhs) const {
         return Type::operator== (rhs) && *underlying_type == *rhs.underlying_type && values == rhs.values;
+    }
+
+    std::string EnumType::repr() const {
+        return std::format("enum {}", name);
     }
 
     std::string EnumType::ir_code(std::unordered_set<const Type*> parents) const {
@@ -302,10 +334,10 @@ namespace toycc::ir {
     }
 
     // -------- FunctionType
-    FunctionType::FunctionType(std::string name, CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters)
-        : Type(TypeCategory::FUNCTION, name, location), return_type(return_type), parameters(parameters) {}
+    FunctionType::FunctionType(CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters)
+        : Type(TypeCategory::FUNCTION, location), return_type(return_type), parameters(parameters) {}
 
-    std::shared_ptr<FunctionType> FunctionType::make(std::string name, CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters) {
+    std::shared_ptr<FunctionType> FunctionType::make(CodeLocation location, std::shared_ptr<Type> return_type, std::vector<Member> parameters) {
         std::vector<Member> actual_parameters;
         for (const Member& parameter : parameters) {
             if (parameter.type->category == TypeCategory::VOID) {
@@ -319,7 +351,7 @@ namespace toycc::ir {
         if (return_type->category == TypeCategory::ARRAY)
             throw Diagnostic(DiagnosticLevel::ERROR, "A function can't return an array type", location);
 
-        return std::make_shared<FunctionType> (FunctionType {name, location, return_type, parameters});
+        return std::make_shared<FunctionType> (FunctionType {location, return_type, parameters});
     }
 
     size_t FunctionType::size(CodeLocation location) const {
@@ -349,6 +381,17 @@ namespace toycc::ir {
         }
     }
 
+    std::string FunctionType::repr() const {
+        std::stringstream code;
+        code << return_type->repr() << " (*)(";
+        for (const auto& [index, parameter] : std::ranges::enumerate_view(parameters)) {
+            code << parameter.type->repr();
+            if (static_cast<size_t>(index) < parameters.size() - 1)
+                code << ", ";
+        }
+        return code.str();
+    }
+
     std::string FunctionType::ir_code(std::unordered_set<const Type*> parents) const {
         if (parents.contains(this))
             return "(...)";
@@ -360,8 +403,12 @@ namespace toycc::ir {
             code << "()";
         } else {
             code << "(\n";
-            for (const Member& parameter : parameters)
-                code << "    " << parameter.ir_code(parents) << ",\n";
+            for (const auto& [index, parameter] : std::ranges::enumerate_view(parameters)) {
+                code << "    " << parameter.ir_code(parents);
+                if (static_cast<size_t>(index) < parameters.size() - 1)
+                    code << ",\n";
+            }
+
             code << ")";
         }
         return code.str();
@@ -369,8 +416,8 @@ namespace toycc::ir {
 
     // -------- TypeModifier
 
-    TypeModifier::TypeModifier(TypeCategory category, std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type)
-        : Type(category, name, location), underlying_type(underlying_type) {}
+    TypeModifier::TypeModifier(TypeCategory category, CodeLocation location, std::shared_ptr<Type> underlying_type)
+        : Type(category, location), underlying_type(underlying_type) {}
 
     bool TypeModifier::is_const() const {
         return underlying_type->is_const();
@@ -398,15 +445,15 @@ namespace toycc::ir {
 
 
     // -------- BitfieldType
-    BitfieldType::BitfieldType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits)
-        : TypeModifier(TypeCategory::BITFIELD, name, location, underlying_type), size_bits(size_bits) {}
+    BitfieldType::BitfieldType(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits)
+        : TypeModifier(TypeCategory::BITFIELD, location, underlying_type), size_bits(size_bits) {}
 
-    std::shared_ptr<BitfieldType> BitfieldType::make(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits) {
+    std::shared_ptr<BitfieldType> BitfieldType::make(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t size_bits) {
         if (underlying_type->category != TypeCategory::BOOL || underlying_type->category != TypeCategory::INTEGER)
             throw Diagnostic(DiagnosticLevel::ERROR, "A bitfield type must be built upon a boolean or integer type", location);
 
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Should bitfields be simplified in semantic analysis ?", location);
-        return std::make_shared<BitfieldType> (BitfieldType {name, location, underlying_type, size_bits});
+        return std::make_shared<BitfieldType> (BitfieldType {location, underlying_type, size_bits});
     }
 
     size_t BitfieldType::size(CodeLocation location) const {
@@ -433,55 +480,37 @@ namespace toycc::ir {
         return TypeModifier::operator== (rhs) && size_bits == rhs.size_bits;
     }
 
+    std::string BitfieldType::repr() const {
+        return std::format("{}:{}", underlying_type->repr(), size_bits);
+    }
+
     std::string BitfieldType::ir_code(std::unordered_set<const Type*> parents) const {
         return std::format("{}:{}", underlying_type->ir_code(parents), size_bits);
     }
 
     // -------- AlignedType
-    AlignedType::AlignedType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits)
-        : TypeModifier(TypeCategory::ALIGNED, name, location, underlying_type), alignment_bits(alignment_bits) {}
+    AlignedType::AlignedType(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits)
+        : TypeModifier(TypeCategory::ALIGNED, location, underlying_type), alignment_bits(alignment_bits) {}
 
-    std::shared_ptr<Type> AlignedType::make(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits) {
+    std::shared_ptr<Type> AlignedType::make(CodeLocation location, std::shared_ptr<Type> underlying_type, size_t alignment_bits) {
         if (!is_power_of_two(alignment_bits))
             throw Diagnostic(DiagnosticLevel::ERROR, "Alignment boundaries must be powers of two", location);
 
         switch (underlying_type->category) {
-            case TypeCategory::VOID:     throw Diagnostic(DiagnosticLevel::ERROR, "Can't align a void type", location);
-            case TypeCategory::BUILTIN:  throw Diagnostic(DiagnosticLevel::ERROR, "Built-in types' memory layout are unspecified and can't be manually aligned", location);
-            case TypeCategory::LABEL:    throw Diagnostic(DiagnosticLevel::ERROR, "Can't realign a label", location);
-
-            case TypeCategory::BOOL:
-            case TypeCategory::INTEGER:
-            case TypeCategory::FLOAT: {
-                if (alignment_bits < underlying_type->alignment(location))
-                    throw Diagnostic(DiagnosticLevel::ERROR, "Can't manually align a type to a smaller boundary than its natural alignment", location);
-
-                // Simplify the type expression : AlignedType(PrimitiveType) -> PrimitiveType with a different alignment
-                const PrimitiveType& underlying_primitive = static_cast<const PrimitiveType&>(*underlying_type);
-                return std::make_shared<PrimitiveType> (underlying_primitive.category, name, location, underlying_primitive.size_bits, alignment_bits);
-            }
-
-            case TypeCategory::ARRAY:  // Is that even possible ?
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Aligning array types is not implemented", location);
-
-            case TypeCategory::ENUM: {
-                // Simplify the type expression : AlignedType(EnumType) -> EnumType(PrimitiveType with a different alignment)
-                const EnumType& underlying_enum = static_cast<const EnumType&> (*underlying_type);
-                if (underlying_enum.underlying_type->category != TypeCategory::INTEGER)
-                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Enum types can't have anything other than integers as their underlying type", location);
-                std::shared_ptr<Type> aligned_primitive = AlignedType::make({}, location, underlying_enum.underlying_type, alignment_bits);
-                return EnumType::make(name, location, aligned_primitive, underlying_enum.values);
-            }
-
+            case TypeCategory::VOID:      throw Diagnostic(DiagnosticLevel::ERROR, "Can't align a void type", location);
+            case TypeCategory::BUILTIN:   throw Diagnostic(DiagnosticLevel::ERROR, "Built-in types' memory layout are unspecified and can't be manually aligned", location);
+            case TypeCategory::LABEL:     throw Diagnostic(DiagnosticLevel::ERROR, "Can't realign a label", location);
             case TypeCategory::FUNCTION:  throw Diagnostic(DiagnosticLevel::ERROR, "Can't manually align a function type", location);
             case TypeCategory::BITFIELD:  throw Diagnostic(DiagnosticLevel::ERROR, "Can't manually align a bitfield type", location);
+            case TypeCategory::ARRAY:  // Is that even possible ?
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Aligning array types is not implemented", location);
 
             case TypeCategory::QUALIFIED: {
                 // Simplify the type expression : AlignedType(QualifiedType(x)) = QualifiedType(AlignedType(x))
                 // AlignedType simplifies better than QualifiedType, so keep QualifiedType on top
                 const QualifiedType& qualified_type = static_cast<const QualifiedType&> (*underlying_type);
-                std::shared_ptr<Type> aligned_unqualified_type = AlignedType::make({}, location, qualified_type.underlying_type, alignment_bits);
-                return QualifiedType::make(name, location, aligned_unqualified_type, qualified_type.qualifiers);
+                std::shared_ptr<Type> aligned_unqualified_type = AlignedType::make(location, qualified_type.underlying_type, alignment_bits);
+                return QualifiedType::make(location, aligned_unqualified_type, qualified_type.qualifiers);
             }
 
             case TypeCategory::ALIGNED: {
@@ -489,14 +518,18 @@ namespace toycc::ir {
                 const AlignedType& inner_aligned = static_cast<const AlignedType&> (*underlying_type);
                 if (alignment_bits < inner_aligned.alignment_bits)
                     throw Diagnostic(DiagnosticLevel::ERROR, "Can't manually align a type to a smaller boundary than its existing alignment", location);
-                return std::make_shared<AlignedType> (AlignedType {name, location, inner_aligned.underlying_type, alignment_bits});
+                return std::make_shared<AlignedType> (AlignedType {location, inner_aligned.underlying_type, alignment_bits});
             }
 
             // Otherwise, generate a normal type expression
+            case TypeCategory::BOOL:
+            case TypeCategory::INTEGER:
+            case TypeCategory::FLOAT:
             case TypeCategory::POINTER:
             case TypeCategory::STRUCT:
             case TypeCategory::UNION:
-                return std::make_shared<AlignedType> (AlignedType {name, location, underlying_type, alignment_bits});
+            case TypeCategory::ENUM:
+                return std::make_shared<AlignedType> (AlignedType {location, underlying_type, alignment_bits});
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category", location);
     }
@@ -521,15 +554,19 @@ namespace toycc::ir {
         return underlying_type->dequalify();
     }
 
+    std::string AlignedType::repr() const {
+        return std::format("alignas({}) {}", alignment_bits, underlying_type->repr());
+    }
+
     std::string AlignedType::ir_code(std::unordered_set<const Type*> parents) const {
         return std::format("{}|{}", underlying_type->ir_code(parents), alignment_bits);
     }
 
     // -------- QualifiedType
-    QualifiedType::QualifiedType(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers)
-        : TypeModifier(TypeCategory::QUALIFIED, name, location, underlying_type), qualifiers(qualifiers) {}
+    QualifiedType::QualifiedType(CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers)
+        : TypeModifier(TypeCategory::QUALIFIED, location, underlying_type), qualifiers(qualifiers) {}
 
-    std::shared_ptr<QualifiedType> QualifiedType::make(std::string name, CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers) {
+    std::shared_ptr<QualifiedType> QualifiedType::make(CodeLocation location, std::shared_ptr<Type> underlying_type, Flags<TypeQualifier> qualifiers) {
         switch (underlying_type->category) {
             case TypeCategory::BUILTIN:  // Not sure about that case, block for now
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Qualifying built-in types is not implemented", location);
@@ -542,11 +579,11 @@ namespace toycc::ir {
 
             case TypeCategory::QUALIFIED: {  // Simplify the type expression : QualifiedType(Q1, QualifiedType(Q2, x)) = QualifiedType(Q1 | Q2, x)
                 const QualifiedType& underlying_qualified = static_cast<const QualifiedType&>(*underlying_type);
-                return std::make_shared<QualifiedType> (QualifiedType {name, location, underlying_qualified.underlying_type, qualifiers | underlying_qualified.qualifiers});
+                return std::make_shared<QualifiedType> (QualifiedType {location, underlying_qualified.underlying_type, qualifiers | underlying_qualified.qualifiers});
             }
 
             // Otherwise, generate a normal type expression
-            case TypeCategory::VOID:  // Allowed for pointers (e.g const void*)
+            case TypeCategory::VOID:  // Allowed in pointers (e.g const void*)
             case TypeCategory::BOOL:
             case TypeCategory::INTEGER:
             case TypeCategory::FLOAT:
@@ -556,7 +593,7 @@ namespace toycc::ir {
             case TypeCategory::ENUM:
             case TypeCategory::BITFIELD:
             case TypeCategory::ALIGNED:  // AlignedType(QualifiedType(x)) simplifies to QualifiedType(AlignedType(x)), don't simplify here to keep QualifiedType on top
-                return std::make_shared<QualifiedType> (QualifiedType {name, location, underlying_type, qualifiers});
+                return std::make_shared<QualifiedType> (QualifiedType {location, underlying_type, qualifiers});
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid type category", location);
     }
@@ -579,6 +616,10 @@ namespace toycc::ir {
 
     std::shared_ptr<Type> QualifiedType::dequalify() const {
         return underlying_type->dequalify();
+    }
+
+    std::string QualifiedType::repr() const {
+        return std::format("{}{}", type_qualifiers_repr(qualifiers), underlying_type->repr());
     }
 
     std::string QualifiedType::ir_code(std::unordered_set<const Type*> parents) const {

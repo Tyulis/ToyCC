@@ -5,6 +5,7 @@
 #include "gen/parser/CParser.h"
 #include "ir/type_expressions.h"
 #include "ir/statement.h"
+#include "arch/datamodel.h"
 #include "semantic/analyzer.h"
 
 namespace toycc::semantic {
@@ -275,7 +276,7 @@ namespace toycc::semantic {
         if (!operand.is_lvalue())
             throw Diagnostic(DiagnosticLevel::ERROR, "Can't take the address of an rvalue", locate(context));
 
-        std::shared_ptr<Type> pointer_type = PointerType::make(anonymous_type(), location, operand.type());
+        std::shared_ptr<Type> pointer_type = PointerType::make(location, operand.type());
         std::shared_ptr<Declaration> result = declare_temporary(pointer_type, location);
         emit(Statement::make_addressof(location, operand.lvalue(), result));
         return ExpressionResult {LValue {result}, location};
@@ -414,7 +415,7 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Member `{}` is not defined in type `{}`", member_name, type->name), location);
 
         const size_t member_index = std::distance(type->members.begin(), found_member);
-        Constant index(IntegerConstant(member_index), location, literal_integer_type);
+        Constant index(IntegerConstant(member_index), location, arch::DATAMODEL->literal_integer_type);
         std::vector<RValue> indices = object.indices();
         indices.push_back(index);
 
@@ -507,13 +508,13 @@ namespace toycc::semantic {
         std::shared_ptr<Type> left_type = left.type(), right_type = right.type();
 
         if (left_type->dequalify()->category == TypeCategory::POINTER) {
-            RValue item_size = Constant {IntegerConstant(left_type->dereference({}, location)->size(location)), location, size_type};
+            RValue item_size = Constant {IntegerConstant(left_type->dereference({}, location)->size(location)), location, arch::DATAMODEL->size_type};
             ExpressionResult increment = emit_binary_operation(StatementTag::MUL, right, ExpressionResult {item_size, location}, location);
             std::shared_ptr<Declaration> result = declare_temporary(left_type, location);
             emit(Statement::make_binary_operation(location, op, left.operand(), increment.operand(), result));
             return ExpressionResult {RValue {result}, location};
         } else if (right_type->dequalify()->category == TypeCategory::POINTER) {
-            RValue item_size = Constant {IntegerConstant(right_type->dereference({}, location)->size(location)), location, size_type};
+            RValue item_size = Constant {IntegerConstant(right_type->dereference({}, location)->size(location)), location, arch::DATAMODEL->size_type};
             ExpressionResult increment = emit_binary_operation(StatementTag::MUL, left, ExpressionResult {item_size, location}, location);
             std::shared_ptr<Declaration> result = declare_temporary(right_type, location);
             emit(Statement::make_binary_operation(location, op, increment.operand(), right.operand(), result));
@@ -618,7 +619,7 @@ namespace toycc::semantic {
             case StatementTag::NE:
             case StatementTag::LOGICAL_AND:
             case StatementTag::LOGICAL_OR:
-                return boolean_type;
+                return arch::DATAMODEL->boolean_type;
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown binary operator");
         }

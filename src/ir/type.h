@@ -27,10 +27,9 @@ namespace toycc::ir {
 
     struct Type {
         TypeCategory category;
-        std::string name;
         CodeLocation location;
 
-        Type(TypeCategory category, std::string name, CodeLocation location);
+        Type(TypeCategory category, CodeLocation location);
 
         virtual bool complete() const;  // Defaults to true
         virtual bool is_const() const;  // Defaults to false
@@ -41,18 +40,20 @@ namespace toycc::ir {
         virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const;  // Type emitted by a dereference of this type. Defaults to a throw.
         virtual std::shared_ptr<Type> dequalify() const;                         // Type without modifiers
         virtual TypeCategory storage_category() const;                           // Physical storage type category (ex. POINTER -> INTEGER), default to the same category
+        virtual TypeIdentifier identifier() const;
 
-        TypeIdentifier identifier() const;
         bool is_arithmetic() const;
         bool is_integral() const;
         bool is_comparable() const;
         bool has_truth_value() const;
 
+        virtual std::string repr() const;  // Get the type representation as in C code (ex. const int* [4])
         virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const;
         virtual std::string text() const;  // Defaults to the IR code
     };
 
     struct PrimitiveType : public Type {
+        std::string name;
         size_t size_bits;
         size_t alignment_bits;
 
@@ -63,6 +64,7 @@ namespace toycc::ir {
         virtual bool operator== (const Type& rhs) const override;
         bool operator== (const PrimitiveType& rhs) const;
 
+        virtual std::string repr() const override;
         virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
     };
 
