@@ -27,6 +27,9 @@ namespace toycc::arch::x86_64 {
     constexpr std::array<Location, 5> CALLEE_SAVED_REGISTERS = {Location::b, Location::r12, Location::r13, Location::r14, Location::r15};
     // FIXME : XMM locations not implemented
 
+    // Register indices for use in the DWARF location informations. Ref. https://gitlab.com/x86-psABIs/x86-64-ABI, section 3.7, table 3.36
+    extern const std::unordered_map<Location, size_t> DWARF_REGISTER_MAPPING;
+
     struct GroupMatch {
        TranslationGroupTag group;
        std::vector<std::shared_ptr<ir::DependencyNode>> statements;

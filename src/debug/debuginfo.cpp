@@ -29,6 +29,9 @@ namespace toycc::debug {
     }
 
     // -------- AttributeValue
+    AttributeValue::AttributeValue(Attribute attribute, Form form, const Expression& value)
+        : attribute(attribute), form(form), expression(value.str()), expression_length(value.length()) {}
+
     Encoder& AttributeValue::emit(Encoder& encoder) const {
         switch (form) {
             case Form::DW_FORM_addr:        encoder.offset(expression);  break;
@@ -43,6 +46,7 @@ namespace toycc::debug {
             case Form::DW_FORM_ref2:        encoder.int16 (expression);  break;
             case Form::DW_FORM_ref4:        encoder.int32 (expression);  break;
             case Form::DW_FORM_ref8:        encoder.int64 (expression);  break;
+            case Form::DW_FORM_exprloc:     encoder.insert(expression, expression_length);  break;
 
             case Form::DW_FORM_block2:
             case Form::DW_FORM_block4:
@@ -54,7 +58,6 @@ namespace toycc::debug {
             case Form::DW_FORM_ref_addr:
             case Form::DW_FORM_ref_udata:
             case Form::DW_FORM_indirect:
-            case Form::DW_FORM_exprloc:
             case Form::DW_FORM_flag_present:
             case Form::DW_FORM_strx:
             case Form::DW_FORM_addrx:
@@ -83,6 +86,11 @@ namespace toycc::debug {
 
     // -------- DebugInfoRecord
     DebugInfoEntry::DebugInfoEntry(Tag tag) : tag(tag) {}
+
+    DebugInfoEntry& DebugInfoEntry::add(Attribute attribute, Form form, const Expression& expression) {
+        values.push_back(AttributeValue {attribute, form, expression});
+        return *this;
+    }
 
     DebugInfoEntry& DebugInfoEntry::location(size_t fileno, size_t line, size_t column) {
         return add(Attribute::DW_AT_decl_file,   Form::DW_FORM_data4, fileno)

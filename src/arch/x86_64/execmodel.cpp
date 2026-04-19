@@ -5,6 +5,43 @@
 #include "util/combinatorics.hpp"
 
 namespace toycc::arch::x86_64 {
+    const std::unordered_map<Location, size_t> DWARF_REGISTER_MAPPING {
+        {Location::a,    0}, {Location::d,    1}, {Location::c,    2}, {Location::b,    3},
+        {Location::si,   4}, {Location::di,   5}, {Location::bp,   6}, {Location::sp,   7},
+        {Location::r8,   8}, {Location::r9,   9}, {Location::r10, 10}, {Location::r11, 11},
+        {Location::r12, 12}, {Location::r13, 13}, {Location::r14, 14}, {Location::r15, 15},
+        // Return address (RA) : 16
+        {Location::mm0,  17}, {Location::mm1,  18}, {Location::mm2,  19}, {Location::mm3,  20},  // FIXME : Those are for xmm registers, mmx registers are separate ?
+        {Location::mm4,  21}, {Location::mm5,  22}, {Location::mm6,  23}, {Location::mm7,  24},
+        {Location::mm8,  25}, {Location::mm9,  26}, {Location::mm10, 27}, {Location::mm11, 28},
+        {Location::mm12, 29}, {Location::mm13, 30}, {Location::mm14, 31}, {Location::mm15, 32},
+        // Floating Point Registers (st0-st7) : [33, 40]
+        // MMX registers (mm0-mm7) : [41, 48]
+        // Flag Register (rFLAGS) : 49
+        // Segment Register ES : 50
+        // Segment Register CS : 51
+        // Segment Register SS : 52
+        // Segment Register DS : 53
+        // Segment Register FS : 54
+        // Segment Register GS : 55
+        // Reserved : [56, 57]
+        // FS Base address (fs.base) : 58
+        // GS Base address (gs.base) : 59
+        // Reserved : [60, 61]
+        // Task Register (tr) : 62
+        // LDT Register (ldtr) : 63
+        // 128-bit Media Control and Status (mxcsr) : 64
+        // x87 Control Word (fcw) : 65
+        // x87 Status Word (fsw) : 66
+        // AVX512 Upper Vector Registers (xmm16-xmm31) : [67, 82]
+        // Reserved : [83, 117]
+        // AVX512 Vector Mask Registers (k0-k7) : [118, 125]
+        // Reserved : [126, 129]
+        // APX Integer Registers (r16-r31) : [130, 145]
+        // Tile Registers (tmm0-tmm7) : [146, 153]
+        // Tile Control Register (tilecfg) : 154
+    };
+
     // Return the indices of the inner values, or an empty optional if this combination doesn't match
     static std::optional<std::vector<size_t>> match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
         // Find which values are links between the selected statements (= which values have more than two edges in the statement combination)

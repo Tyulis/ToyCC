@@ -143,14 +143,14 @@ namespace toycc::arch::x86_64 {
         code.directive(".cfi_startproc");
         code.statement("pushq %rbp");
         code.directive(".cfi_def_cfa_offset 16");
-        code.directive(".cfi_offset 6, -16");  // Push %rbp = %r6 to the stack
+        code.directive(std::format(".cfi_offset {}, -16", DWARF_REGISTER_MAPPING.at(Location::bp)));  // Push to the stack
 
         for (Location reg : CALLEE_SAVED_REGISTERS)
             if (used_locations.contains(reg))
                 code.statement(std::format("pushq {}", emit_operand(reg, 8)));
 
         code.statement("movq %rsp, %rbp");
-        code.directive(".cfi_def_cfa_register 6");  // The CFA register is now %rbp = %r6
+        code.directive(std::format(".cfi_def_cfa_register {}", DWARF_REGISTER_MAPPING.at(Location::bp)));  // The CFA register is now %rbp = %r6
 
         if (current_offset > 0)
             code.statement(std::format("subq ${}, %rsp", align_offset(current_offset, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
@@ -165,7 +165,7 @@ namespace toycc::arch::x86_64 {
                 code.statement(std::format("popq {}", emit_operand(reg, 8)));
 
         code.statement("leave");
-        code.directive(".cfi_def_cfa 7, 8");  // The Canonical Frame Address is at %rsp+8 = %r7+8
+        code.directive(std::format(".cfi_def_cfa {}, 8", DWARF_REGISTER_MAPPING.at(Location::sp)));  // The Canonical Frame Address is at %rsp+8 = %r7+8
         code.statement("ret");
         code.directive(".cfi_endproc");
         code.directive(std::format(".size {}, .-{}", name, name));

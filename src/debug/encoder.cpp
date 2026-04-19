@@ -4,21 +4,6 @@
 #include "debug/dwarf.h"
 
 namespace toycc::debug {
-    constexpr static size_t nof_significant_bits(size_t value) {
-        if (value == 0)
-            return 1;
-
-        return 8*sizeof(value) - __builtin_clzll(value);
-    }
-
-    constexpr static size_t int_ceil_division(size_t value, size_t divisor) {
-        return (value / divisor) + (value % divisor == 0? 0 : 1);
-    }
-
-    constexpr static size_t uleb128_size(size_t value) {
-        return int_ceil_division(nof_significant_bits(value), 7);
-    }
-
     // -------- Encoder
     Encoder::Encoder(size_t size) : size(size) {}
 
@@ -29,6 +14,7 @@ namespace toycc::debug {
     }
     Encoder& Encoder::int8(int8_t value)                {  return int8(std::to_string(static_cast<int>(value)));  }
     Encoder& Encoder::int8(uint8_t value)               {  return int8(std::to_string(static_cast<unsigned int>(value)));  }
+    Encoder& Encoder::int8(Operation value)             {  return int8(std::to_underlying(value));  }
     Encoder& Encoder::int8(ChildDetermination value)    {  return int8(std::to_underlying(value));  }
     Encoder& Encoder::int8(CompilationUnitType value)   {  return int8(std::to_underlying(value));  }
     Encoder& Encoder::int8(LocationListEntryType value) {  return int8(std::to_underlying(value));  }
@@ -72,6 +58,12 @@ namespace toycc::debug {
     Encoder& Encoder::uleb128(Tag value)       {  return uleb128(std::to_underlying(value));  }
     Encoder& Encoder::uleb128(Attribute value) {  return uleb128(std::to_underlying(value));  }
     Encoder& Encoder::uleb128(Form value)      {  return uleb128(std::to_underlying(value));  }
+
+    Encoder& Encoder::sleb128(ssize_t value) {
+        assembly.directive(std::format(".sleb128 {}", value));
+        size += sleb128_size(value);
+        return *this;
+    }
 
     Encoder& Encoder::header(const CompilationUnitHeader& header) {
         int16 (header.version);

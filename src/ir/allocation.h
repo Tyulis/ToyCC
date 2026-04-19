@@ -115,10 +115,8 @@ namespace toycc::ir {
 
             // Terminate the stack frame and emit debug info
             void end() {
-                for (auto& [declaration, loclist] : debug_variables) {
-                    loclist.end();
-                    debuginfo.append(debuginfo.variable(declaration, loclist));
-                }
+                for (auto& [declaration, loclist] : debug_variables)
+                    debuginfo.append(debuginfo.variable(declaration, loclist.end()));
             }
 
         protected:

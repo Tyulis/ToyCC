@@ -2,6 +2,7 @@
 
 #include "diagnostic.h"
 #include "debug/debuginfo.h"
+#include "debug/expression.h"
 #include "debug/unit.h"
 #include "ir/declaration.h"
 #include "ir/flow.h"
@@ -12,12 +13,16 @@ namespace toycc::debug {
         std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
         std::shared_ptr<ir::FunctionType> function_type = std::static_pointer_cast<ir::FunctionType>(declaration->type);
 
+        Expression frame_base;
+        frame_base.call_frame_cfa();
+
         DebugInfoEntry entry = DebugInfoEntry(Tag::DW_TAG_subprogram)
-            .add(Attribute::DW_AT_name,            Form::DW_FORM_strp,  string(declaration->name))
-            .add(Attribute::DW_AT_external,        Form::DW_FORM_flag,  !(declaration->storage & ir::StorageClass::STATIC))
-            .add(Attribute::DW_AT_main_subprogram, Form::DW_FORM_flag,  declaration->name == "main")
-            .add(Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,  procedure.start_label())
-            .add(Attribute::DW_AT_high_pc,         Form::DW_FORM_data8, std::format("{}-{}", procedure.end_label(), procedure.start_label()))
+            .add(Attribute::DW_AT_name,            Form::DW_FORM_strp,    string(declaration->name))
+            .add(Attribute::DW_AT_external,        Form::DW_FORM_flag,    !(declaration->storage & ir::StorageClass::STATIC))
+            .add(Attribute::DW_AT_main_subprogram, Form::DW_FORM_flag,    declaration->name == "main")
+            .add(Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,    procedure.start_label())
+            .add(Attribute::DW_AT_high_pc,         Form::DW_FORM_data8,   std::format("{}-{}", procedure.end_label(), procedure.start_label()))
+            .add(Attribute::DW_AT_frame_base,      Form::DW_FORM_exprloc, frame_base)
             .location(fileno(declaration->location.filename), declaration->location.line, declaration->location.character);
 
         // Return type : only if the function actually returns something

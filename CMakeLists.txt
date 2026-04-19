@@ -82,6 +82,7 @@ add_executable(${PROJECT_NAME}
 	src/debug/dwarf.cpp
 	src/debug/debuginfo.cpp
 	src/debug/encoder.cpp
+	src/debug/expression.cpp
 	src/debug/loclist.cpp
 	src/debug/generation.cpp
 	src/debug/unit.cpp
