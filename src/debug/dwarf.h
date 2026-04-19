@@ -264,7 +264,7 @@ namespace toycc::debug {
 
     // DWARF5 7.5.5
     enum class Class {
-        address, block, constant, string, flag, reference, indirect, pointer,  exprloc, loclist, rnglist
+        address, block, constant, string, flag, reference, indirect, pointer, exprloc, loclist, rnglist
     };
 
     extern std::unordered_map<Form, Class> TO_CLASS;
@@ -355,5 +355,13 @@ namespace toycc::debug {
         constexpr static CompilationUnitType unit_type = CompilationUnitType::DW_UT_compile;
         constexpr static uint8_t address_size = 8;
         std::string debug_abbrev_label;
+    };
+
+    // DWARF5 7.29
+    struct LocationListHeader {
+        constexpr static uint16_t version = 5;
+        constexpr static uint8_t address_size = 8;
+        constexpr static uint8_t segment_selector_size = 0;  // FIXME : What is this for ?
+        constexpr static uint32_t offset_entry_count = 0;    // Forbids the use of DW_FORM_loclistx
     };
 }

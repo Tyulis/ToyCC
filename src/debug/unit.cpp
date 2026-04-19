@@ -1,7 +1,6 @@
-#include "diagnostic.h"
 #include "debug/unit.h"
 #include "debug/dwarf.h"
-#include "debug/generation.h"
+#include "debug/debuginfo.h"
 #include "ir/type.h"
 
 namespace toycc::debug {
@@ -90,6 +89,7 @@ namespace toycc::debug {
     }
 
     void CompilationUnit::emit_debug_sections(CodeOutput& assembly) {
+        pop();  // Pop the compilation unit
         debug_abbrev.uleb128(0);  // The .debug_abbrev section must be null-terminated
 
         // Fill the .debug_info section
@@ -129,34 +129,5 @@ namespace toycc::debug {
 
         abbreviations[entry.abbrev_key(has_children)] = abbreviation;
         abbreviation.emit(debug_abbrev);
-    }
-
-    void CompilationUnit::emit_type(std::shared_ptr<ir::Type> type) {
-        switch (type->category) {
-            case ir::TypeCategory::INTEGER:  emit_integer_type(std::static_pointer_cast<ir::IntegerType>(type));  break;
-
-            case ir::TypeCategory::BOOL:
-            case ir::TypeCategory::FLOAT:
-            case ir::TypeCategory::ARRAY:
-            case ir::TypeCategory::STRUCT:
-            case ir::TypeCategory::UNION:
-            case ir::TypeCategory::FUNCTION:
-            case ir::TypeCategory::VOID:
-            case ir::TypeCategory::BUILTIN:
-            case ir::TypeCategory::LABEL:
-            case ir::TypeCategory::POINTER:
-            case ir::TypeCategory::ENUM:
-            case ir::TypeCategory::BITFIELD:
-            case ir::TypeCategory::QUALIFIED:
-            case ir::TypeCategory::ALIGNED:
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Debug info emission is not implemented for type `{}`", type->ir_code()));
-        }
-    }
-
-    void CompilationUnit::emit_integer_type(std::shared_ptr<ir::IntegerType> type) {
-        append(DebugInfoEntry(Tag::DW_TAG_base_type)
-            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp,  string(type->name))
-            .add(Attribute::DW_AT_encoding, Form::DW_FORM_data1, (type->is_signed ? BaseTypeEncoding::DW_ATE_signed : BaseTypeEncoding::DW_ATE_unsigned))
-            .add(Attribute::DW_AT_bit_size, Form::DW_FORM_data1, type->size_bits));
     }
 }

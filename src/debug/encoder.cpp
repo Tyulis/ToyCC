@@ -72,6 +72,22 @@ namespace toycc::debug {
     Encoder& Encoder::uleb128(Attribute value) {  return uleb128(std::to_underlying(value));  }
     Encoder& Encoder::uleb128(Form value)      {  return uleb128(std::to_underlying(value));  }
 
+    Encoder& Encoder::header(const CompilationUnitHeader& header) {
+        int16 (header.version);
+        int8  (header.unit_type);
+        int8  (header.address_size);
+        offset(header.debug_abbrev_label);
+        return *this;
+    }
+
+    Encoder& Encoder::header(const LocationListHeader& header) {
+        int16(header.version);
+        int8 (header.address_size);
+        int8 (header.segment_selector_size);
+        int32(header.offset_entry_count);
+        return *this;
+    }
+
     size_t Encoder::length() const {
         return size;
     }
@@ -80,18 +96,11 @@ namespace toycc::debug {
         return assembly.str();
     }
 
-    // -------- DebugInfoEncoder
-    DebugInfoEncoder::DebugInfoEncoder() : Encoder(12) {}  // Reserved for the length header (0xFFFFFFFF + 64-bits length)
 
-    DebugInfoEncoder& DebugInfoEncoder::header(const CompilationUnitHeader& header) {
-        int16 (header.version);
-        int8  (header.unit_type);
-        int8  (header.address_size);
-        offset(header.debug_abbrev_label);
-        return *this;
-    }
+    // -------- LengthFieldEncoder
+    LengthFieldEncoder::LengthFieldEncoder() : Encoder(12) {}  // Reserved for the length header (0xFFFFFFFF + 64-bits length)
 
-    std::string DebugInfoEncoder::str() const {
+    std::string LengthFieldEncoder::str() const {
         CodeOutput output;
 
         // Prepend the length header
@@ -101,13 +110,14 @@ namespace toycc::debug {
         return output.str();
     }
 
+
     // -------- Stream operators
     CodeOutput& operator<< (CodeOutput& output, const Encoder& encoder) {
         output << encoder.str();
         return output;
     }
 
-    CodeOutput& operator<< (CodeOutput& output, const DebugInfoEncoder& encoder) {
+    CodeOutput& operator<< (CodeOutput& output, const LengthFieldEncoder& encoder) {
         output << encoder.str();
         return output;
     }

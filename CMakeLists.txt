@@ -73,7 +73,6 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/custom_matchers.cpp
 	src/arch/x86_64/custom_targets.cpp
 	src/arch/x86_64/datamodel.cpp
-	src/arch/x86_64/debug.cpp
 	src/arch/x86_64/execmodel.cpp
 	src/arch/x86_64/exports.cpp
 	src/arch/x86_64/global.cpp
@@ -81,6 +80,7 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/transfer.cpp
 
 	src/debug/dwarf.cpp
+	src/debug/debuginfo.cpp
 	src/debug/encoder.cpp
 	src/debug/generation.cpp
 	src/debug/unit.cpp

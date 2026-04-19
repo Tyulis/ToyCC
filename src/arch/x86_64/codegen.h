@@ -1,6 +1,5 @@
 #pragma once
 
-#include "debug/generation.h"
 #include "output.h"
 #include "ir/flow.h"
 #include "arch/codegen.h"
@@ -47,8 +46,5 @@ namespace toycc::arch::x86_64 {
             // -------- Symbol management -> arch/x86_64/symbols.cpp
             size_t unique_id = 0;
             std::string anonymous_identifier();
-
-            // -------- Debug info generation -> arch/x86_64/debug.cpp
-            debug::DebugInfoEntry procedure_debuginfo(const ir::Procedure& procedure, debug::CompilationUnit& debuginfo);
     };
 }

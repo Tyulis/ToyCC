@@ -80,6 +80,8 @@ namespace toycc::debug {
             return *this;
         }
 
+        DebugInfoEntry& location(size_t fileno, size_t line, size_t column);
+
         AbbreviationKey abbrev_key(bool has_children) const;
         Encoder& emit(Encoder& encoder, const AbbreviationEntry& abbreviation) const;
     };

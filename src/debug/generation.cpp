@@ -1,119 +1,112 @@
-#include <utility>
+#include <format>
 
 #include "diagnostic.h"
-#include "debug/generation.h"
-#include "debug/dwarf.h"
+#include "debug/debuginfo.h"
+#include "debug/unit.h"
+#include "ir/declaration.h"
+#include "ir/flow.h"
+#include "ir/type_expressions.h"
 
 namespace toycc::debug {
-    // -------- StringTable
-    const std::string& StringTable::operator[] (const std::string& string) {
-        auto it = labels.find(string);
-        if (it == labels.end())
-            return insert(string);
-        else
-            return it->second;
+    DebugInfoEntry CompilationUnit::procedure(const ir::Procedure& procedure) {
+        std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
+        std::shared_ptr<ir::FunctionType> function_type = std::static_pointer_cast<ir::FunctionType>(declaration->type);
+
+        DebugInfoEntry entry = DebugInfoEntry(Tag::DW_TAG_subprogram)
+            .add(Attribute::DW_AT_name,            Form::DW_FORM_strp,  string(declaration->name))
+            .add(Attribute::DW_AT_external,        Form::DW_FORM_flag,  !(declaration->storage & ir::StorageClass::STATIC))
+            .add(Attribute::DW_AT_main_subprogram, Form::DW_FORM_flag,  declaration->name == "main")
+            .add(Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,  procedure.start_label())
+            .add(Attribute::DW_AT_high_pc,         Form::DW_FORM_data8, std::format("{}-{}", procedure.end_label(), procedure.start_label()))
+            .location(fileno(declaration->location.filename), declaration->location.line, declaration->location.character);
+
+        // Return type : only if the function actually returns something
+        if (function_type->return_type->category != ir::TypeCategory::VOID)
+            entry.add(Attribute::DW_AT_type, Form::DW_FORM_ref8, type(function_type->return_type));
+
+        return entry;
     }
 
-    const std::string& StringTable::insert(const std::string& string) {
-        std::string label = std::format(".WS{}", current_id++);
-        labels[string] = label;
-
-        assembly.label(label);
-        assembly.directive(std::format(".string \"{}\"", string));
-        return labels[string];
+    DebugInfoEntry CompilationUnit::variable(std::shared_ptr<ir::Declaration> declaration) {
+        // Missing : DW_AT_declaration, DW_AT_location
+        DebugInfoEntry entry = DebugInfoEntry(Tag::DW_TAG_variable)
+            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp, string(declaration->name))
+            .add(Attribute::DW_AT_external, Form::DW_FORM_flag, (declaration->storage & ir::StorageClass::GLOBAL) && !(declaration->storage & ir::StorageClass::STATIC))
+            .add(Attribute::DW_AT_type,     Form::DW_FORM_ref8, type(declaration->type))
+            .location(fileno(declaration->location.filename), declaration->location.line, declaration->location.character);
+        return entry;
     }
 
-    CodeOutput& StringTable::emit(CodeOutput& output) const {
-        output << assembly;
-        return output;
-    }
 
-    // -------- AttributeValue
-    Encoder& AttributeValue::emit(Encoder& encoder) const {
-        switch (form) {
-            case Form::DW_FORM_addr:        encoder.offset(expression);  break;
-            case Form::DW_FORM_data1:       encoder.int8  (expression);  break;
-            case Form::DW_FORM_data2:       encoder.int16 (expression);  break;
-            case Form::DW_FORM_data4:       encoder.int32 (expression);  break;
-            case Form::DW_FORM_data8:       encoder.int64 (expression);  break;
-            case Form::DW_FORM_strp:        encoder.offset(expression);  break;
-            case Form::DW_FORM_sec_offset:  encoder.offset(expression);  break;
-            case Form::DW_FORM_flag:        encoder.int8  (expression);  break;
-            case Form::DW_FORM_ref1:        encoder.int8  (expression);  break;
-            case Form::DW_FORM_ref2:        encoder.int16 (expression);  break;
-            case Form::DW_FORM_ref4:        encoder.int32 (expression);  break;
-            case Form::DW_FORM_ref8:        encoder.int64 (expression);  break;
+    // -------- Type entries
+    void CompilationUnit::emit_type(std::shared_ptr<ir::Type> type_expression) {
+        switch (type_expression->category) {
+            case ir::TypeCategory::INTEGER:  return emit_integer_type(std::static_pointer_cast<ir::IntegerType>(type_expression));
+            case ir::TypeCategory::POINTER:  return emit_pointer_type(std::static_pointer_cast<ir::PointerType>(type_expression));
+            case ir::TypeCategory::ARRAY:    return emit_array_type  (std::static_pointer_cast<ir::ArrayType>  (type_expression));
+            case ir::TypeCategory::STRUCT:   return emit_struct_type (std::static_pointer_cast<ir::StructType> (type_expression));
 
-            case Form::DW_FORM_block2:
-            case Form::DW_FORM_block4:
-            case Form::DW_FORM_string:
-            case Form::DW_FORM_block:
-            case Form::DW_FORM_block1:
-            case Form::DW_FORM_sdata:
-            case Form::DW_FORM_udata:
-            case Form::DW_FORM_ref_addr:
-            case Form::DW_FORM_ref_udata:
-            case Form::DW_FORM_indirect:
-            case Form::DW_FORM_exprloc:
-            case Form::DW_FORM_flag_present:
-            case Form::DW_FORM_strx:
-            case Form::DW_FORM_addrx:
-            case Form::DW_FORM_ref_sup4:
-            case Form::DW_FORM_strp_sup:
-            case Form::DW_FORM_data16:
-            case Form::DW_FORM_line_strp:
-            case Form::DW_FORM_ref_sig8:
-            case Form::DW_FORM_implicit_const:
-            case Form::DW_FORM_loclistx:
-            case Form::DW_FORM_rnglistx:
-            case Form::DW_FORM_ref_sup8:
-            case Form::DW_FORM_strx1:
-            case Form::DW_FORM_strx2:
-            case Form::DW_FORM_strx3:
-            case Form::DW_FORM_strx4:
-            case Form::DW_FORM_addrx1:
-            case Form::DW_FORM_addrx2:
-            case Form::DW_FORM_addrx3:
-            case Form::DW_FORM_addrx4:
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("DWARF form {} is not implemented", std::to_underlying(form)));
+            case ir::TypeCategory::BOOL:
+            case ir::TypeCategory::FLOAT:
+            case ir::TypeCategory::UNION:
+            case ir::TypeCategory::FUNCTION:
+            case ir::TypeCategory::VOID:
+            case ir::TypeCategory::BUILTIN:
+            case ir::TypeCategory::LABEL:
+            case ir::TypeCategory::ENUM:
+            case ir::TypeCategory::BITFIELD:
+            case ir::TypeCategory::QUALIFIED:
+            case ir::TypeCategory::ALIGNED:
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Debug info emission is not implemented for type `{}`", type_expression->ir_code()));
         }
-
-        return encoder;
     }
 
-    // -------- DebugInfoRecord
-    DebugInfoEntry::DebugInfoEntry(Tag tag) : tag(tag) {}
-
-    AbbreviationKey DebugInfoEntry::abbrev_key(bool has_children) const {
-        ChildDetermination child_determination = (has_children ? ChildDetermination::DW_CHILDREN_yes : ChildDetermination::DW_CHILDREN_no);
-
-        std::set<Attribute> keyset;
-        for (const AttributeValue& value : values)
-            keyset.insert(value.attribute);
-
-        return {tag, child_determination, keyset};
+    void CompilationUnit::emit_integer_type(std::shared_ptr<ir::IntegerType> type_expression) {
+        append(DebugInfoEntry(Tag::DW_TAG_base_type)
+            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp,  string(type_expression->name))
+            .add(Attribute::DW_AT_encoding, Form::DW_FORM_data1, (type_expression->is_signed ? BaseTypeEncoding::DW_ATE_signed : BaseTypeEncoding::DW_ATE_unsigned))
+            .add(Attribute::DW_AT_bit_size, Form::DW_FORM_data1, type_expression->size_bits)
+            .location(fileno(type_expression->location.filename), type_expression->location.line, type_expression->location.character));
     }
 
-    Encoder& DebugInfoEntry::emit(Encoder& encoder, const AbbreviationEntry& abbreviation) const {
-        encoder.uleb128(abbreviation.index);
-        for (const auto& [attribute, form] : abbreviation.attributes) {
-            auto value = std::ranges::find_if(values, [attribute](const AttributeValue& value) { return value.attribute == attribute; });
-            if (value == values.end())
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid abbreviation entry : attribute not found");
-
-            value->emit(encoder);
-        }
-
-        return encoder;
+    void CompilationUnit::emit_pointer_type(std::shared_ptr<ir::PointerType> type_expression) {
+        append(DebugInfoEntry(Tag::DW_TAG_pointer_type)
+            .add(Attribute::DW_AT_type, Form::DW_FORM_ref8, type(type_expression->referenced_type))
+            .location(fileno(type_expression->location.filename), type_expression->location.line, type_expression->location.character));
     }
 
-    // -------- AbbreviationEntry
-    Encoder& AbbreviationEntry::emit(Encoder& encoder) const {
-        // DWARF5 7.5.3
-        encoder.uleb128(index).uleb128(tag).int8(has_children);
-        for (const auto& [attribute, form] : attributes)
-            encoder.uleb128(attribute).uleb128(form);
-        encoder.uleb128(0).uleb128(0);
-        return encoder;
+    void CompilationUnit::emit_array_type(std::shared_ptr<ir::ArrayType> type_expression) {
+        auto array_entry = push_auto(DebugInfoEntry(Tag::DW_TAG_array_type)
+            .add(Attribute::DW_AT_type, Form::DW_FORM_ref8, type(type_expression->element_type))
+            .location(fileno(type_expression->location.filename), type_expression->location.line, type_expression->location.character));
+
+        DebugInfoEntry subrange_entry = DebugInfoEntry(Tag::DW_TAG_subrange_type)
+            .add(Attribute::DW_AT_lower_bound, Form::DW_FORM_data1, 0);
+
+        // Constant length -> set the upper bound ; otherwise, don't specify it so it's considered unknown (DWARF5 5.13)
+        if (type_expression->length.is_constant() && type_expression->length.constant().tag() == ir::Constant::INTEGER)
+            subrange_entry.add(Attribute::DW_AT_upper_bound, Form::DW_FORM_data8, static_cast<size_t>(type_expression->length.constant().integer()));
+
+        append(subrange_entry);
+    }
+
+    void CompilationUnit::emit_struct_type(std::shared_ptr<ir::StructType> type_expression) {
+        DebugInfoEntry struct_entry = DebugInfoEntry(Tag::DW_TAG_structure_type)
+            .add(Attribute::DW_AT_byte_size, Form::DW_FORM_data8, type_expression->size(type_expression->location))
+            .location(fileno(type_expression->location.filename), type_expression->location.line, type_expression->location.character);
+        if (type_expression->name[0] != '.')  // Skip the generated name of anonymous structs
+            struct_entry.add(Attribute::DW_AT_name, Form::DW_FORM_strp, string(type_expression->name));
+
+        auto struct_scope = push_auto(struct_entry);
+        for (const auto& [index, member] : std::ranges::enumerate_view(type_expression->members))
+            emit_member(member, 8 * type_expression->member_offset(index));  // FIXME : Bitfields ?
+    }
+
+    void CompilationUnit::emit_member(const ir::Member& member, size_t bit_offset) {
+        append(DebugInfoEntry(Tag::DW_TAG_member)
+            .add(Attribute::DW_AT_name,            Form::DW_FORM_strp,  string(member.name))
+            .add(Attribute::DW_AT_data_bit_offset, Form::DW_FORM_data4, bit_offset)
+            .add(Attribute::DW_AT_type,            Form::DW_FORM_ref8,  type(member.type))
+            .location(fileno(member.location.filename), member.location.line, member.location.character));
     }
 }

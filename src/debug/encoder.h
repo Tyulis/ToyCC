@@ -37,6 +37,9 @@ namespace toycc::debug {
             Encoder& uleb128(Attribute value);
             Encoder& uleb128(Form value);
 
+            Encoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
+            Encoder& header(const LocationListHeader& header);     // Emit a location lists section header *except the length field*
+
             size_t length() const;
             std::string str() const;
 
@@ -45,15 +48,13 @@ namespace toycc::debug {
             size_t size;
     };
 
-    // Specialization for the .debug_info section
-    class DebugInfoEncoder : public Encoder {
+    // Specialization for the sections with an initial length field (.debug_info, .debug_loclists)
+    class LengthFieldEncoder : public Encoder {
         public:
-            DebugInfoEncoder();
-            DebugInfoEncoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
-
+            LengthFieldEncoder();
             std::string str() const;
     };
 
     CodeOutput& operator<< (CodeOutput& output, const Encoder& encoder);
-    CodeOutput& operator<< (CodeOutput& output, const DebugInfoEncoder& encoder);
+    CodeOutput& operator<< (CodeOutput& output, const LengthFieldEncoder& encoder);
 }
