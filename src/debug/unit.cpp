@@ -15,8 +15,9 @@ namespace toycc::debug {
     }
 
     CompilationUnit::CompilationUnit(std::string working_directory, std::string filename) {
-        // Emit the compilation unit header
-        debug_info.header({.debug_abbrev_label = BEGIN_DEBUG_ABBREV_LABEL});
+        // Emit the compilation unit headers
+        debug_info.header(CompilationUnitHeader {.debug_abbrev_label = BEGIN_DEBUG_ABBREV_LABEL});
+        debug_loclists.header(LocationListHeader {});
 
         // Emit the compilation unit root entry
         push(DebugInfoEntry(Tag::DW_TAG_compile_unit)
@@ -70,6 +71,12 @@ namespace toycc::debug {
         return offset;
     }
 
+    size_t CompilationUnit::emit_location_list(const LocationList& loclist) {
+        const size_t offset = debug_loclists.length();
+        debug_loclists << loclist;
+        return offset;
+    }
+
     // -------- Debug info entries
     void CompilationUnit::push(const DebugInfoEntry& entry) {
         emit_debug_entry(entry, true);
@@ -100,6 +107,10 @@ namespace toycc::debug {
         assembly.directive(".section .debug_abbrev,\"\",@progbits");
         assembly.label(BEGIN_DEBUG_ABBREV_LABEL);
         assembly << debug_abbrev;
+
+        // Fill the .debug_loclists section
+        assembly.directive(".section .debug_loclists,\"\",@progbits");
+        assembly << debug_loclists;
 
         // Fill the .debug_str section
         assembly.directive(".section .debug_str,\"\",@progbits");

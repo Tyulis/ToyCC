@@ -27,10 +27,11 @@ namespace toycc::debug {
         size += 1;
         return *this;
     }
-    Encoder& Encoder::int8(int8_t value)              {  return int8(std::to_string(static_cast<int>(value)));  }
-    Encoder& Encoder::int8(uint8_t value)             {  return int8(std::to_string(static_cast<unsigned int>(value)));  }
-    Encoder& Encoder::int8(ChildDetermination value)  {  return int8(std::to_underlying(value));  }
-    Encoder& Encoder::int8(CompilationUnitType value) {  return int8(std::to_underlying(value));  }
+    Encoder& Encoder::int8(int8_t value)                {  return int8(std::to_string(static_cast<int>(value)));  }
+    Encoder& Encoder::int8(uint8_t value)               {  return int8(std::to_string(static_cast<unsigned int>(value)));  }
+    Encoder& Encoder::int8(ChildDetermination value)    {  return int8(std::to_underlying(value));  }
+    Encoder& Encoder::int8(CompilationUnitType value)   {  return int8(std::to_underlying(value));  }
+    Encoder& Encoder::int8(LocationListEntryType value) {  return int8(std::to_underlying(value));  }
 
     Encoder& Encoder::int16(std::string expression) {
         assembly.directive(std::format(".short {}", expression));
@@ -85,6 +86,12 @@ namespace toycc::debug {
         int8 (header.address_size);
         int8 (header.segment_selector_size);
         int32(header.offset_entry_count);
+        return *this;
+    }
+
+    Encoder& Encoder::insert(const std::string& code, size_t length) {
+        assembly << code;
+        size += length;
         return *this;
     }
 

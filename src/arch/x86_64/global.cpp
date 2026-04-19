@@ -28,7 +28,7 @@ namespace toycc::arch::x86_64 {
     }
 
     void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::CompilationUnit& debuginfo) {
-        StackFrame frame(procedure);
+        StackFrame frame(procedure, debuginfo);
         std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
         auto debug_scope = debuginfo.push_auto(debuginfo.procedure(procedure));
 
@@ -92,7 +92,7 @@ namespace toycc::arch::x86_64 {
             }
         }
 
-        frame.emit_debuginfo(debuginfo);
+        frame.end();
 
         output << frame;
         output.label(procedure.end_label());

@@ -27,12 +27,13 @@ namespace toycc::debug {
         return entry;
     }
 
-    DebugInfoEntry CompilationUnit::variable(std::shared_ptr<ir::Declaration> declaration) {
+    DebugInfoEntry CompilationUnit::variable(std::shared_ptr<ir::Declaration> declaration, const LocationList& loclist) {
         // Missing : DW_AT_declaration, DW_AT_location
         DebugInfoEntry entry = DebugInfoEntry(Tag::DW_TAG_variable)
-            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp, string(declaration->name))
-            .add(Attribute::DW_AT_external, Form::DW_FORM_flag, (declaration->storage & ir::StorageClass::GLOBAL) && !(declaration->storage & ir::StorageClass::STATIC))
-            .add(Attribute::DW_AT_type,     Form::DW_FORM_ref8, type(declaration->type))
+            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp,       string(declaration->name))
+            .add(Attribute::DW_AT_external, Form::DW_FORM_flag,       (declaration->storage & ir::StorageClass::GLOBAL) && !(declaration->storage & ir::StorageClass::STATIC))
+            .add(Attribute::DW_AT_type,     Form::DW_FORM_ref8,       type(declaration->type))
+            .add(Attribute::DW_AT_location, Form::DW_FORM_sec_offset, emit_location_list(loclist))
             .location(fileno(declaration->location.filename), declaration->location.line, declaration->location.character);
         return entry;
     }

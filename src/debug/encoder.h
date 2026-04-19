@@ -16,6 +16,7 @@ namespace toycc::debug {
             Encoder& int8(int8_t value);
             Encoder& int8(ChildDetermination value);
             Encoder& int8(CompilationUnitType value);
+            Encoder& int8(LocationListEntryType value);
 
             Encoder& int16(std::string expression);
             Encoder& int16(uint16_t value);
@@ -39,6 +40,8 @@ namespace toycc::debug {
 
             Encoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
             Encoder& header(const LocationListHeader& header);     // Emit a location lists section header *except the length field*
+
+            Encoder& insert(const std::string& code, size_t length);
 
             size_t length() const;
             std::string str() const;

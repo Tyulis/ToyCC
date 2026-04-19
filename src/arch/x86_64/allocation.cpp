@@ -13,7 +13,8 @@ namespace toycc::arch::x86_64 {
     // -------- StackFrame
     static const std::unordered_set<Location> NONUNIQUE_LOCATIONS = {Location::constant, Location::memory, Location::stack};
 
-    StackFrame::StackFrame(const ir::Procedure& procedure) : ir::StackFrame<Location>(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name) {}
+    StackFrame::StackFrame(const ir::Procedure& procedure, debug::CompilationUnit& debuginfo)
+        : ir::StackFrame<Location>(procedure, NONUNIQUE_LOCATIONS, debuginfo), name(procedure.declaration->name) {}
 
     std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
         if (operand.is_dereference())

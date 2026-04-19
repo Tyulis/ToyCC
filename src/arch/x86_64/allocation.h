@@ -15,7 +15,7 @@ namespace toycc::arch::x86_64 {
     // Stack frame object that automatically generates its frame push and pop code
     class StackFrame : public ir::StackFrame<Location> {
         public:
-            StackFrame(const ir::Procedure& procedure);
+            StackFrame(const ir::Procedure& procedure, debug::CompilationUnit& debuginfo);
 
             std::unordered_set<Location> locate(const ir::Operand& operand) const;
             std::optional<Location> allocate(const std::unordered_set<Location>& locations) const;
