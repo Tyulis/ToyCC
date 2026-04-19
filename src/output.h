@@ -9,6 +9,7 @@ namespace toycc {
         public:
             void label(std::string name);
             void statement(std::string code);
+            void labeled_statement(std::string label, std::string code);
             void directive(std::string code);
             void comment(std::string content);
             void debug(std::string content);

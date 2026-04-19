@@ -6,7 +6,7 @@ namespace toycc::semantic {
     }
 
     std::string SemanticAnalyzer::anonymous_label() {
-        return std::format(".GL{}", unique_id++);
+        return std::format(".LGL{}", unique_id++);
     }
 
     std::shared_ptr<Scope> SemanticAnalyzer::current_scope() {

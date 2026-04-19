@@ -1,4 +1,5 @@
 #include "config.h"
+#include "debug/expression.h"
 #include "diagnostic.h"
 #include "gen/execmodel/x86_64/location.h"
 #include "ir/declaration.h"
@@ -14,7 +15,26 @@ namespace toycc::arch::x86_64 {
     static const std::unordered_set<Location> NONUNIQUE_LOCATIONS = {Location::constant, Location::memory, Location::stack};
 
     StackFrame::StackFrame(const ir::Procedure& procedure, debug::CompilationUnit& debuginfo)
-        : ir::StackFrame<Location>(procedure, NONUNIQUE_LOCATIONS, debuginfo), name(procedure.declaration->name) {}
+        : Parent(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name), debuginfo(debuginfo) {}
+
+    // Remove all existing locations of this variable and move it elsewhere. If there is something at `location`, it is overwritten
+    void StackFrame::move(std::shared_ptr<ir::Declaration> declaration, Location location) {
+        unset_debug_locations(declaration, Parent::locate(declaration), instruction_label());
+        Parent::move(declaration, location);
+        set_debug_locations(declaration, {location}, instruction_label());
+    }
+
+    // Add another location for a variable. If there is already something at `location`, it is overwritten
+    void StackFrame::copy(std::shared_ptr<ir::Declaration> declaration, Location location) {
+        Parent::copy(declaration, location);
+        set_debug_locations(declaration, {location}, instruction_label());
+    }
+
+    // Remove all locations of this variable
+    void StackFrame::free(std::shared_ptr<ir::Declaration> declaration) {
+        unset_debug_locations(declaration, Parent::locate(declaration), instruction_label());
+        Parent::free(declaration);
+    }
 
     std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
         if (operand.is_dereference())
@@ -27,7 +47,7 @@ namespace toycc::arch::x86_64 {
             if (operand.type()->storage_category() == ir::TypeCategory::FUNCTION)
                 return {Location::constant};
             else
-                return ir::StackFrame<Location>::locate(operand.declaration());
+                return Parent::locate(operand.declaration());
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
     }
@@ -125,6 +145,13 @@ namespace toycc::arch::x86_64 {
         }
     }
 
+    void StackFrame::end() {
+        for (auto& [declaration, loclist] : debug_variables) {
+            loclist.end(procedure.end_label());
+            debuginfo.append(debuginfo.variable(declaration, loclist));
+        }
+    }
+
     std::string StackFrame::str() const {
         CodeOutput code;
 
@@ -159,6 +186,7 @@ namespace toycc::arch::x86_64 {
         code << output;
 
         // Emit the exit block : restore saved registers then return
+        code.label(instruction_label());  // Instruction label with the last index = valid until the end of the procedure (before popping the stack frame)
         code.label(procedure.exit_block->label->name);
         for (Location reg : std::ranges::reverse_view(CALLEE_SAVED_REGISTERS))
             if (used_locations.contains(reg))
@@ -189,7 +217,8 @@ namespace toycc::arch::x86_64 {
     void StackFrame::statement(std::string code) {
         if (toycc::config::debug::with_comment_trace)
             code = std::format("{}  # {}", code, dump_allocations());
-        output.statement(code);
+        output.labeled_statement(instruction_label(), code);
+        instruction_index += 1;
     }
 
     void StackFrame::directive(std::string code) {
@@ -210,6 +239,56 @@ namespace toycc::arch::x86_64 {
             result << allocation.declaration->name << ": " << allocation.location << ", ";
         return result.str();
     }
+
+    std::string StackFrame::instruction_label() const {
+        return std::format(".L{}.II{}", procedure.declaration->name, instruction_index);
+    }
+
+    bool StackFrame::is_debug_variable(std::shared_ptr<ir::Declaration> declaration) {
+        return !(declaration->storage & ir::StorageClass::TEMPORARY) && declaration->type->category != ir::TypeCategory::FUNCTION;
+    }
+
+    void StackFrame::set_debug_locations(std::shared_ptr<ir::Declaration> declaration, std::unordered_set<Location> locations, const std::string& label) {
+        if (!is_debug_variable(declaration))
+            return;
+
+        if (!debug_variables.contains(declaration))
+            debug_variables.insert({declaration, debug::LocationList(debuginfo.format)});
+        auto it = debug_variables.find(declaration);
+
+        for (Location location : locations) {
+            debug::AssemblyData expression = debug_location(declaration, location);
+            it->second.set(expression, label);
+        }
+    }
+
+    void StackFrame::unset_debug_locations(std::shared_ptr<ir::Declaration> declaration, std::unordered_set<Location> locations, const std::string& label) {
+        if (!is_debug_variable(declaration))
+            return;
+
+        if (!debug_variables.contains(declaration))
+            debug_variables.insert({declaration, debug::LocationList(debuginfo.format)});
+        auto it = debug_variables.find(declaration);
+
+        for (Location location : locations) {
+            debug::AssemblyData expression = debug_location(declaration, location);
+            it->second.unset(expression, label);
+        }
+    }
+
+    debug::AssemblyData StackFrame::debug_location(std::shared_ptr<ir::Declaration> declaration, Location location) {
+        if (location == Location::constant)
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Constant debug locations are not implemented", declaration->location);
+        else if (location == Location::memory && (declaration->storage & ir::StorageClass::GLOBAL))
+            return debug::Expression(debuginfo.format).address(declaration->name).encode();
+        else if (location == Location::stack)
+            return debug::Expression(debuginfo.format).stack_offset(offset(declaration)).encode();
+        else if (DWARF_REGISTER_MAPPING.contains(location))
+            return debug::Expression(debuginfo.format).reg_location(DWARF_REGISTER_MAPPING.at(location)).encode();
+        else
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert the given location to a DWARF expression", declaration->location);
+    }
+
 
 
     CodeOutput& operator<< (CodeOutput& output, const StackFrame& code) {

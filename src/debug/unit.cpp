@@ -6,15 +6,17 @@
 namespace toycc::debug {
     const static std::string PRODUCER_IDENTIFICATION = "ToyCC";
 
-    const static std::string BEGIN_TEXT_LABEL = ".WL.text.begin";
-    const static std::string END_TEXT_LABEL   = ".WL.text.end";
-    const static std::string BEGIN_DEBUG_ABBREV_LABEL = ".WL.debug_abbrev.begin";
+    const static std::string BEGIN_TEXT_LABEL = ".LWL.text.begin";
+    const static std::string END_TEXT_LABEL   = ".LWL.text.end";
+    const static std::string BEGIN_DEBUG_ABBREV_LABEL = ".LWL.debug_abbrev.begin";
 
     CompilationUnit::EntryLifespan::~EntryLifespan() {
         unit.pop();
     }
 
-    CompilationUnit::CompilationUnit(std::string working_directory, std::string filename) {
+    CompilationUnit::CompilationUnit(std::string working_directory, std::string filename, DWARFFormat format)
+        : format(format), debug_info(format), debug_loclists(format), debug_abbrev(format)
+    {
         // Emit the compilation unit headers
         debug_info.header(CompilationUnitHeader {.debug_abbrev_label = BEGIN_DEBUG_ABBREV_LABEL});
         debug_loclists.header(LocationListHeader {});
@@ -41,6 +43,9 @@ namespace toycc::debug {
 
     // -------- Debug info tables management and query
     size_t CompilationUnit::fileno(std::string filename) {
+        if (filename.empty())
+            filename = "<unknown>";
+
         auto it = filenos.find(filename);
         if (it == filenos.end()) {
             size_t new_fileno = current_fileno++;
@@ -73,7 +78,7 @@ namespace toycc::debug {
 
     size_t CompilationUnit::emit_location_list(const LocationList& loclist) {
         const size_t offset = debug_loclists.length();
-        debug_loclists << loclist;
+        debug_loclists.insert(loclist.encode());
         return offset;
     }
 

@@ -29,24 +29,24 @@ namespace toycc::debug {
     }
 
     // -------- AttributeValue
-    AttributeValue::AttributeValue(Attribute attribute, Form form, const Expression& value)
-        : attribute(attribute), form(form), expression(value.str()), expression_length(value.length()) {}
+    AttributeValue::AttributeValue(Attribute attribute, Form form, const AssemblyData& value)
+        : attribute(attribute), form(form), expression(value.assembly), expression_length(value.length) {}
 
     Encoder& AttributeValue::emit(Encoder& encoder) const {
         switch (form) {
-            case Form::DW_FORM_addr:        encoder.offset(expression);  break;
-            case Form::DW_FORM_data1:       encoder.int8  (expression);  break;
-            case Form::DW_FORM_data2:       encoder.int16 (expression);  break;
-            case Form::DW_FORM_data4:       encoder.int32 (expression);  break;
-            case Form::DW_FORM_data8:       encoder.int64 (expression);  break;
-            case Form::DW_FORM_strp:        encoder.offset(expression);  break;
-            case Form::DW_FORM_sec_offset:  encoder.offset(expression);  break;
-            case Form::DW_FORM_flag:        encoder.int8  (expression);  break;
-            case Form::DW_FORM_ref1:        encoder.int8  (expression);  break;
-            case Form::DW_FORM_ref2:        encoder.int16 (expression);  break;
-            case Form::DW_FORM_ref4:        encoder.int32 (expression);  break;
-            case Form::DW_FORM_ref8:        encoder.int64 (expression);  break;
-            case Form::DW_FORM_exprloc:     encoder.insert(expression, expression_length);  break;
+            case Form::DW_FORM_addr:        encoder.address(expression);  break;
+            case Form::DW_FORM_data1:       encoder.int8   (expression);  break;
+            case Form::DW_FORM_data2:       encoder.int16  (expression);  break;
+            case Form::DW_FORM_data4:       encoder.int32  (expression);  break;
+            case Form::DW_FORM_data8:       encoder.int64  (expression);  break;
+            case Form::DW_FORM_strp:        encoder.offset (expression);  break;
+            case Form::DW_FORM_sec_offset:  encoder.offset (expression);  break;
+            case Form::DW_FORM_flag:        encoder.int8   (expression);  break;
+            case Form::DW_FORM_ref1:        encoder.int8   (expression);  break;
+            case Form::DW_FORM_ref2:        encoder.int16  (expression);  break;
+            case Form::DW_FORM_ref4:        encoder.int32  (expression);  break;
+            case Form::DW_FORM_ref8:        encoder.int64  (expression);  break;
+            case Form::DW_FORM_exprloc:     encoder.insert (AssemblyData {.assembly = expression, .length = expression_length});  break;
 
             case Form::DW_FORM_block2:
             case Form::DW_FORM_block4:
@@ -87,7 +87,7 @@ namespace toycc::debug {
     // -------- DebugInfoRecord
     DebugInfoEntry::DebugInfoEntry(Tag tag) : tag(tag) {}
 
-    DebugInfoEntry& DebugInfoEntry::add(Attribute attribute, Form form, const Expression& expression) {
+    DebugInfoEntry& DebugInfoEntry::add(Attribute attribute, Form form, const AssemblyData& expression) {
         values.push_back(AttributeValue {attribute, form, expression});
         return *this;
     }

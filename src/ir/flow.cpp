@@ -426,7 +426,7 @@ namespace toycc::ir {
         std::shared_ptr<Scope> scope = function.block;
         entry_block = blocks.emplace_node(BasicBlockType::ENTRY, unique_id);
         exit_block  = blocks.emplace_node(BasicBlockType::EXIT,  unique_id,
-                                          Label {.type = LabelType::INTERNAL, .name = std::format(".{}.BB.__exit", declaration->name), .location = function.location});
+                                          Label {.type = LabelType::INTERNAL, .name = std::format(".L{}.BB.__exit", declaration->name), .location = function.location});
 
         for (std::shared_ptr<Declaration> declaration : scope->locals_list())
             if (declaration->storage & StorageClass::PARAMETER)
@@ -590,7 +590,7 @@ namespace toycc::ir {
     }
 
     std::string Procedure::end_label() const {
-        return std::format(".{}.BB.__end", declaration->name);
+        return std::format(".L{}.BB.__end", declaration->name);
     }
 
 

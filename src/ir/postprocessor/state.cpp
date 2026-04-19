@@ -6,7 +6,7 @@ namespace toycc::ir {
     }
 
     std::string PostProcessor::anonymous_label() {
-        return std::format(".PL{}", unique_id++);
+        return std::format(".LPL{}", unique_id++);
     }
 
     std::string PostProcessor::make_scope_prefix(std::string name) {

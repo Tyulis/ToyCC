@@ -26,10 +26,17 @@ namespace toycc::debug {
         return int_ceil_division(1 + nof_significant_bits(absolute_value), 7);
     }
 
+    struct AssemblyData {
+        std::string assembly;
+        size_t length;
+
+        bool operator== (const AssemblyData& other) const;
+    };
+
     // More convenient encoder of DWARF debug information fields
     class Encoder {
         public:
-            Encoder(size_t size = 0);
+            Encoder(DWARFFormat format, size_t size = 0);
 
             Encoder& int8(std::string expression);
             Encoder& int8(uint8_t value);
@@ -51,8 +58,11 @@ namespace toycc::debug {
             Encoder& int64(uint64_t value);
             Encoder& int64(int64_t value);
 
-            Encoder& offset(std::string expression);
-            Encoder& offset(uint64_t value);
+            Encoder& address(std::string expression);  // Address on the target machine
+            Encoder& address(uint64_t value);
+
+            Encoder& offset(std::string expression);  // DWARF section offset (dependent on the DWARF format)
+            Encoder& offset(size_t value);
 
             Encoder& uleb128(size_t value);
             Encoder& uleb128(Tag value);
@@ -64,23 +74,36 @@ namespace toycc::debug {
             Encoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
             Encoder& header(const LocationListHeader& header);     // Emit a location lists section header *except the length field*
 
-            Encoder& insert(const std::string& code, size_t length);
+            Encoder& insert(const AssemblyData& data);
 
             size_t length() const;
             std::string str() const;
 
+            AssemblyData encode() const;
+
         protected:
             CodeOutput assembly;
+            DWARFFormat format;
             size_t size;
+
+            static size_t length_field_length(DWARFFormat format);
     };
 
     // Specialization for the sections with an initial length field (.debug_info, .debug_loclists)
     class LengthFieldEncoder : public Encoder {
         public:
-            LengthFieldEncoder();
+            LengthFieldEncoder(DWARFFormat format);
             std::string str() const;
     };
 
     CodeOutput& operator<< (CodeOutput& output, const Encoder& encoder);
     CodeOutput& operator<< (CodeOutput& output, const LengthFieldEncoder& encoder);
+}
+
+namespace std {
+    template<> struct hash<toycc::debug::AssemblyData> {
+        size_t operator() (const toycc::debug::AssemblyData& key) const {
+            return std::hash<std::string>{}(key.assembly);
+        }
+    };
 }

@@ -8,7 +8,6 @@
 #include "output.h"
 #include "debug/dwarf.h"
 #include "debug/encoder.h"
-#include "debug/expression.h"
 
 namespace toycc::debug {
     // String table, encoded as the .debug_str section
@@ -66,7 +65,7 @@ namespace toycc::debug {
 
         template <typename T> requires requires (T value) {{asm_expression(value)} -> std::same_as<std::string>;}
         AttributeValue(Attribute attribute, Form form, T value) : attribute(attribute), form(form), expression(asm_expression(value)) {}
-        AttributeValue(Attribute attribute, Form form, const Expression& value);
+        AttributeValue(Attribute attribute, Form form, const AssemblyData& value);
 
         Encoder& emit(Encoder& encoder) const;
     };
@@ -83,7 +82,7 @@ namespace toycc::debug {
             return *this;
         }
 
-        DebugInfoEntry& add(Attribute attribute, Form form, const Expression& expression);
+        DebugInfoEntry& add(Attribute attribute, Form form, const AssemblyData& expression);
         DebugInfoEntry& location(size_t fileno, size_t line, size_t column);
 
         AbbreviationKey abbrev_key(bool has_children) const;

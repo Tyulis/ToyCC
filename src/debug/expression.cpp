@@ -4,6 +4,8 @@
 #include "debug/expression.h"
 
 namespace toycc::debug {
+    Expression::Expression(DWARFFormat format) : Encoder(format) {}
+
     Expression& Expression::reg_location(size_t index) {
         auto it = OP_REGISTER_LOCATION.find(index);
         if (it == OP_REGISTER_LOCATION.end()) {
@@ -28,8 +30,12 @@ namespace toycc::debug {
     }
 
     Expression& Expression::address(uint64_t value) {
+        return address(std::to_string(value));
+    }
+
+    Expression& Expression::address(std::string label) {
         int8(Operation::DW_OP_addr);
-        offset(value);
+        Encoder::address(label);
         return *this;
     }
 
@@ -104,9 +110,13 @@ namespace toycc::debug {
 
     std::string Expression::str() const {
         // Add the length field
-        Encoder encoder;
+        Encoder encoder(format);
         encoder.uleb128(size);
-        encoder.insert(assembly.str(), size);
+        encoder.insert({.assembly = assembly.str(), .length = size});
         return encoder.str();
+    }
+
+    AssemblyData Expression::encode() const {
+        return AssemblyData {.assembly = str(), .length = length()};
     }
 }

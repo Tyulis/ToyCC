@@ -11,8 +11,6 @@
 
 #include "ir/flow.h"
 #include "ir/declaration.h"
-#include "debug/unit.h"
-#include "debug/loclist.h"
 #include "util/alignment.hpp"
 
 namespace toycc::ir {
@@ -37,8 +35,8 @@ namespace toycc::ir {
         public:
             const Procedure& procedure;
 
-            StackFrame(const Procedure& procedure, const std::unordered_set<Location>& nonunique_locations, debug::CompilationUnit& debuginfo)
-                : procedure(procedure), nonunique_locations(nonunique_locations), debuginfo(debuginfo) {}
+            StackFrame(const Procedure& procedure, const std::unordered_set<Location>& nonunique_locations)
+                : procedure(procedure), nonunique_locations(nonunique_locations) {}
 
             // -------- Stack variables management
             // Get the offset of the requested variable in the stack frame.
@@ -83,8 +81,6 @@ namespace toycc::ir {
 
                 declaration_index.emplace(declaration, location);
                 used_locations.insert(location);
-
-                move_debug_variable(declaration);
             }
 
             // Add another location for a variable. If there is already something at `location`, it is overwritten
@@ -102,21 +98,12 @@ namespace toycc::ir {
 
                 location_index.emplace(declaration, location);
                 used_locations.insert(location);
-
-                move_debug_variable(declaration);
             }
 
             // Remove all locations of this variable
             void free(std::shared_ptr<Declaration> declaration) {
                 auto& declaration_index = allocations.template get<declaration_tag>();
                 declaration_index.erase(declaration);
-            }
-
-
-            // Terminate the stack frame and emit debug info
-            void end() {
-                for (auto& [declaration, loclist] : debug_variables)
-                    debuginfo.append(debuginfo.variable(declaration, loclist.end()));
             }
 
         protected:
@@ -127,17 +114,5 @@ namespace toycc::ir {
 
             AllocationTable<Location> allocations;
             std::unordered_set<Location> used_locations;
-
-            debug::CompilationUnit& debuginfo;
-            std::unordered_map<std::shared_ptr<Declaration>, debug::LocationList> debug_variables;
-
-            void move_debug_variable(std::shared_ptr<Declaration> declaration) {
-                if (declaration->storage & (StorageClass::TEMPORARY | StorageClass::GLOBAL))  // FIXME : What to do with global variables ?
-                    return;  // Not from source code -> nothing to do in debug info
-
-                auto it = debug_variables.find(declaration);
-                if (it == debug_variables.end())
-                    debug_variables[declaration] = debug::LocationList {};
-            }
     };
 }

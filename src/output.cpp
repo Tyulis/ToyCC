@@ -12,6 +12,10 @@ namespace toycc {
         output << "\t" << code << "\n";
     }
 
+    void CodeOutput::labeled_statement(std::string label, std::string code) {
+        output << label << ":\t" << code << "\n";
+    }
+
     void CodeOutput::directive(std::string code) {
         output << "\t" << code << "\n";
     }

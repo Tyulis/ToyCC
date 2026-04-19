@@ -1,6 +1,5 @@
 #include <filesystem>
 
-#include "arch/x86_64/execmodel.h"
 #include "debug/unit.h"
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"

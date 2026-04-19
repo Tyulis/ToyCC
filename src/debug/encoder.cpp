@@ -4,8 +4,13 @@
 #include "debug/dwarf.h"
 
 namespace toycc::debug {
+    // -------- AssemblyData
+    bool AssemblyData::operator== (const AssemblyData& other) const {
+        return assembly == other.assembly;
+    }
+
     // -------- Encoder
-    Encoder::Encoder(size_t size) : size(size) {}
+    Encoder::Encoder(DWARFFormat format, size_t size) : format(format), size(size) {}
 
     Encoder& Encoder::int8(std::string expression) {
         assembly.directive(std::format(".byte {}", expression));
@@ -43,12 +48,28 @@ namespace toycc::debug {
     Encoder& Encoder::int64(int64_t value)  {  return int64(std::to_string(value));  }
     Encoder& Encoder::int64(uint64_t value) {  return int64(std::to_string(value));  }
 
-    Encoder& Encoder::offset(std::string expression) {
+    Encoder& Encoder::address(std::string expression) {
         assembly.directive(std::format(".quad {}", expression));
         size += 8;
         return *this;
     }
-    Encoder& Encoder::offset(uint64_t value) {  return offset(std::to_string(value));  }
+    Encoder& Encoder::address(uint64_t value) {  return address(std::to_string(value));  }
+
+    Encoder& Encoder::offset(std::string expression) {
+        switch (format) {
+            case DWARFFormat::DWARF32:
+                assembly.directive(std::format(".int {}", expression));
+                size += 4;
+                break;
+
+            case DWARFFormat::DWARF64:
+                assembly.directive(std::format(".quad {}", expression));
+                size += 8;
+                break;
+        }
+        return *this;
+    }
+    Encoder& Encoder::offset(size_t value) {  return offset(std::to_string(value));  }
 
     Encoder& Encoder::uleb128(size_t value) {
         assembly.directive(std::format(".uleb128 {}", value));
@@ -81,9 +102,9 @@ namespace toycc::debug {
         return *this;
     }
 
-    Encoder& Encoder::insert(const std::string& code, size_t length) {
-        assembly << code;
-        size += length;
+    Encoder& Encoder::insert(const AssemblyData& data) {
+        assembly << data.assembly;
+        size += data.length;
         return *this;
     }
 
@@ -95,16 +116,38 @@ namespace toycc::debug {
         return assembly.str();
     }
 
+    AssemblyData Encoder::encode() const {
+        return {.assembly = str(), .length = length()};
+    }
+
+    size_t Encoder::length_field_length(DWARFFormat format) {
+        switch (format) {
+            case DWARFFormat::DWARF32: return 4;
+            case DWARFFormat::DWARF64: return 12;
+        }
+        __builtin_unreachable();
+    }
+
 
     // -------- LengthFieldEncoder
-    LengthFieldEncoder::LengthFieldEncoder() : Encoder(12) {}  // Reserved for the length header (0xFFFFFFFF + 64-bits length)
+    LengthFieldEncoder::LengthFieldEncoder(DWARFFormat format) : Encoder(format, length_field_length(format)) {}  // Reserved for the length header
 
     std::string LengthFieldEncoder::str() const {
         CodeOutput output;
 
-        // Prepend the length header
-        output.directive(".int 0xFFFFFFFF");  // Length field : set 64-bit DWARF
-        output.directive(std::format(".quad {}", length() - 12));  // Length field excluded
+        // Prepend the length field
+        const size_t content_length = length() - length_field_length(format);
+        switch (format) {
+            case DWARFFormat::DWARF32:
+                output.directive(std::format(".int {}", content_length));
+                break;
+
+            case DWARFFormat::DWARF64:
+                output.directive(".int 0xFFFFFFFF");  // Length field : set 64-bit DWARF
+                output.directive(std::format(".quad {}", content_length));  // Length field excluded
+                break;
+        }
+
         output << assembly.str();
         return output.str();
     }

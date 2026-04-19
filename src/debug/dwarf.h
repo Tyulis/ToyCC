@@ -5,6 +5,11 @@
 #include <unordered_map>
 
 namespace toycc::debug {
+    // DWARF5 7.4 : DWARF 32-bits vs 64-bits offsets
+    enum class DWARFFormat {
+        DWARF32, DWARF64,
+    };
+
     // DWARF5 7.5.1
     enum class CompilationUnitType : uint8_t {
         DW_UT_compile = 0x01,

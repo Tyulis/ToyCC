@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "debug/dwarf.h"
 #include "output.h"
 #include "ir/flow.h"
 #include "ir/type.h"
@@ -22,7 +23,9 @@ namespace toycc::debug {
             };
 
         public:
-            CompilationUnit(std::string working_directory, std::string filename);
+            const DWARFFormat format;
+
+            CompilationUnit(std::string working_directory, std::string filename, DWARFFormat format = DWARFFormat::DWARF32);
 
             // To emit debugging directives at the beginning and end of the .text section
             void begin_text(CodeOutput& assembly) const;
