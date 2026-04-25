@@ -5,6 +5,7 @@
 #include <vector>
 #include <utility>
 
+#include "diagnostic.h"
 #include "output.h"
 #include "debug/dwarf.h"
 #include "debug/encoder.h"
@@ -64,7 +65,12 @@ namespace toycc::debug {
         size_t expression_length = 0;  // For complex expressions (ex. exprloc)
 
         template <typename T> requires requires (T value) {{asm_expression(value)} -> std::same_as<std::string>;}
-        AttributeValue(Attribute attribute, Form form, T value) : attribute(attribute), form(form), expression(asm_expression(value)) {}
+        AttributeValue(Attribute attribute, Form form, T value) : attribute(attribute), form(form), expression(asm_expression(value)) {
+            if (form == Form::DW_FORM_flag_present)
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "DW_FORM_flag_present can only be used with literal boolean values");
+        }
+
+        AttributeValue(Attribute attribute, Form form, bool value);
         AttributeValue(Attribute attribute, Form form, const AssemblyData& value);
 
         Encoder& emit(Encoder& encoder) const;
@@ -78,7 +84,14 @@ namespace toycc::debug {
 
         template <typename T>
         DebugInfoEntry& add(Attribute attribute, Form form, T value) {
-            values.push_back(AttributeValue {attribute, form, value});
+            values.emplace_back(attribute, form, value);
+            return *this;
+        }
+
+        DebugInfoEntry& add(Attribute attribute, Form form, bool value) {
+            // Special encoding for DW_FORM_flag_present : don't add it at all if it's false
+            if ((form == Form::DW_FORM_flag_present && value) || form != Form::DW_FORM_flag_present)
+                values.emplace_back(attribute, form, value);
             return *this;
         }
 

@@ -17,11 +17,11 @@ namespace toycc::arch::x86_64 {
         private:
             // -------- Global constructs -> arch/x86_64/global.cpp
             void generate_translation_unit(CodeOutput& output, const ir::TranslationUnit& unit);
-            void generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals);
-            void generate_uninitialized_globals(CodeOutput& output, const std::unordered_set<std::shared_ptr<ir::Declaration>>& globals);
-            void generate_readwrite_globals(CodeOutput& output, const ir::GlobalMap& globals);
-            void generate_readonly_globals(CodeOutput& output, const ir::GlobalMap& globals);
-            void generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable);
+            void generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals, debug::CompilationUnit& debuginfo);
+            void generate_uninitialized_globals(CodeOutput& output, const std::unordered_set<std::shared_ptr<ir::Declaration>>& globals, debug::CompilationUnit& debuginfo);
+            void generate_readwrite_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::CompilationUnit& debuginfo);
+            void generate_readonly_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::CompilationUnit& debuginfo);
+            void generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable, debug::CompilationUnit& debuginfo);
             void generate_global_value(CodeOutput& output, const ir::Constant& value);
             void generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::CompilationUnit& debuginfo);
 

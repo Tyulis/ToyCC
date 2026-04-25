@@ -1,29 +1,44 @@
+#include <unordered_set>
+
+#include "config.h"
+#include "debug/settings.h"
 #include "diagnostic.h"
+#include "debug/encoder.h"
 #include "debug/dwarf.h"
 #include "debug/loclist.h"
 
 namespace toycc::debug {
-    LocationList::LocationList(DWARFFormat format) : format(format) {}
-
-    void LocationList::set(const AssemblyData& location, const std::string& label) {
+    // -------- LocationList
+    void LocationList::copy(const AssemblyData& location, const std::string& label) {
         if (current_locations.contains(location))
             return;  // Already in that location
 
         current_locations[location] = LocationRange {.location = location, .start_label = label, .end_label = {}};
     }
 
-    void LocationList::unset(const AssemblyData& location, const std::string& label) {
-        auto it = current_locations.find(location);
-        if (it == current_locations.end())
-            return;  // Not there, nothing to do
+    void LocationList::move(const AssemblyData& location, const std::string& label) {
+        bool exists = false;
+        std::unordered_set<AssemblyData> freed_locations;
+        for (auto& [current_location, range] : current_locations) {
+            if (current_location == location) {
+                exists = true;
+                continue;
+            }
 
-        it->second.end_label = label;
-        ranges.push_back(it->second);  // Store the old location
-        current_locations.erase(it);   // Then remove it from the variable's current locations
+            range.end_label = label;
+            ranges.push_back(range);
+            freed_locations.insert(location);
+        }
+
+        for (const AssemblyData& current_location : freed_locations)
+            current_locations.erase(current_location);
+
+        if (!exists)
+            current_locations[location] = LocationRange {.location = location, .start_label = label, .end_label = {}};
     }
 
     // Unset all locations with the given end `label`
-    void LocationList::end(const std::string& label) {
+    void LocationList::free(const std::string& label) {
         for (auto& [declaration, range] : current_locations) {
             range.end_label = label;
             ranges.push_back(range);
@@ -32,11 +47,14 @@ namespace toycc::debug {
         current_locations.clear();
     }
 
-    AssemblyData LocationList::encode() const {
+    void LocationList::set_default(const AssemblyData& location) {
+        default_location = location;
+    }
+
+    Encoder& LocationList::emit(Encoder& encoder) const {
         if (!current_locations.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to encode a location list with current locations");
 
-        Encoder encoder(format);
         for (const LocationRange& range : ranges) {
             encoder.int8(LocationListEntryType::DW_LLE_start_end);
             encoder.address(range.start_label.value());
@@ -44,7 +62,75 @@ namespace toycc::debug {
             encoder.insert(range.location);
         }
 
+        if (default_location.has_value()) {
+            if (config::debug::with_default_location) {
+                encoder.int8(LocationListEntryType::DW_LLE_default_location);
+                encoder.insert(default_location.value());
+            } else {
+                // FIXME : If DW_LLE_default_location is unsupported, patch with the full range of .text ?
+                encoder.int8(LocationListEntryType::DW_LLE_start_end);
+                encoder.address(BEGIN_TEXT_LABEL);
+                encoder.address(END_TEXT_LABEL);
+                encoder.insert(default_location.value());
+            }
+        }
+
         encoder.int8(LocationListEntryType::DW_LLE_end_of_list);
-        return encoder.encode();
+        return encoder;
+    }
+
+
+    // -------- LocationListsSection
+    LocationListsSection::LocationListsSection(DWARFFormat format) : format(format) {}
+
+    size_t LocationListsSection::index(std::shared_ptr<ir::Declaration> declaration) {
+        get(declaration);  // Add the location list if it doesn't exist
+        return std::distance(order.begin(), std::ranges::find(order, declaration));
+    }
+
+    void LocationListsSection::copy(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location, const std::string& label) {
+        get(declaration).copy(location, label);
+    }
+
+    void LocationListsSection::move(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location, const std::string& label) {
+        get(declaration).move(location, label);
+    }
+
+    void LocationListsSection::free(std::shared_ptr<ir::Declaration> declaration, const std::string& label) {
+        get(declaration).free(label);
+    }
+
+    void LocationListsSection::set_default(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location) {
+        get(declaration).set_default(location);
+    }
+
+    std::string LocationListsSection::str() const {
+        LocationListHeader header;
+
+        Encoder content(format);
+        const size_t offset_table_size = lists.size() * offset_size(format);
+        for (std::shared_ptr<ir::Declaration> declaration : order) {
+            header.offsets.push_back(offset_table_size + content.length());
+            lists.at(declaration).emit(content);
+        }
+
+        LengthFieldEncoder section(format);
+        section.header(header);
+        section.insert(content.encode());
+        return section.str();
+    }
+
+    size_t LocationListsSection::base() const {
+        switch (format) {
+            case DWARFFormat::DWARF32:  return 12;
+            case DWARFFormat::DWARF64:  return 20;
+        }
+        __builtin_unreachable();
+    }
+
+    LocationList& LocationListsSection::get(std::shared_ptr<ir::Declaration> declaration) {
+        if (!lists.contains(declaration))
+            order.push_back(declaration);
+        return lists[declaration];
     }
 }

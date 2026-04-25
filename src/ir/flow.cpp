@@ -598,6 +598,9 @@ namespace toycc::ir {
         std::unordered_set<std::shared_ptr<Declaration>> declarations;
         for (std::shared_ptr<BasicBlock> block : blocks.nodes())
             declarations.insert_range(block->locals());
+
+        // Parameters must be added explicitely, since unused parameters won't appear in dependency graphs used in BasicBlock::locals
+        declarations.insert_range(parameters);
         return declarations;
     }
 

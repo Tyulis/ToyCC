@@ -1,3 +1,4 @@
+#include <boost/program_options.hpp>
 #include <boost/program_options/errors.hpp>
 #include <boost/program_options/positional_options.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -6,9 +7,8 @@
 #include <iostream>
 #include <filesystem>
 
-#include <boost/program_options.hpp>
-
 #include "config.h"
+#include "debug/dwarf.h"
 #include "linker.h"
 #include "parser.h"
 #include "assembler.h"
@@ -17,9 +17,9 @@
 #include "preprocess.h"
 #include "ir/scope.h"
 #include "ir/postprocessor.h"
-#include "util/log.h"
-#include <filesystem>
 
+#include "util/log.h"
+#include "util/strings.h"
 #include "util/tempfile.h"
 
 #include "arch/datamodel.h"
@@ -44,20 +44,40 @@ void read_config(const boost::program_options::variables_map& options) {
     // Optimization options
     if (options.count("fsplit-intermediates"))
         toycc::config::optimization::split_intermediates = true;
-    if (options.count("fno-split-intermediates"))
+    else if (options.count("fno-split-intermediates"))
         toycc::config::optimization::split_intermediates = false;
 
     // Debug options
     if (options.count("debug"))
         toycc::config::debug::enable = true;
-    if (options.count("translation-trace"))
-        toycc::config::debug::with_translation_trace = true;
-    if (options.count("comment-trace"))
-        toycc::config::debug::with_comment_trace = true;
+    if (options.count("gdwarf-32")) {
+        toycc::config::debug::enable = true;
+        toycc::config::debug::format = toycc::debug::DWARFFormat::DWARF32;
+    } else if (options.count("gdwarf-64")) {
+        toycc::config::debug::enable = true;
+        toycc::config::debug::format = toycc::debug::DWARFFormat::DWARF64;
+    }
+
+    // Developer options
+    if (options.count("vtranslation-trace"))
+        toycc::config::dev::with_translation_trace = true;
+    if (options.count("vcomment-trace"))
+        toycc::config::dev::with_comment_trace = true;
+
+    // Config dump
+    if (options.count("vdump-config")) {
+        std::cerr << "Compiler configuration :" << std::endl;
+        std::cerr << toycc::indent(toycc::config::dump(), "    ") << std::endl << std::endl;
+    }
 }
 
 int main(int argc, char** argv) {
     toycc::arch::DATAMODEL = &toycc::arch::x86_64::DATAMODEL;  // Only x86_64 for now
+
+    boost::program_options::options_description generic_options("Generic options");
+    generic_options.add_options()("help,h",        "Show this help message")
+                                 ("output,o",      boost::program_options::value<std::string>(), "Output file name")
+                                 ("source-file,f", boost::program_options::value<std::string>(), "Source files");
 
     boost::program_options::options_description sequence_options("Sequence options");
     sequence_options.add_options()("preprocess,E",   "Only preprocess the source code")
@@ -71,21 +91,22 @@ int main(int argc, char** argv) {
                                   ("compile,c",      "Compile to an object file");
 
     boost::program_options::options_description debug_options("Debug options");
-    debug_options.add_options()("debug,g",           "Emit debugging information in 64-bits DWARF5 format")
-                               ("translation-trace", "Log all translation model steps")
-                               ("comment-trace",     "Add comments with the translation process in the assembly code output");
+    debug_options.add_options()("debug,g",           "Emit debugging information in DWARF5 format")
+                               ("gdwarf-32",         "Force the 32-bits DWARF format (default)")
+                               ("gdwarf-64",         "Force the 64-bits DWARF format (currently has issues because GAS only generates DWARF-32)")
+                               ("gdefault-location", "Emit more reliable default location entries (not supported by current GDB)");
 
     boost::program_options::options_description optimization_options("Optimization options");
     optimization_options.add_options()("fsplit-intermediates",    "Split intermediate values in basic blocks")
                                       ("fno-split-intermediates", "Don't split intermediate values in basic blocks");
 
-    boost::program_options::options_description generic_options("Generic options");
-    generic_options.add_options()("help,h",        "Show this help message")
-                                 ("output,o",      boost::program_options::value<std::string>(), "Output file name")
-                                 ("source-file,f", boost::program_options::value<std::string>(), "Source files");
+    boost::program_options::options_description dev_options("Compiler developer options");
+    dev_options.add_options()("vtranslation-trace", "Log all translation model steps")
+                             ("vcomment-trace",     "Add comments with the translation process in the assembly code output")
+                             ("vdump-config",       "Begin by printing the compiler config");
 
     boost::program_options::options_description all_options;
-    all_options.add(generic_options).add(sequence_options).add(optimization_options).add(debug_options);
+    all_options.add(generic_options).add(sequence_options).add(optimization_options).add(debug_options).add(dev_options);
 
     boost::program_options::positional_options_description positional;
     positional.add("source-file", 1);
@@ -209,7 +230,7 @@ int main(int argc, char** argv) {
 
         toycc::assemble(assembly.str(), temp_object_path);
         if (target_step == SequenceStep::ASSEMBLY) {
-            std::filesystem::copy_file(temp_object_path, production_path);
+            std::filesystem::copy_file(temp_object_path, production_path, std::filesystem::copy_options::overwrite_existing);
             return 0;
         }
 

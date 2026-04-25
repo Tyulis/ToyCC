@@ -65,11 +65,13 @@ namespace toycc::debug {
             Encoder& offset(size_t value);
 
             Encoder& uleb128(size_t value);
+            Encoder& uleb128(std::string expression);
             Encoder& uleb128(Tag value);
             Encoder& uleb128(Attribute value);
             Encoder& uleb128(Form value);
 
             Encoder& sleb128(ssize_t value);
+            Encoder& sleb128(std::string expression);
 
             Encoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
             Encoder& header(const LocationListHeader& header);     // Emit a location lists section header *except the length field*

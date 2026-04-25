@@ -18,22 +18,34 @@ namespace toycc::arch::x86_64 {
         : Parent(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name), debuginfo(debuginfo) {}
 
     // Remove all existing locations of this variable and move it elsewhere. If there is something at `location`, it is overwritten
+    // Must be called after emitting the corresponding instruction
     void StackFrame::move(std::shared_ptr<ir::Declaration> declaration, Location location) {
-        unset_debug_locations(declaration, Parent::locate(declaration), instruction_label());
         Parent::move(declaration, location);
-        set_debug_locations(declaration, {location}, instruction_label());
+
+        if (is_debug_variable(declaration)) {
+            debug::AssemblyData expression = debug_location(declaration, location);
+            debuginfo.loclists.move(declaration, expression, instruction_label());
+        }
     }
 
     // Add another location for a variable. If there is already something at `location`, it is overwritten
+    // Must be called after emitting the corresponding instruction
     void StackFrame::copy(std::shared_ptr<ir::Declaration> declaration, Location location) {
         Parent::copy(declaration, location);
-        set_debug_locations(declaration, {location}, instruction_label());
+
+        if (is_debug_variable(declaration)) {
+            debug::AssemblyData expression = debug_location(declaration, location);
+            debuginfo.loclists.copy(declaration, expression, instruction_label());
+        }
     }
 
     // Remove all locations of this variable
+    // Must be called after emitting the corresponding instruction
     void StackFrame::free(std::shared_ptr<ir::Declaration> declaration) {
-        unset_debug_locations(declaration, Parent::locate(declaration), instruction_label());
         Parent::free(declaration);
+
+        if (is_debug_variable(declaration))
+            debuginfo.loclists.free(declaration, instruction_label());
     }
 
     std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
@@ -146,9 +158,18 @@ namespace toycc::arch::x86_64 {
     }
 
     void StackFrame::end() {
-        for (auto& [declaration, loclist] : debug_variables) {
-            loclist.end(procedure.end_label());
-            debuginfo.append(debuginfo.variable(declaration, loclist));
+        for (std::shared_ptr<ir::Declaration> declaration : procedure.locals()) {
+            if (!is_debug_variable(declaration))
+                continue;
+
+            // If the local variable has a stack location, set it as its default location
+            if (stack_offsets.contains(declaration)) {
+                debug::AssemblyData default_location = debug::Expression(debuginfo.format).stack_offset(stack_offset(*this, declaration)).encode();
+                debuginfo.loclists.set_default(declaration, default_location);
+            }
+
+            debuginfo.loclists.free(declaration, procedure.end_label());
+            debuginfo.append(debuginfo.variable(declaration));
         }
     }
 
@@ -162,7 +183,7 @@ namespace toycc::arch::x86_64 {
         code.directive(std::format(".type {}, @function", procedure.declaration->name));
         code.label(procedure.declaration->name);
 
-        if (toycc::config::debug::with_comment_trace)
+        if (toycc::config::dev::with_comment_trace)
             for (const auto& [variable, offset] : stack_offsets)
                 code.comment(std::format("{}(%rbp) : {}", -static_cast<ssize_t>(offset + variable->type->size({})), variable->name));
 
@@ -177,7 +198,7 @@ namespace toycc::arch::x86_64 {
                 code.statement(std::format("pushq {}", emit_operand(reg, 8)));
 
         code.statement("movq %rsp, %rbp");
-        code.directive(std::format(".cfi_def_cfa_register {}", DWARF_REGISTER_MAPPING.at(Location::bp)));  // The CFA register is now %rbp = %r6
+        code.directive(std::format(".cfi_def_cfa {}, 0", DWARF_REGISTER_MAPPING.at(Location::bp)));  // The CFA register is now %rbp = %r6
 
         if (current_offset > 0)
             code.statement(std::format("subq ${}, %rsp", align_offset(current_offset, 16)));  // The stack pointer must be aligned to 16 bytes before making a call
@@ -215,7 +236,7 @@ namespace toycc::arch::x86_64 {
     }
 
     void StackFrame::statement(std::string code) {
-        if (toycc::config::debug::with_comment_trace)
+        if (toycc::config::dev::with_comment_trace)
             code = std::format("{}  # {}", code, dump_allocations());
         output.labeled_statement(instruction_label(), code);
         instruction_index += 1;
@@ -245,35 +266,7 @@ namespace toycc::arch::x86_64 {
     }
 
     bool StackFrame::is_debug_variable(std::shared_ptr<ir::Declaration> declaration) {
-        return !(declaration->storage & ir::StorageClass::TEMPORARY) && declaration->type->category != ir::TypeCategory::FUNCTION;
-    }
-
-    void StackFrame::set_debug_locations(std::shared_ptr<ir::Declaration> declaration, std::unordered_set<Location> locations, const std::string& label) {
-        if (!is_debug_variable(declaration))
-            return;
-
-        if (!debug_variables.contains(declaration))
-            debug_variables.insert({declaration, debug::LocationList(debuginfo.format)});
-        auto it = debug_variables.find(declaration);
-
-        for (Location location : locations) {
-            debug::AssemblyData expression = debug_location(declaration, location);
-            it->second.set(expression, label);
-        }
-    }
-
-    void StackFrame::unset_debug_locations(std::shared_ptr<ir::Declaration> declaration, std::unordered_set<Location> locations, const std::string& label) {
-        if (!is_debug_variable(declaration))
-            return;
-
-        if (!debug_variables.contains(declaration))
-            debug_variables.insert({declaration, debug::LocationList(debuginfo.format)});
-        auto it = debug_variables.find(declaration);
-
-        for (Location location : locations) {
-            debug::AssemblyData expression = debug_location(declaration, location);
-            it->second.unset(expression, label);
-        }
+        return !(declaration->storage & (ir::StorageClass::TEMPORARY | ir::StorageClass::GLOBAL)) && declaration->type->category != ir::TypeCategory::FUNCTION;
     }
 
     debug::AssemblyData StackFrame::debug_location(std::shared_ptr<ir::Declaration> declaration, Location location) {
@@ -282,14 +275,12 @@ namespace toycc::arch::x86_64 {
         else if (location == Location::memory && (declaration->storage & ir::StorageClass::GLOBAL))
             return debug::Expression(debuginfo.format).address(declaration->name).encode();
         else if (location == Location::stack)
-            return debug::Expression(debuginfo.format).stack_offset(offset(declaration)).encode();
+            return debug::Expression(debuginfo.format).stack_offset(stack_offset(*this, declaration)).encode();
         else if (DWARF_REGISTER_MAPPING.contains(location))
             return debug::Expression(debuginfo.format).reg_location(DWARF_REGISTER_MAPPING.at(location)).encode();
         else
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert the given location to a DWARF expression", declaration->location);
     }
-
-
 
     CodeOutput& operator<< (CodeOutput& output, const StackFrame& code) {
         output << code.str();

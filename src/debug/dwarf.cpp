@@ -1,6 +1,14 @@
 #include "debug/dwarf.h"
 
 namespace toycc::debug {
+    std::ostream& operator<< (std::ostream& stream, DWARFFormat format) {
+        switch (format) {
+            case DWARFFormat::DWARF32:  return stream << "DWARF32";
+            case DWARFFormat::DWARF64:  return stream << "DWARF64";
+        }
+        __builtin_unreachable();
+    }
+
     const std::unordered_map<Form, Class> TO_CLASS = {
         {Form::DW_FORM_addr,           Class::address},
         {Form::DW_FORM_block2,         Class::block},

@@ -17,12 +17,12 @@ namespace toycc::debug {
         frame_base.call_frame_cfa();
 
         DebugInfoEntry entry = DebugInfoEntry(Tag::DW_TAG_subprogram)
-            .add(Attribute::DW_AT_name,            Form::DW_FORM_strp,    string(declaration->name))
-            .add(Attribute::DW_AT_external,        Form::DW_FORM_flag,    !(declaration->storage & ir::StorageClass::STATIC))
-            .add(Attribute::DW_AT_main_subprogram, Form::DW_FORM_flag,    declaration->name == "main")
-            .add(Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,    procedure.start_label())
-            .add(Attribute::DW_AT_high_pc,         Form::DW_FORM_data8,   std::format("{}-{}", procedure.end_label(), procedure.start_label()))
-            .add(Attribute::DW_AT_frame_base,      Form::DW_FORM_exprloc, frame_base.encode())
+            .add(Attribute::DW_AT_name,            Form::DW_FORM_strp,         string(declaration->name))
+            .add(Attribute::DW_AT_external,        Form::DW_FORM_flag_present, !(declaration->storage & ir::StorageClass::STATIC))
+            .add(Attribute::DW_AT_main_subprogram, Form::DW_FORM_flag_present, declaration->name == "main")
+            .add(Attribute::DW_AT_low_pc,          Form::DW_FORM_addr,         procedure.start_label())
+            .add(Attribute::DW_AT_high_pc,         Form::DW_FORM_data8,        std::format("{}-{}", procedure.end_label(), procedure.start_label()))
+            .add(Attribute::DW_AT_frame_base,      Form::DW_FORM_exprloc,      frame_base.encode())
             .location(fileno(declaration->location.filename), declaration->location.line, declaration->location.character);
 
         // Return type : only if the function actually returns something
@@ -32,13 +32,13 @@ namespace toycc::debug {
         return entry;
     }
 
-    DebugInfoEntry CompilationUnit::variable(std::shared_ptr<ir::Declaration> declaration, const LocationList& loclist) {
+    DebugInfoEntry CompilationUnit::variable(std::shared_ptr<ir::Declaration> declaration) {
         // Missing : DW_AT_declaration, DW_AT_location
         DebugInfoEntry entry = DebugInfoEntry(Tag::DW_TAG_variable)
-            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp,       string(declaration->name))
-            .add(Attribute::DW_AT_external, Form::DW_FORM_flag,       (declaration->storage & ir::StorageClass::GLOBAL) && !(declaration->storage & ir::StorageClass::STATIC))
-            .add(Attribute::DW_AT_type,     Form::DW_FORM_ref8,       type(declaration->type))
-            .add(Attribute::DW_AT_location, Form::DW_FORM_sec_offset, emit_location_list(loclist))
+            .add(Attribute::DW_AT_name,     Form::DW_FORM_strp,     string(declaration->name))
+            .add(Attribute::DW_AT_external, Form::DW_FORM_flag,     (declaration->storage & ir::StorageClass::GLOBAL) && !(declaration->storage & ir::StorageClass::STATIC))
+            .add(Attribute::DW_AT_type,     Form::DW_FORM_ref8,     type(declaration->type))
+            .add(Attribute::DW_AT_location, Form::DW_FORM_loclistx, loclists.index(declaration))
             .location(fileno(declaration->location.filename), declaration->location.line, declaration->location.character);
         return entry;
     }

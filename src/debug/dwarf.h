@@ -1,7 +1,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <cstdint>
+#include <iostream>
 #include <unordered_map>
 
 namespace toycc::debug {
@@ -9,6 +11,15 @@ namespace toycc::debug {
     enum class DWARFFormat {
         DWARF32, DWARF64,
     };
+    std::ostream& operator<< (std::ostream& stream, DWARFFormat format);
+
+    constexpr inline size_t offset_size(DWARFFormat format) {
+        switch (format) {
+            case DWARFFormat::DWARF32: return 4;
+            case DWARFFormat::DWARF64: return 8;
+        }
+        __builtin_unreachable();
+    }
 
     // DWARF5 7.5.1
     enum class CompilationUnitType : uint8_t {
@@ -554,6 +565,6 @@ namespace toycc::debug {
         constexpr static uint16_t version = 5;
         constexpr static uint8_t address_size = 8;
         constexpr static uint8_t segment_selector_size = 0;  // FIXME : What is this for ?
-        constexpr static uint32_t offset_entry_count = 0;    // Forbids the use of DW_FORM_loclistx
+        std::vector<uint32_t> offsets;
     };
 }

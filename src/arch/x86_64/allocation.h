@@ -6,7 +6,6 @@
 #include "ir/flow.h"
 #include "ir/allocation.h"
 #include "debug/unit.h"
-#include "debug/loclist.h"
 #include "gen/execmodel/x86_64/location.h"
 
 namespace toycc::arch::x86_64 {
@@ -56,7 +55,6 @@ namespace toycc::arch::x86_64 {
             CodeOutput output;
 
             debug::CompilationUnit& debuginfo;
-            std::unordered_map<std::shared_ptr<ir::Declaration>, debug::LocationList> debug_variables;
 
             std::string dump_allocations() const;
 
@@ -64,8 +62,6 @@ namespace toycc::arch::x86_64 {
             std::string instruction_label() const;
 
             bool is_debug_variable(std::shared_ptr<ir::Declaration> declaration);
-            void set_debug_locations  (std::shared_ptr<ir::Declaration> declaration, std::unordered_set<Location> locations, const std::string& label);
-            void unset_debug_locations(std::shared_ptr<ir::Declaration> declaration, std::unordered_set<Location> locations, const std::string& label);
             debug::AssemblyData debug_location(std::shared_ptr<ir::Declaration> declaration, Location location);
     };
 

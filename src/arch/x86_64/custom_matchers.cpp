@@ -37,7 +37,7 @@ namespace toycc::arch::x86_64 {
         }
 
         TranslationMatch match = {.translation = TranslationTag::CALL_0, .group_match = group_match, .statements = {statement_match}, .allocations = {}};
-        if (toycc::config::debug::with_translation_trace)
+        if (toycc::config::dev::with_translation_trace)
             std::cerr << indent(dump(match), true, "        ") << "\n";
 
         if (match.matches() || match.nof_transfers().has_value())

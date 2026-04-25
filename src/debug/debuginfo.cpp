@@ -29,8 +29,19 @@ namespace toycc::debug {
     }
 
     // -------- AttributeValue
+    AttributeValue::AttributeValue(Attribute attribute, Form form, bool value)
+        : attribute(attribute), form(form), expression(asm_expression(value))
+    {
+        if (form == Form::DW_FORM_flag_present && !value)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "DW_FORM_flag_present can only be present if its value is true");
+    }
+
     AttributeValue::AttributeValue(Attribute attribute, Form form, const AssemblyData& value)
-        : attribute(attribute), form(form), expression(value.assembly), expression_length(value.length) {}
+        : attribute(attribute), form(form), expression(value.assembly), expression_length(value.length)
+    {
+        if (form == Form::DW_FORM_flag_present)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "DW_FORM_flag_present can only be used with literal boolean values");
+    }
 
     Encoder& AttributeValue::emit(Encoder& encoder) const {
         switch (form) {
@@ -39,26 +50,27 @@ namespace toycc::debug {
             case Form::DW_FORM_data2:       encoder.int16  (expression);  break;
             case Form::DW_FORM_data4:       encoder.int32  (expression);  break;
             case Form::DW_FORM_data8:       encoder.int64  (expression);  break;
+            case Form::DW_FORM_sdata:       encoder.sleb128(expression);  break;
+            case Form::DW_FORM_udata:       encoder.uleb128(expression);  break;
             case Form::DW_FORM_strp:        encoder.offset (expression);  break;
             case Form::DW_FORM_sec_offset:  encoder.offset (expression);  break;
             case Form::DW_FORM_flag:        encoder.int8   (expression);  break;
+            case Form::DW_FORM_flag_present:                              break;  // Only present if true, no actual value
             case Form::DW_FORM_ref1:        encoder.int8   (expression);  break;
             case Form::DW_FORM_ref2:        encoder.int16  (expression);  break;
             case Form::DW_FORM_ref4:        encoder.int32  (expression);  break;
             case Form::DW_FORM_ref8:        encoder.int64  (expression);  break;
             case Form::DW_FORM_exprloc:     encoder.insert (AssemblyData {.assembly = expression, .length = expression_length});  break;
+            case Form::DW_FORM_loclistx:    encoder.uleb128(expression);  break;
 
             case Form::DW_FORM_block2:
             case Form::DW_FORM_block4:
             case Form::DW_FORM_string:
             case Form::DW_FORM_block:
             case Form::DW_FORM_block1:
-            case Form::DW_FORM_sdata:
-            case Form::DW_FORM_udata:
             case Form::DW_FORM_ref_addr:
             case Form::DW_FORM_ref_udata:
             case Form::DW_FORM_indirect:
-            case Form::DW_FORM_flag_present:
             case Form::DW_FORM_strx:
             case Form::DW_FORM_addrx:
             case Form::DW_FORM_ref_sup4:
@@ -67,7 +79,6 @@ namespace toycc::debug {
             case Form::DW_FORM_line_strp:
             case Form::DW_FORM_ref_sig8:
             case Form::DW_FORM_implicit_const:
-            case Form::DW_FORM_loclistx:
             case Form::DW_FORM_rnglistx:
             case Form::DW_FORM_ref_sup8:
             case Form::DW_FORM_strx1:
@@ -93,9 +104,10 @@ namespace toycc::debug {
     }
 
     DebugInfoEntry& DebugInfoEntry::location(size_t fileno, size_t line, size_t column) {
-        return add(Attribute::DW_AT_decl_file,   Form::DW_FORM_data4, fileno)
-              .add(Attribute::DW_AT_decl_line,   Form::DW_FORM_data4, line)
-              .add(Attribute::DW_AT_decl_column, Form::DW_FORM_data4, column);
+        if (fileno != 0)  add(Attribute::DW_AT_decl_file,   Form::DW_FORM_udata, fileno);
+        if (line   != 0)  add(Attribute::DW_AT_decl_line,   Form::DW_FORM_udata, line);
+        if (column != 0)  add(Attribute::DW_AT_decl_column, Form::DW_FORM_udata, column);
+        return *this;
     }
 
     AbbreviationKey DebugInfoEntry::abbrev_key(bool has_children) const {

@@ -903,7 +903,7 @@ namespace toycc::arch::x86_64 {
             }
         }
 
-        if (toycc::config::debug::with_translation_trace) {
+        if (toycc::config::dev::with_translation_trace) {
             std::cerr << "        Transfer order dependencies :\n";
             for (TransferGraph::Edge edge : graph.edges())
                 std::cerr << "            [" << edge.entry->first << " -> " << edge.entry->second.location << "] ----> [" << edge.exit->first << " -> " << edge.exit->second.location << "]";
@@ -921,7 +921,7 @@ namespace toycc::arch::x86_64 {
         find_indirects(indirects, reads, graph, match);
 
         WeightsMatrix weights = build_weights_matrix(frame, match, indirects);
-        if (toycc::config::debug::with_translation_trace) {
+        if (toycc::config::dev::with_translation_trace) {
             std::cerr << "        Location weights matrix :\n";
             std::cerr << indent(dump(weights), true, "            ");
         }
@@ -929,7 +929,7 @@ namespace toycc::arch::x86_64 {
         std::vector<std::pair<AllocatedValue, SpecificLocation>> allocation_map = find_matching(weights);
         sort_transfers(frame, allocation_map);
 
-        if (toycc::config::debug::with_translation_trace) {
+        if (toycc::config::dev::with_translation_trace) {
             std::cerr << "        Location matching :\n";
             for (const auto& [value, specific_location] : allocation_map)
                 std::cerr << "            " << value << " -> " << specific_location.location << "\n";
@@ -967,7 +967,7 @@ namespace toycc::arch::x86_64 {
                 frame.move(value.variable, specific_location.location);
         }
 
-        if (toycc::config::debug::with_translation_trace) {
+        if (toycc::config::dev::with_translation_trace) {
             std::cerr << "        Allocated translation match :\n";
             std::cerr << indent(dump(match), true, "            ") << "\n";
         }
@@ -993,30 +993,32 @@ namespace toycc::arch::x86_64 {
         if (!match.has_value())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("No transfer match for operand {}", operand.ir_code()), operand.location);
 
+        // Emit the actual instruction
         Location source = *match->source_locations.begin();
         ir::Operand source_operand = operand;
-        if (operand.is_constant() || operand.is_dereference()) {
-            std::shared_ptr<ir::Declaration> temporary = frame.declare_intermediate(operand.type(), operand.location);
-            frame.copy(temporary, destination);
-            operand = temporary;
-        } else if (operand.is_label()) {
+
+        if (operand.is_constant() || operand.is_dereference())
+            operand = frame.declare_intermediate(operand.type(), operand.location);
+
+        toycc::execmodel::x86_64::emit_transfer(frame, source_operand, operand, match.value(), source, destination);
+
+        // Then the internal move (required to be after emitting the instruction)
+        if (operand.is_label()) {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Transferring labels is not supported", operand.location);
-        } else if (operand.is_variable()) {
+        } else if (operand.is_variable() || operand.is_constant() || operand.is_dereference()) {
+            // Constants and dereference operands were previously converted to an intermediate declaration
             frame.copy(operand.declaration(), destination);
         } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
 
-        if (toycc::config::debug::with_comment_trace) {
+        if (toycc::config::dev::with_comment_trace) {
             std::stringstream comment;
             comment << "TRANSFER " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")";
             frame.comment(comment.str());
         }
 
-        if (toycc::config::debug::with_translation_trace) {
+        if (toycc::config::dev::with_translation_trace) {
             std::cerr << "        Transfer " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")" << "\n";
             std::cerr << indent(dump(match.value()), true, "            ") << "\n";
         }
-
-
-        toycc::execmodel::x86_64::emit_transfer(frame, source_operand, operand, match.value(), source, destination);
     }
 }

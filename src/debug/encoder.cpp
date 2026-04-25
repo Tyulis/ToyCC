@@ -1,7 +1,10 @@
 #include <format>
+#include <string>
 #include <utility>
-#include "debug/encoder.h"
+
+#include "diagnostic.h"
 #include "debug/dwarf.h"
+#include "debug/encoder.h"
 
 namespace toycc::debug {
     // -------- AssemblyData
@@ -76,6 +79,11 @@ namespace toycc::debug {
         size += uleb128_size(value);
         return *this;
     }
+    Encoder& Encoder::uleb128(std::string value) {
+        if (value.empty() || value.find_first_not_of("+0123456789") != std::string::npos)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("ULEB128 can only be encoded from literal integers, not `{}`", value));
+        return uleb128(std::stoul(value));
+    }
     Encoder& Encoder::uleb128(Tag value)       {  return uleb128(std::to_underlying(value));  }
     Encoder& Encoder::uleb128(Attribute value) {  return uleb128(std::to_underlying(value));  }
     Encoder& Encoder::uleb128(Form value)      {  return uleb128(std::to_underlying(value));  }
@@ -84,6 +92,11 @@ namespace toycc::debug {
         assembly.directive(std::format(".sleb128 {}", value));
         size += sleb128_size(value);
         return *this;
+    }
+    Encoder& Encoder::sleb128(std::string value) {
+        if (value.empty() || value.find_first_not_of("+-0123456789") != std::string::npos)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("SLEB128 can only be encoded from literal integers, not `{}`", value));
+        return sleb128(std::stol(value));
     }
 
     Encoder& Encoder::header(const CompilationUnitHeader& header) {
@@ -98,7 +111,11 @@ namespace toycc::debug {
         int16(header.version);
         int8 (header.address_size);
         int8 (header.segment_selector_size);
-        int32(header.offset_entry_count);
+        int32(static_cast<uint32_t>(header.offsets.size()));
+
+        for (size_t list_offset : header.offsets)
+            offset(list_offset);
+
         return *this;
     }
 
