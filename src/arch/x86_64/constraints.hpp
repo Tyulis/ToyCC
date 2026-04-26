@@ -68,7 +68,10 @@ namespace toycc::arch::x86_64 {
                 return {OperandMatch::REQUIRES_TRANSFER, {expected_location}};
         }
 
-        if (locations.contains(expected_location) || frame.is_free(expected_location))
+        // The output is already in the expected location -> trivial OK
+        // If the expected location is free, then the result may go into it directly as an output operand so it's also OK,
+        //     BUT this only applies to actual variables, dereferences are always in a fixed place in memory so the output location can't be chosen freely like that
+        if (locations.contains(expected_location) || (operand.is_variable() && frame.is_free(expected_location)))
             return {OperandMatch::OK, {expected_location}};
         else
             return {OperandMatch::REQUIRES_TRANSFER, {expected_location}};

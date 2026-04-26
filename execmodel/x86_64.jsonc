@@ -208,6 +208,8 @@
         {"ir": {"tag": "BITWISE_XOR"}, "target": {"instruction": "XOR"}},
 
         // -------- COPY
+        // To clear a register, use `xor r, r`, that's a lot shorter than `mov 0, r`
+        {"ir": {"tag": "COPY", "source": "0"}, "target": {"instruction": "XOR", "input": ["$0.output", "$0.output"]}},
         {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},
 
         // -------- SIGN_EXTEND
