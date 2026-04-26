@@ -58,8 +58,10 @@ namespace toycc::arch::x86_64 {
 
             std::string dump_allocations() const;
 
+            bool emit_instruction_label = false;
             size_t instruction_index = 0;
-            std::string instruction_label() const;
+            std::string get_instruction_label() const;  // Only get the name of the current instruction label
+            std::string use_instruction_label();        // Get the name and set `emit_instruction_label`
 
             bool is_debug_variable(std::shared_ptr<ir::Declaration> declaration);
             debug::AssemblyData debug_location(std::shared_ptr<ir::Declaration> declaration, Location location);

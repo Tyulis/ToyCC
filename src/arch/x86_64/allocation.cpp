@@ -24,7 +24,7 @@ namespace toycc::arch::x86_64 {
 
         if (is_debug_variable(declaration)) {
             debug::AssemblyData expression = debug_location(declaration, location);
-            debuginfo.loclists.move(declaration, expression, instruction_label());
+            debuginfo.loclists.move(declaration, expression, use_instruction_label());
         }
     }
 
@@ -35,7 +35,7 @@ namespace toycc::arch::x86_64 {
 
         if (is_debug_variable(declaration)) {
             debug::AssemblyData expression = debug_location(declaration, location);
-            debuginfo.loclists.copy(declaration, expression, instruction_label());
+            debuginfo.loclists.copy(declaration, expression, use_instruction_label());
         }
     }
 
@@ -45,7 +45,7 @@ namespace toycc::arch::x86_64 {
         Parent::free(declaration);
 
         if (is_debug_variable(declaration))
-            debuginfo.loclists.free(declaration, instruction_label());
+            debuginfo.loclists.free(declaration, use_instruction_label());
     }
 
     std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
@@ -207,7 +207,8 @@ namespace toycc::arch::x86_64 {
         code << output;
 
         // Emit the exit block : restore saved registers then return
-        code.label(instruction_label());  // Instruction label with the last index = valid until the end of the procedure (before popping the stack frame)
+        if (emit_instruction_label)
+            code.label(get_instruction_label());  // Instruction label with the last index = valid until the end of the procedure (before popping the stack frame)
         code.label(procedure.exit_block->label->name);
         for (Location reg : std::ranges::reverse_view(CALLEE_SAVED_REGISTERS))
             if (used_locations.contains(reg))
@@ -236,10 +237,17 @@ namespace toycc::arch::x86_64 {
     }
 
     void StackFrame::statement(std::string code) {
+        std::optional<std::string> comment;
         if (toycc::config::dev::with_comment_trace)
-            code = std::format("{}  # {}", code, dump_allocations());
-        output.labeled_statement(instruction_label(), code);
+            comment = dump_allocations();
+
+        if (emit_instruction_label)
+            output.labeled_statement(get_instruction_label(), code, comment);
+        else
+            output.statement(code, comment);
+
         instruction_index += 1;
+        emit_instruction_label = false;
     }
 
     void StackFrame::directive(std::string code) {
@@ -261,12 +269,19 @@ namespace toycc::arch::x86_64 {
         return result.str();
     }
 
-    std::string StackFrame::instruction_label() const {
+    std::string StackFrame::get_instruction_label() const {
         return std::format(".L{}.II{}", procedure.declaration->name, instruction_index);
     }
 
+    std::string StackFrame::use_instruction_label() {
+        emit_instruction_label = true;
+        return get_instruction_label();
+    }
+
     bool StackFrame::is_debug_variable(std::shared_ptr<ir::Declaration> declaration) {
-        return !(declaration->storage & (ir::StorageClass::TEMPORARY | ir::StorageClass::GLOBAL)) && declaration->type->category != ir::TypeCategory::FUNCTION;
+        return config::debug::enable &&
+               !(declaration->storage & (ir::StorageClass::TEMPORARY | ir::StorageClass::GLOBAL)) &&
+               declaration->type->category != ir::TypeCategory::FUNCTION;
     }
 
     debug::AssemblyData StackFrame::debug_location(std::shared_ptr<ir::Declaration> declaration, Location location) {

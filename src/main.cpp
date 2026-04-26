@@ -57,6 +57,8 @@ void read_config(const boost::program_options::variables_map& options) {
         toycc::config::debug::enable = true;
         toycc::config::debug::format = toycc::debug::DWARFFormat::DWARF64;
     }
+    if (options.count("gdefault-location"))
+        toycc::config::debug::with_default_location = true;
 
     // Developer options
     if (options.count("vtranslation-trace"))
