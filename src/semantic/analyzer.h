@@ -55,6 +55,8 @@ namespace toycc::semantic {
             void decode_for_statement(CParser::IterationStatementContext* context);
             void decode_jump_statement(CParser::JumpStatementContext* context);
             void decode_goto_statement(CParser::JumpStatementContext* context);
+            void decode_break_statement(CParser::JumpStatementContext* context);
+            void decode_continue_statement(CParser::JumpStatementContext* context);
             void decode_return_statement(CParser::JumpStatementContext* context);
             void decode_labeled_statement(CParser::LabeledStatementContext* context);
 
@@ -211,7 +213,8 @@ namespace toycc::semantic {
             std::string anonymous_identifier();
             std::string anonymous_label();
 
-            std::shared_ptr<Scope> current_scope();
+            std::shared_ptr<Scope> current_scope() const;
+            std::shared_ptr<Scope> upper_scope_of_type(const std::unordered_set<ScopeType> types) const;
             ScopeFrame in_scope(std::shared_ptr<Scope> scope);
 
             Statement& emit(const Statement& statement);

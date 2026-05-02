@@ -9,8 +9,16 @@ namespace toycc::semantic {
         return std::format(".LGL{}", unique_id++);
     }
 
-    std::shared_ptr<Scope> SemanticAnalyzer::current_scope() {
+    std::shared_ptr<Scope> SemanticAnalyzer::current_scope() const {
         return scope_stack.back();
+    }
+
+    // Get the first containing scope of any of the requested type
+    std::shared_ptr<Scope> SemanticAnalyzer::upper_scope_of_type(const std::unordered_set<ScopeType> types) const {
+        for (std::shared_ptr<Scope> scope : std::ranges::reverse_view(scope_stack))
+            if (types.contains(scope->type))
+                return scope;
+        return nullptr;
     }
 
     ScopeFrame SemanticAnalyzer::in_scope(std::shared_ptr<Scope> scope) {

@@ -29,10 +29,20 @@ namespace toycc::semantic {
     }
 
     void SemanticAnalyzer::decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type, std::string entry_label, std::string exit_label) {
+        if (context->compoundStatement()) {
+            decode_compound_statement(context->compoundStatement(), scope_type.value_or(ScopeType::BLOCK), entry_label, exit_label);
+            return;
+        }
+
+        // When the scope type is set (= it's a conditional, loop, ...) but this not a compound statement, emulate it by pushing a new scope for the statement
+        std::shared_ptr<Scope> statement_scope = nullptr;
+        if (scope_type.has_value()) {
+            statement_scope = std::make_shared<Scope>(scope_type.value(), current_scope()->function, entry_label, exit_label);
+            scope_stack.push_back(statement_scope);
+        }
+
         if (context->labeledStatement())
             decode_labeled_statement(context->labeledStatement());
-        else if (context->compoundStatement())
-            decode_compound_statement(context->compoundStatement(), scope_type.value_or(ScopeType::BLOCK), entry_label, exit_label);
         else if (context->expressionStatement())
             decode_expression_statement(context->expressionStatement());
         else if (context->selectionStatement())
@@ -44,6 +54,12 @@ namespace toycc::semantic {
         else if (context->asmStatement())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Inline assembly is not supported", locate(context));
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown statement `{}`", context->getText()), locate(context));
+
+        // Pop the emulated scope
+        if (scope_type.has_value()) {
+            scope_stack.pop_back();
+            emit(Statement::make_block(locate(context), statement_scope));
+        }
     }
 
     void SemanticAnalyzer::decode_expression_statement(CParser::ExpressionStatementContext* context) {
@@ -187,9 +203,9 @@ namespace toycc::semantic {
         if (context->Goto())
             decode_goto_statement(context);
         else if (context->Continue())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "`continue` statements are not implemented", locate(context));
+            decode_continue_statement(context);
         else if (context->Break())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "`break` statements are not implemented", locate(context));
+            decode_break_statement(context);
         else if (context->Return())
             decode_return_statement(context);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown jump statement `{}`", context->getText()), locate(context));
@@ -197,6 +213,24 @@ namespace toycc::semantic {
 
     void SemanticAnalyzer::decode_goto_statement(CParser::JumpStatementContext* context) {
         emit(Statement::make_jump(locate(context), context->Identifier()->getText()));
+    }
+
+    void SemanticAnalyzer::decode_break_statement(CParser::JumpStatementContext* context) {
+        std::shared_ptr<Scope> break_scope = upper_scope_of_type({ScopeType::LOOP, ScopeType::SWITCH});
+
+        if (break_scope.get() == nullptr)
+            throw Diagnostic(DiagnosticLevel::ERROR, "`break` statement outside of a loop or `switch` block", locate(context));
+
+        emit(Statement::make_jump(locate(context), break_scope->exit_label));
+    }
+
+    void SemanticAnalyzer::decode_continue_statement(CParser::JumpStatementContext* context) {
+        std::shared_ptr<Scope> continue_scope = upper_scope_of_type({ScopeType::LOOP});
+
+        if (continue_scope.get() == nullptr)
+            throw Diagnostic(DiagnosticLevel::ERROR, "`continue` statement outside of a loop", locate(context));
+
+        emit(Statement::make_jump(locate(context), continue_scope->entry_label));
     }
 
     void SemanticAnalyzer::decode_return_statement(CParser::JumpStatementContext* context) {
