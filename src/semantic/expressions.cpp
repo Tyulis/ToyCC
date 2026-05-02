@@ -71,48 +71,58 @@ namespace toycc::semantic {
         const std::vector<CParser::LogicalAndExpressionContext*> operands = context->logicalAndExpression();
         const std::vector<antlr4::tree::TerminalNode*> operators = context->OrOr();
 
-        ExpressionResult result = decode_logical_and_expression(context->logicalAndExpression()[0]);
+        ExpressionResult operand = decode_logical_and_expression(context->logicalAndExpression()[0]);
 
-        if (operators.size() > 0) {
-            const std::string evaluation_finished = anonymous_label();
-            for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
-                const CodeLocation location = locate(operators[operation_index]);
+        if (operators.size() == 0)
+            return operand;
 
-                // Short-circuit evaluation : first `true` result skips the rest
-                emit_conditional_jump(result, evaluation_finished, true, location);
+        std::shared_ptr<Declaration> result = declare_temporary(arch::DATAMODEL->boolean_type, locate(context));
+        emit_copy(result, operand.operand(), locate(context), true);
 
-                // If it gets to this point, the previous `result` is false
-                // So no need for an explicit operation, just replace the result with the new value
-                result = decode_logical_and_expression(operands[operation_index + 1]);
-            }
-            emit_label(LabelType::INTERNAL, evaluation_finished, locate(context));
+        const std::string evaluation_finished = anonymous_label();
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+
+            // Short-circuit evaluation : first `true` result skips the rest
+            emit_conditional_jump(operand, evaluation_finished, true, location);
+
+            // If it gets to this point, the previous `result` is false
+            // So no need for an explicit operation, just replace the result with the new value
+            operand = decode_logical_and_expression(operands[operation_index + 1]);
+            emit_copy(result, operand.operand(), location, false);
         }
+        emit_label(LabelType::INTERNAL, evaluation_finished, locate(context));
 
-        return result;
+        return ExpressionResult {RValue {result}, locate(context)};
     }
 
     ExpressionResult SemanticAnalyzer::decode_logical_and_expression(CParser::LogicalAndExpressionContext* context) {
         const std::vector<CParser::InclusiveOrExpressionContext*> operands = context->inclusiveOrExpression();
         const std::vector<antlr4::tree::TerminalNode*> operators = context->AndAnd();
 
-        ExpressionResult result = decode_inclusive_or_expression(context->inclusiveOrExpression()[0]);
+        ExpressionResult operand = decode_inclusive_or_expression(context->inclusiveOrExpression()[0]);
 
-        if (operators.size() > 0) {
-            const std::string evaluation_finished = anonymous_label();
-            for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
-                const CodeLocation location = locate(operators[operation_index]);
+        if (operators.size() == 0)
+            return operand;
 
-                // Short-circuit evaluation : first `false` result skips the rest
-                emit_conditional_jump(result, evaluation_finished, false, location);
+        std::shared_ptr<Declaration> result = declare_temporary(arch::DATAMODEL->boolean_type, locate(context));
+        emit_copy(result, operand.operand(), locate(context), true);
 
-                // If it gets to this point, the previous `result` is true
-                // So no need for an explicit operation, just replace the result with the new value
-                result = decode_inclusive_or_expression(operands[operation_index + 1]);
-            }
-            emit_label(LabelType::INTERNAL, evaluation_finished, locate(context));
+        const std::string evaluation_finished = anonymous_label();
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+
+            // Short-circuit evaluation : first `false` result skips the rest
+            emit_conditional_jump(operand, evaluation_finished, false, location);
+
+            // If it gets to this point, the previous `result` is true
+            // So no need for an explicit operation, just replace the result with the new value
+            operand = decode_inclusive_or_expression(operands[operation_index + 1]);
+            emit_copy(result, operand.operand(), location, false);
         }
+        emit_label(LabelType::INTERNAL, evaluation_finished, locate(context));
 
-        return result;
+        return ExpressionResult {RValue {result}, locate(context)};
     }
 
     ExpressionResult SemanticAnalyzer::decode_inclusive_or_expression(CParser::InclusiveOrExpressionContext* context) {

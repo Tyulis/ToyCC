@@ -207,6 +207,36 @@
         // -------- BITWISE_XOR
         {"ir": {"tag": "BITWISE_XOR"}, "target": {"instruction": "XOR"}},
 
+        // -------- EQ
+        {"ir":     [{"tag": "EQ"}],
+         "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
+                    {"instruction": "SETE", "output": "$0.output"}]},
+
+        // -------- NE
+        {"ir":     [{"tag": "NE"}],
+         "target": [{"instruction": "CMP",   "input": ["$0.left", "$0.right"]},
+                    {"instruction": "SETNE", "output": "$0.output"}]},
+
+        // -------- LT
+        {"ir":     [{"tag": "LT"}],
+         "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
+                    {"instruction": "SETL", "output": "$0.output"}]},
+
+        // -------- LE
+        {"ir":     [{"tag": "LE"}],
+         "target": [{"instruction": "CMP",   "input": ["$0.left", "$0.right"]},
+                    {"instruction": "SETLE", "output": "$0.output"}]},
+
+        // -------- GT
+        {"ir":     [{"tag": "GT"}],
+         "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
+                    {"instruction": "SETG", "output": "$0.output"}]},
+
+        // -------- GE
+        {"ir":     [{"tag": "GE"}],
+         "target": [{"instruction": "CMP",   "input": ["$0.left", "$0.right"]},
+                    {"instruction": "SETGE", "output": "$0.output"}]},
+
         // -------- COPY
         // To clear a register, use `xor r, r`, that's a lot shorter than `mov 0, r`
         {"ir": {"tag": "COPY", "source": "0"}, "target": {"instruction": "XOR", "input": ["$0.output", "$0.output"]}},
@@ -226,11 +256,11 @@
         {"ir": {"tag": "JUMP", "target": "label"}, "target": {"instruction": "JMP"}},
 
         // -------- JUMP_IF_TRUE
-        // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit test x, x when x is in registers, it's shorter
+        // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit `test x, x` when x is in registers, it's shorter
         {"ir"    : [{"tag": "EQ",           "left": "int", "right": "0", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
-         "target": [{"instruction": "CMP", "input": ["$0.left", "$0.left"]},
-                    {"instruction": "JE",  "input": ["$1.target"]}]},
+         "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
+                    {"instruction": "JE",   "input": ["$1.target"]}]},
         {"ir"    : [{"tag": "NE",           "left": "int", "right": "0", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
@@ -262,8 +292,13 @@
          "target": [{"instruction": "CMP", "input": ["$0.left", "$0.right"]},
                     {"instruction": "JLE",  "input": ["$1.target"]}]},
 
+        // Actual boolean variable
+        {"ir":     [{"tag": "JUMP_IF_TRUE"}],
+         "target": [{"instruction": "TEST", "input": ["$0.predicate", "$0.predicate"]},
+                    {"instruction": "JNE",  "input": ["$0.target"]}]},
+
         // -------- JUMP_IF_FALSE
-        // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit test x, x
+        // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit `test x, x` when x in in registers, it's shorter
         {"ir"    : [{"tag": "EQ",            "left": "int", "right": "0", "output": "tempbool"},
                     {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
@@ -298,6 +333,11 @@
                     {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
                     {"instruction": "JNLE", "input": ["$1.target"]}]},
+
+        // Actual boolean variable
+        {"ir":     [{"tag": "JUMP_IF_FALSE"}],
+         "target": [{"instruction": "TEST", "input": ["$0.predicate", "$0.predicate"]},
+                    {"instruction": "JE",   "input": ["$0.target"]}]},
 
         // -------- RETURN_VAL
         {"ir":       {"tag": "RETURN_VAL", "value": "a"},
