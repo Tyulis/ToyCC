@@ -228,13 +228,22 @@ namespace toycc::semantic {
     }
 
     ExpressionResult SemanticAnalyzer::decode_cast_expression(CParser::CastExpressionContext* context) {
+        const CodeLocation location = locate(context);
+
         if (context->DigitSequence())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences as cast expressions are not implemented", locate(context));
-        else if (context->typeName())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Cast expressions are not implemented");
+            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences as cast expressions are not implemented", location);
         else if (context->prefixExpression())
             return decode_prefix_expression(context->prefixExpression());
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown cast expression `{}`", context->getText()), locate(context));
+
+        // Emit the conversion
+        ExpressionResult operand = decode_cast_expression(context->castExpression());
+        std::shared_ptr<Type> destination_type = decode_type_name(context->typeName());
+        Operand converted = emit_explicit_conversion(destination_type, operand.operand(), location);
+
+        // Copy to the destination
+        std::shared_ptr<Declaration> result = declare_temporary(destination_type, location);
+        emit(Statement::make_unary_operation(location, StatementTag::COPY, converted, result));
+        return ExpressionResult {RValue {result}, location};
     }
 
     ExpressionResult SemanticAnalyzer::decode_prefix_expression(CParser::PrefixExpressionContext* context) {

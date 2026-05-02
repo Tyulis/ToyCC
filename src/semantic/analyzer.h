@@ -186,7 +186,7 @@ namespace toycc::semantic {
 
             ConversionValidity get_conversion_validity(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> source);
             Operand emit_implicit_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location);
-            Operand emit_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location);
+            Operand emit_explicit_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location);
 
             // Internals
             Operand emit_conversion(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, Operand source,

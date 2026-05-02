@@ -51,7 +51,9 @@ namespace toycc::semantic {
         }
 
         if (destination->category == TypeCategory::POINTER) {
-            if      (source->category == TypeCategory::POINTER)  return ConversionValidity::EXPLICIT;  // Only implicit when it's the same pointer type
+            // Only implicit when it's the same pointer type or conversion to void*
+            if      (source->category == TypeCategory::POINTER && destination->dereference({}, {})->category == TypeCategory::VOID)  return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::POINTER)  return ConversionValidity::EXPLICIT;
             else if (source->category == TypeCategory::INTEGER)  return ConversionValidity::EXPLICIT;
             else if (source->category == TypeCategory::ARRAY) {
                 std::shared_ptr<PointerType> destination_pointer = std::static_pointer_cast<PointerType> (destination);
@@ -112,13 +114,13 @@ namespace toycc::semantic {
             case ConversionValidity::EXPLICIT:
                 throw Diagnostic(DiagnosticLevel::ERROR, std::format("Conversion from `{}` to `{}` can't be implicit", source.type()->text(), destination_type->text()), location);
             case ConversionValidity::IMPLICIT:
-                return emit_conversion(destination_type, source, location);
+                return emit_conversion(destination_type, source.type(), source, location, make_temporary_generator(destination_type, location));
         }
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown conversion validity", location);
     }
 
     // Main entry point. Internals won't recheck the validity of the conversion
-    Operand SemanticAnalyzer::emit_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location) {
+    Operand SemanticAnalyzer::emit_explicit_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location) {
         const ConversionValidity validity = get_conversion_validity(destination_type, source.type());
         if (validity == ConversionValidity::INVALID)
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't convert from `{}` to `{}`", source.type()->text(), destination_type->text()));

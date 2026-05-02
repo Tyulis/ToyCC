@@ -6,6 +6,7 @@
 #include "debug/unit.h"
 #include "ir/declaration.h"
 #include "ir/flow.h"
+#include "ir/type.h"
 #include "ir/type_expressions.h"
 
 namespace toycc::debug {
@@ -76,9 +77,14 @@ namespace toycc::debug {
     }
 
     void CompilationUnit::emit_pointer_type(std::shared_ptr<ir::PointerType> type_expression) {
-        append(DebugInfoEntry(Tag::DW_TAG_pointer_type)
-            .add(Attribute::DW_AT_type, Form::DW_FORM_ref8, type(type_expression->referenced_type))
-            .location(fileno(type_expression->location.filename), type_expression->location.line, type_expression->location.character));
+        DebugInfoEntry entry(Tag::DW_TAG_pointer_type);
+        entry.location(fileno(type_expression->location.filename), type_expression->location.line, type_expression->location.character);
+
+        // For void*, just generate the type entry without referenced type
+        if (type_expression->referenced_type->category != ir::TypeCategory::VOID)
+            entry.add(Attribute::DW_AT_type, Form::DW_FORM_ref8, type(type_expression->referenced_type));
+
+        append(entry);
     }
 
     void CompilationUnit::emit_array_type(std::shared_ptr<ir::ArrayType> type_expression) {
