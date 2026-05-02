@@ -40,11 +40,11 @@ namespace toycc::semantic {
             void decode_function_body(CParser::FunctionBodyContext* context, std::shared_ptr<Scope> function_scope);
 
             // -------- Statements -> semantic/statements.cpp
-            std::shared_ptr<Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type, std::string entry_label = {}, std::string exit_label = {});
+            std::shared_ptr<Scope> decode_compound_statement(CParser::CompoundStatementContext* context, ScopeType type, std::string break_label = {}, std::string continue_label = {});
             void decode_compound_statement(CParser::CompoundStatementContext* context, std::shared_ptr<Scope> scope);
 
             void decode_block_item_list(CParser::BlockItemListContext* context);
-            void decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type = {}, std::string entry_label = {}, std::string exit_label = {});
+            void decode_statement(CParser::StatementContext* context, std::optional<ScopeType> scope_type = {}, std::string break_label = {}, std::string continue_label = {});
             void decode_expression_statement(CParser::ExpressionStatementContext* context);
             void decode_selection_statement(CParser::SelectionStatementContext* context);
             void decode_if_statement(CParser::SelectionStatementContext* context);

@@ -5,8 +5,8 @@
 #include "util/strings.h"
 
 namespace toycc::ir {
-    Scope::Scope(ScopeType type, std::shared_ptr<Declaration> function, std::string entry_label, std::string exit_label)
-        : type(type), function(function), entry_label(entry_label), exit_label(exit_label) {}
+    Scope::Scope(ScopeType type, std::shared_ptr<Declaration> function, std::string break_label, std::string continue_label)
+        : type(type), function(function), break_label(break_label), continue_label(continue_label) {}
 
     std::string Scope::ir_code() const {
         std::stringstream code;
