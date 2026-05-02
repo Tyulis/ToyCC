@@ -21,7 +21,7 @@
     "banked_locations":  ["constant", "stack", "memory"],  // Non-unique locations
 
     "operand_types": {
-        "0"            : {"category": "constant", "type": "INTEGER", "value":  0},
+        "0"            : {"category": "constant", "type": ["BOOL", "INTEGER"], "value":  0},
         "-1"           : {"category": "constant", "type": "INTEGER", "value": -1},
         "constint"     : {"category": "constant", "type": "INTEGER"},
         "var"          : {"category": "variable"},
@@ -38,7 +38,7 @@
         "rdm"          : {"anyof": ["rd", "m"]},
         "label"        : {"category": "label"},
 
-        "1"            : {"category": "constant", "type": "INTEGER", "value": 1},
+        "1"            : {"category": "constant", "type": ["BOOL", "INTEGER"], "value": 1},
         "3"            : {"category": "constant", "type": "INTEGER", "value": 3},
         "a"            : {"location": "a"},
         "al"           : {"location": "a", "size": 1},
@@ -50,11 +50,11 @@
         "rel8"         : {"category": "label"},
         "rel32"        : {"category": "label"},
         "rel32m"       : {"category": "label"},
-        "imm4"         : {"category": "constant", "type": "INTEGER", "value_bits": 4},
-        "imm8"         : {"category": "constant", "type": "INTEGER", "size": 1},
-        "imm16"        : {"category": "constant", "type": "INTEGER", "size": 2},
-        "imm32"        : {"category": "constant", "type": "INTEGER", "size": 4},
-        "imm64"        : {"category": "constant", "type": "INTEGER", "size": 8},
+        "imm4"         : {"category": "constant", "type": ["BOOL", "INTEGER"], "value_bits": 4},
+        "imm8"         : {"category": "constant", "type": ["BOOL", "INTEGER"], "size": 1},
+        "imm16"        : {"category": "constant", "type": ["BOOL", "INTEGER"], "size": 2},
+        "imm32"        : {"category": "constant", "type": ["BOOL", "INTEGER"], "size": 4},
+        "imm64"        : {"category": "constant", "type": ["BOOL", "INTEGER"], "size": 8},
         "r8"           : {"anyof": "r", "size": 1},
         "r16"          : {"anyof": "r", "size": 2},
         "r32"          : {"anyof": "r", "size": 4},
@@ -208,11 +208,17 @@
         {"ir": {"tag": "BITWISE_XOR"}, "target": {"instruction": "XOR"}},
 
         // -------- EQ
+        {"ir":     [{"tag": "EQ", "right": "0"}],
+         "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
+                    {"instruction": "SETZ", "output": "$0.output"}]},
         {"ir":     [{"tag": "EQ"}],
          "target": [{"instruction": "CMP",  "input": ["$0.left", "$0.right"]},
                     {"instruction": "SETE", "output": "$0.output"}]},
 
         // -------- NE
+        {"ir":     [{"tag": "NE", "right": "0"}],
+         "target": [{"instruction": "TEST",  "input": ["$0.left", "$0.left"]},
+                    {"instruction": "SETNZ", "output": "$0.output"}]},
         {"ir":     [{"tag": "NE"}],
          "target": [{"instruction": "CMP",   "input": ["$0.left", "$0.right"]},
                     {"instruction": "SETNE", "output": "$0.output"}]},
@@ -242,9 +248,8 @@
         {"ir": {"tag": "COPY", "source": "0"}, "target": {"instruction": "XOR", "input": ["$0.output", "$0.output"]}},
         {"ir": {"tag": "COPY"}, "target": {"instruction": "MOV"}},
 
-        // -------- SIGN_EXTEND
-        {"ir": {"tag": "SIGN_EXTEND"}, "target": {"instruction": "MOVSX"}},
-        {"ir": {"tag": "SIGN_EXTEND"}, "target": {"instruction": "MOVSXD"}},
+        // -------- MINUS
+        {"ir": {"tag": "MINUS"}, "target": {"instruction": "NEG"}},
 
         // -------- ADDRESSOF
         // The input operand doesn't need to be in memory when the ADDRESSOF operation goes through, don't add a `location` constraint here
@@ -252,19 +257,23 @@
         {"ir":     {"tag": "ADDRESSOF", "operand": {"anyof": ["var", "deref"]}, "output": "var"},
          "target": {"custom": true, "header": "arch/x86_64/custom_targets.h", "function": "emit_addressof"}},
 
+        // -------- SIGN_EXTEND
+        {"ir": {"tag": "SIGN_EXTEND"}, "target": {"instruction": "MOVSX"}},
+        {"ir": {"tag": "SIGN_EXTEND"}, "target": {"instruction": "MOVSXD"}},
+
         // -------- Unconditional JUMP
         {"ir": {"tag": "JUMP", "target": "label"}, "target": {"instruction": "JMP"}},
 
         // -------- JUMP_IF_TRUE
         // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit `test x, x` when x is in registers, it's shorter
-        {"ir"    : [{"tag": "EQ",           "left": "int", "right": "0", "output": "tempbool"},
+        {"ir"    : [{"tag": "EQ",           "right": "0", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
-                    {"instruction": "JE",   "input": ["$1.target"]}]},
-        {"ir"    : [{"tag": "NE",           "left": "int", "right": "0", "output": "tempbool"},
+                    {"instruction": "JZ",   "input": ["$1.target"]}]},
+        {"ir"    : [{"tag": "NE",           "right": "0", "output": "tempbool"},
                     {"tag": "JUMP_IF_TRUE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
-                    {"instruction": "JNE",  "input": ["$1.target"]}]},
+                    {"instruction": "JNZ",  "input": ["$1.target"]}]},
 
         // Actual comparisons
         {"ir"    : [{"tag": "EQ",           "left": "int", "right": "int", "output": "tempbool"},
@@ -295,18 +304,18 @@
         // Actual boolean variable
         {"ir":     [{"tag": "JUMP_IF_TRUE"}],
          "target": [{"instruction": "TEST", "input": ["$0.predicate", "$0.predicate"]},
-                    {"instruction": "JNE",  "input": ["$0.target"]}]},
+                    {"instruction": "JNZ",  "input": ["$0.target"]}]},
 
         // -------- JUMP_IF_FALSE
         // Direct conversions to boolean -> (x == 0) is equivalent to (x & x) == 0, so emit `test x, x` when x in in registers, it's shorter
-        {"ir"    : [{"tag": "EQ",            "left": "int", "right": "0", "output": "tempbool"},
+        {"ir"    : [{"tag": "EQ",            "right": "0", "output": "tempbool"},
                     {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
-                    {"instruction": "JNE",  "input": ["$1.target"]}]},
-        {"ir"    : [{"tag": "NE",            "left": "int", "right": "0", "output": "tempbool"},
+                    {"instruction": "JNZ",  "input": ["$1.target"]}]},
+        {"ir"    : [{"tag": "NE",            "right": "0", "output": "tempbool"},
                     {"tag": "JUMP_IF_FALSE", "target": "label", "predicate": "$0.output"}],
          "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
-                    {"instruction": "JE",  "input": ["$1.target"]}]},
+                    {"instruction": "JZ",  "input": ["$1.target"]}]},
 
         // Actual comparisons
         {"ir"    : [{"tag": "EQ",            "left": "int", "right": "int", "output": "tempbool"},
@@ -337,7 +346,7 @@
         // Actual boolean variable
         {"ir":     [{"tag": "JUMP_IF_FALSE"}],
          "target": [{"instruction": "TEST", "input": ["$0.predicate", "$0.predicate"]},
-                    {"instruction": "JE",   "input": ["$0.target"]}]},
+                    {"instruction": "JZ",   "input": ["$0.target"]}]},
 
         // -------- RETURN_VAL
         {"ir":       {"tag": "RETURN_VAL", "value": "a"},

@@ -307,7 +307,12 @@ namespace toycc::semantic {
     }
 
     ExpressionResult SemanticAnalyzer::decode_unary_minus(CParser::UnaryExpressionContext* context) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary minus operations are not implemented", locate(context));
+        const CodeLocation location = locate(context);
+        ExpressionResult operand = decode_cast_expression(context->castExpression());
+
+        std::shared_ptr<Declaration> result = declare_temporary(operand.type(), location);
+        emit(Statement::make_unary_operation(location, StatementTag::MINUS, operand.operand(), result));
+        return ExpressionResult {RValue {result}, location};
     }
 
     ExpressionResult SemanticAnalyzer::decode_unary_bitwise_not(CParser::UnaryExpressionContext* context) {
@@ -315,7 +320,13 @@ namespace toycc::semantic {
     }
 
     ExpressionResult SemanticAnalyzer::decode_unary_logical_not(CParser::UnaryExpressionContext* context) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unary logical not operations are not implemented", locate(context));
+        const CodeLocation location = locate(context);
+        ExpressionResult operand = decode_cast_expression(context->castExpression());
+
+        // The logical NOT is equivalent to `x == 0`
+        std::shared_ptr<Declaration> result = declare_temporary(arch::DATAMODEL->boolean_type, location);
+        emit(Statement::make_binary_operation(location, StatementTag::EQ, operand.operand(), make_constant_zero(operand.type(), location), result));
+        return ExpressionResult {RValue {result}, location};
     }
 
 
