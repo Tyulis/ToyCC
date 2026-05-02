@@ -146,7 +146,8 @@ namespace toycc::semantic {
             ExpressionResult emit_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, const ExpressionResult& destination, CodeLocation location);
             ExpressionResult emit_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
-            ExpressionResult emit_pointer_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
+            ExpressionResult emit_pointer_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
+            ExpressionResult emit_pointer_pointer_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_increment(const ExpressionResult& operand, StatementTag op, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);

@@ -33,6 +33,7 @@ namespace toycc::arch {
 
         std::shared_ptr<ir::Type> size_type;
         std::shared_ptr<ir::Type> offset_type;
+        std::shared_ptr<ir::Type> ptrdiff_type;
         std::shared_ptr<ir::Type> enum_underlying_type;
         std::shared_ptr<ir::Type> void_pointer_type;
 

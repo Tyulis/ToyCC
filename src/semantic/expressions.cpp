@@ -3,10 +3,12 @@
 
 #include "diagnostic.h"
 #include "gen/parser/CParser.h"
+#include "ir/type.h"
 #include "ir/type_expressions.h"
 #include "ir/statement.h"
 #include "arch/datamodel.h"
 #include "semantic/analyzer.h"
+#include "semantic/values.h"
 
 namespace toycc::semantic {
     // ------------ Expressions
@@ -205,9 +207,7 @@ namespace toycc::semantic {
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
             ExpressionResult right = decode_multiplicative_expression(operands[operation_index + 1]);
-            if (left.type()->is_arithmetic() && right.type()->is_arithmetic())
-                left = emit_binary_operation(decode_additive_operator(operators[operation_index]), left, right, location);
-            else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-arithmetic additive expressions are not implemented");
+            left = emit_binary_operation(decode_additive_operator(operators[operation_index]), left, right, location);
         }
         return left;
     }
@@ -525,7 +525,7 @@ namespace toycc::semantic {
         return ExpressionResult {RValue {result}, location};
     }
 
-    ExpressionResult SemanticAnalyzer::emit_pointer_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location) {
+    ExpressionResult SemanticAnalyzer::emit_pointer_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location) {
         std::shared_ptr<Type> left_type = left.type(), right_type = right.type();
 
         if (left_type->dequalify()->category == TypeCategory::POINTER) {
@@ -543,18 +543,44 @@ namespace toycc::semantic {
         } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted pointer arithmetic without a pointer operand", location);
     }
 
+    ExpressionResult SemanticAnalyzer::emit_pointer_pointer_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location) {
+        if (op != StatementTag::SUB)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Invalid operator between two pointers", location);
+
+        std::shared_ptr<Type> left_referenced_type  = left.type ()->dereference({}, location)->dequalify();
+        std::shared_ptr<Type> right_referenced_type = right.type()->dereference({}, location)->dequalify();
+        if (*left_referenced_type != *right_referenced_type)
+            throw Diagnostic(DiagnosticLevel::ERROR, "Operator `-` between incompatible pointer types", location);
+
+        // Raw offset between the two addresses
+        std::shared_ptr<Declaration> address_difference = declare_temporary(arch::DATAMODEL->ptrdiff_type, location);
+        emit(Statement::make_binary_operation(location, op, left.operand(), right.operand(), address_difference));
+
+        // Like in pointer + arithmetic, pointer - pointer gives the number of *elements*, not bytes -> divide by the element size
+        RValue item_size = Constant {IntegerConstant(left_referenced_type->size(location)), location, arch::DATAMODEL->ptrdiff_type};
+        std::shared_ptr<Declaration> result = declare_temporary(arch::DATAMODEL->ptrdiff_type, location);
+        emit(Statement::make_binary_operation(location, StatementTag::DIV, address_difference, item_size, result));
+
+        return ExpressionResult {RValue {result}, location};
+    }
+
     ExpressionResult SemanticAnalyzer::emit_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location) {
-        std::shared_ptr<Type> left_type = left.type(), right_type = right.type();
+        std::shared_ptr<Type> left_type  = left.type();
+        std::shared_ptr<Type> right_type = right.type();
+        std::shared_ptr<Type> left_dequalified  = left_type->dequalify();
+        std::shared_ptr<Type> right_dequalified = right_type->dequalify();
 
         if (!is_operator_valid(op, left_type, right_type))
             throw Diagnostic(DiagnosticLevel::ERROR, "This operator is not valid on these operands", location);
 
         if (left_type->is_arithmetic() && right_type->is_arithmetic())
             return emit_arithmetic_binary_operation(op, left, right, location);
-        else if (left_type->dequalify()->category == TypeCategory::POINTER && right_type->is_arithmetic())
-            return emit_pointer_binary_operation(op, left, right, location);
-        else if (left_type->is_arithmetic() && right_type->dequalify()->category == TypeCategory::POINTER)
-            return emit_pointer_binary_operation(op, left, right, location);
+        else if (left_dequalified->category == TypeCategory::POINTER && right_type->is_arithmetic())
+            return emit_pointer_arithmetic_binary_operation(op, left, right, location);
+        else if (left_type->is_arithmetic() && right_dequalified->category == TypeCategory::POINTER)
+            return emit_pointer_arithmetic_binary_operation(op, left, right, location);
+        else if (left_dequalified->category == TypeCategory::POINTER && right_dequalified->category == TypeCategory::POINTER)
+            return emit_pointer_pointer_binary_operation(op, left, right, location);
         else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown operation configuration", location);
     }
 
@@ -586,13 +612,14 @@ namespace toycc::semantic {
                 return left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic();
 
             case StatementTag::ADD:
-                return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||
-                       (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic()) ||
-                       (left_unqualified->is_arithmetic() && right_unqualified->category == TypeCategory::POINTER);
+                return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||                                    // arithmetic + arithmetic -> arithmetic
+                       (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic()) ||                  // pointer    + arithmetic -> pointer
+                       (left_unqualified->is_arithmetic() && right_unqualified->category == TypeCategory::POINTER);                    // arithmetic + pointer    -> pointer
 
             case StatementTag::SUB:
-                return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||
-                       (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic());
+                return (left_unqualified->is_arithmetic() && right_unqualified->is_arithmetic()) ||                                    // arithmetic - arithmetic -> arithmetic
+                       (left_unqualified->category == TypeCategory::POINTER && right_unqualified->is_arithmetic()) ||                  // pointer    - arithmetic -> pointer
+                       (left_unqualified->category == TypeCategory::POINTER && right_unqualified->category == TypeCategory::POINTER);  // pointer    - pointer    -> arithmetic
 
             case StatementTag::LSHIFT:
             case StatementTag::RSHIFT:

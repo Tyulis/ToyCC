@@ -32,6 +32,7 @@ namespace toycc::arch::x86_64 {
 
         size_type            = unsigned_long_type;
         offset_type          = unsigned_long_type;
+        ptrdiff_type         = signed_long_type;
         enum_underlying_type = literal_integer_type;
         void_pointer_type    = PointerType::make(BUILTIN_LOCATION, void_type);
 
