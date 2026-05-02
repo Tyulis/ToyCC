@@ -31,6 +31,14 @@ namespace toycc::ir {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown operand group");
     }
 
+    std::ostream& operator<< (std::ostream& stream, FlowType type) {
+        switch (type) {
+            case FlowType::FALLTHROUGH:  stream << "FALLTHROUGH";  break;
+            case FlowType::JUMP:         stream << "JUMP";         break;
+        }
+        return stream;
+    }
+
     static std::string dependency_repr(const Dependency& dependency) {
         std::stringstream repr;
         repr << "(";
@@ -453,11 +461,11 @@ namespace toycc::ir {
 
         for (const FlowGraph::Edge& edge : blocks.edges()) {
             const std::string entry_cluster = cluster_names.at(edge.entry);
-            const std::string exit_cluster = cluster_names.at(edge.exit);
-            const std::string entry_node = block_nodes.at(edge.entry);
-            const std::string exit_node = block_nodes.at(edge.exit);
+            const std::string exit_cluster  = cluster_names.at(edge.exit);
+            const std::string entry_node    = block_nodes.at(edge.entry);
+            const std::string exit_node     = block_nodes.at(edge.exit);
 
-            dot << entry_node << " -> " << exit_node << " [ltail=\"" << entry_cluster << "\" lhead=\"" << exit_cluster << "\"];\n";
+            dot << entry_node << " -> " << exit_node << " [ltail=\"" << entry_cluster << "\" lhead=\"" << exit_cluster << "\" label=\"" << edge.attr << "\"];\n";
         }
 
         dot << "}\n";
@@ -514,6 +522,7 @@ namespace toycc::ir {
                 // Create a new block and chain it after the previous block
                 current_block = blocks.emplace_node(BasicBlockType::INNER, unique_id);
                 blocks.add_edge(previous_block, current_block, FlowType::FALLTHROUGH);
+                previous_block = current_block;
             }
 
             current_block->add_statement(statement, defined_decls);
@@ -548,8 +557,11 @@ namespace toycc::ir {
             }
         }
 
+        std::stringstream dot;
+        dot_subgraph(dot);
+
         // All possible control flow paths should eventually reach the exit block
-        // For those who don't, if the function has no return value we can implicitely insert a return statement. Otherwise the procedure is ill-formed.
+        // For those who don't, if the function has no return value we can implicitely insert a return statement. Otherwise the function is ill-formed.
         auto insert_implicit_exit = [&](std::shared_ptr<BasicBlock> block) {
             const CodeLocation location = scope->statements.back().location;
 
@@ -557,7 +569,8 @@ namespace toycc::ir {
             if (function_type->return_type->category == TypeCategory::VOID) {
                 block->add_statement(Statement::make_return(location), defined_decls);
                 blocks.add_edge(block, exit_block, FlowType::JUMP);
-            } else throw Diagnostic(DiagnosticLevel::ERROR, "Some control flow paths reach the end of the function without returning a value", location);
+            } else throw Diagnostic(DiagnosticLevel::ERROR, "Some control flow paths reach the end of the function without returning a value", location)
+                          .add_note(DiagnosticLevel::NOTE, dot.str());
         };
 
         // Now, ensure that the control frow is correct (all control paths go from the entry block, through inner blocks, to the exit block)

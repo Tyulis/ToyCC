@@ -93,6 +93,8 @@ namespace toycc::ir {
         FALLTHROUGH, JUMP,
     };
 
+    std::ostream& operator<< (std::ostream& stream, FlowType type);
+
     using FlowGraph = Graph<BasicBlock, FlowType>;
     using GlobalMap = std::unordered_map<std::shared_ptr<Declaration>, std::optional<Constant>>;
 
