@@ -469,41 +469,42 @@ namespace toycc::semantic {
     }
 
 
-    void SemanticAnalyzer::decode_abstract_declarator(Member& member, CParser::AbstractDeclaratorContext* context) {
+    std::shared_ptr<Type> SemanticAnalyzer::decode_abstract_declarator(std::shared_ptr<Type> type, CParser::AbstractDeclaratorContext* context) {
         if (context->vcSpecificModifer())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "VC-specific modifiers are not supported", locate(context));
         if (!context->gccDeclaratorExtension().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
 
-        member.name = anonymous_identifier();
-
         if (context->pointer())
-            member.type = decode_pointer_spec(context->pointer(), member.type);
+            type = decode_pointer_spec(context->pointer(), type);
 
         if (context->directAbstractDeclarator())
-            decode_direct_abstract_declarator(member, context->directAbstractDeclarator());
+            type = decode_direct_abstract_declarator(type, context->directAbstractDeclarator());
+
+        return type;
     }
 
-    void SemanticAnalyzer::decode_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorContext* context) {
+    std::shared_ptr<Type> SemanticAnalyzer::decode_direct_abstract_declarator(std::shared_ptr<Type> type, CParser::DirectAbstractDeclaratorContext* context) {
         if (!context->gccDeclaratorExtension().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
 
         if (context->abstractDeclarator())
-            return decode_abstract_declarator(member, context->abstractDeclarator());
+            return decode_abstract_declarator(type, context->abstractDeclarator());
 
         for (CParser::DirectAbstractDeclaratorExtensionContext* extension : context->directAbstractDeclaratorExtension())
-            decode_direct_abstract_declarator_extension(member, extension);
+            type = decode_direct_abstract_declarator_extension(type, extension);
+        return type;
     }
 
-    void SemanticAnalyzer::decode_direct_abstract_declarator_extension(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {
+    std::shared_ptr<Type> SemanticAnalyzer::decode_direct_abstract_declarator_extension(std::shared_ptr<Type> type, CParser::DirectAbstractDeclaratorExtensionContext* context) {
         if (context->LeftBracket() && context->RightBracket())  // Array alternatives
-            return decode_array_direct_abstract_declarator(member, context);
+            return decode_array_direct_abstract_declarator(type, context);
         else if (context->LeftParen() && context->RightParen())  // Function alternative
-            return decode_function_direct_abstract_declarator(member, context);
+            return decode_function_direct_abstract_declarator(type, context);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown declarator type `{}`", context->getText()), locate(context));
     }
 
-    void SemanticAnalyzer::decode_array_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {
+    std::shared_ptr<Type> SemanticAnalyzer::decode_array_direct_abstract_declarator(std::shared_ptr<Type> type, CParser::DirectAbstractDeclaratorExtensionContext* context) {
         if (context->Static())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Static variables as array length are not implemented", locate(context));
         if (context->Star())
@@ -514,19 +515,27 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Deduced array lengths are not implemented", locate(context));
 
         ExpressionResult length = decode_assignment_expression(context->assignmentExpression());
-        member.type = ArrayType::make(locate(context), member.type, length.operand());
+        return ArrayType::make(locate(context), type, length.operand());
     }
 
-    void SemanticAnalyzer::decode_function_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context) {
+    std::shared_ptr<Type> SemanticAnalyzer::decode_function_direct_abstract_declarator(std::shared_ptr<Type> type, CParser::DirectAbstractDeclaratorExtensionContext* context) {
         if (!context->gccDeclaratorExtension().empty())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "GCC declarator extensions are not supported", locate(context));
 
-        std::shared_ptr<FunctionType> function_type = FunctionType::make(locate(context), member.type);
+        std::shared_ptr<FunctionType> function_type = FunctionType::make(locate(context), type);
         if (context->parameterTypeList())
             function_type->parameters = decode_parameter_type_list(context->parameterTypeList());
         // Otherwise, no parameters
 
-        member.type = function_type;
+        return function_type;
+    }
+
+    std::shared_ptr<Type> SemanticAnalyzer::decode_type_name(CParser::TypeNameContext* context) {
+        std::shared_ptr<Type> type = decode_specifier_qualifier_list(context->specifierQualifierList());
+
+        if (context->abstractDeclarator())
+            type = decode_abstract_declarator(type, context->abstractDeclarator());
+        return type;
     }
 
 
@@ -561,15 +570,12 @@ namespace toycc::semantic {
         if (parameter.storage.without(StorageClass::AUTO) || parameter.function_spec)
             throw Diagnostic(DiagnosticLevel::ERROR, "Function parameters can't have storage classes or function specifiers", locate(context));
 
-        std::optional<std::string> name;
-        if (context->declarator())
+        if (context->declarator()) {
             decode_declarator(parameter, context->declarator());
-        else if (context->abstractDeclarator())
-            decode_abstract_declarator(parameter, context->abstractDeclarator());
-        else return {};
-
-        if (name.has_value())
-            parameter.name = name.value();
+        } else if (context->abstractDeclarator()) {
+            parameter.name = anonymous_identifier();
+            parameter.type = decode_abstract_declarator(parameter.type, context->abstractDeclarator());
+        } else return {};
 
         return static_cast<Member>(parameter);
     }

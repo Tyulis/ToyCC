@@ -90,11 +90,12 @@ namespace toycc::semantic {
             void decode_array_direct_declarator(Member& member, CParser::DirectDeclaratorExtensionContext* context);
             void decode_function_direct_declarator(Member& spec, CParser::DirectDeclaratorExtensionContext* context);
 
-            void decode_abstract_declarator(Member& member, CParser::AbstractDeclaratorContext* context);
-            void decode_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorContext* context);
-            void decode_direct_abstract_declarator_extension(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context);
-            void decode_array_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context);
-            void decode_function_direct_abstract_declarator(Member& member, CParser::DirectAbstractDeclaratorExtensionContext* context);
+            std::shared_ptr<Type> decode_abstract_declarator(std::shared_ptr<Type> base_type, CParser::AbstractDeclaratorContext* context);
+            std::shared_ptr<Type> decode_direct_abstract_declarator(std::shared_ptr<Type> base_type, CParser::DirectAbstractDeclaratorContext* context);
+            std::shared_ptr<Type> decode_direct_abstract_declarator_extension(std::shared_ptr<Type> base_type, CParser::DirectAbstractDeclaratorExtensionContext* context);
+            std::shared_ptr<Type> decode_array_direct_abstract_declarator(std::shared_ptr<Type> base_type, CParser::DirectAbstractDeclaratorExtensionContext* context);
+            std::shared_ptr<Type> decode_function_direct_abstract_declarator(std::shared_ptr<Type> base_type, CParser::DirectAbstractDeclaratorExtensionContext* context);
+            std::shared_ptr<Type> decode_type_name(CParser::TypeNameContext* context);
 
             std::vector<Member> decode_parameter_type_list(CParser::ParameterTypeListContext* context);
             std::vector<Member> decode_parameter_list(CParser::ParameterListContext* context);
@@ -149,6 +150,8 @@ namespace toycc::semantic {
             ExpressionResult emit_pointer_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_pointer_pointer_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_increment(const ExpressionResult& operand, StatementTag op, CodeLocation location);
+            ExpressionResult emit_sizeof_type(std::shared_ptr<Type> type, CodeLocation location);
+            ExpressionResult emit_sizeof_expression(const ExpressionResult& operand, CodeLocation location);
 
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
             std::shared_ptr<Type> operation_result_type(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);

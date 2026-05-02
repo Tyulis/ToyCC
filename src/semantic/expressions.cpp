@@ -239,9 +239,9 @@ namespace toycc::semantic {
 
     ExpressionResult SemanticAnalyzer::decode_prefix_expression(CParser::PrefixExpressionContext* context) {
         ExpressionResult result = decode_unary_expression(context->unaryExpression());
-        for (CParser::PrefixOperatorContext* op : context->prefixOperator()) {
+        for (CParser::PrefixOperatorContext* op : std::ranges::reverse_view(context->prefixOperator())) {
             if (op->Sizeof())
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "The sizeof operator is not implemented", locate(context));
+                result = emit_sizeof_expression(result, locate(context));
             else if (op->PlusPlus())
                 result = emit_increment(result, StatementTag::ADD, locate(context));
             else if (op->MinusMinus())
@@ -255,12 +255,16 @@ namespace toycc::semantic {
     ExpressionResult SemanticAnalyzer::decode_unary_expression(CParser::UnaryExpressionContext* context) {
         const CodeLocation location = locate(context);
 
-        if (context->Sizeof() || context->Alignof() || context->AndAnd())
+        if (context->Alignof() || context->AndAnd())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Extension unary expressions are not implemented", locate(context));
         else if (context->postfixExpression())
             return decode_postfix_expression(context->postfixExpression());
         else if (context->unaryOperator() && context->castExpression())
             return decode_unary_operation(context);
+        else if (context->Sizeof() && context->prefixExpression())
+            return emit_sizeof_expression(decode_prefix_expression(context->prefixExpression()), locate(context->Sizeof()));
+        else if (context->Sizeof() && context->typeName())
+            return emit_sizeof_type(decode_type_name(context->typeName()), locate(context->Sizeof()));
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown unary expression `{}`", context->getText()), locate(context));
     }
 
@@ -602,6 +606,16 @@ namespace toycc::semantic {
                                                        : make_constant_one(TypeCategory::INTEGER, location));  // For pointer arithmetic
         return emit_binary_operation(op, operand, ExpressionResult {one, location}, operand, location);
     }
+
+    ExpressionResult SemanticAnalyzer::emit_sizeof_type (std::shared_ptr<Type> type, CodeLocation location) {
+        const RValue size = Constant {IntegerConstant(type->size(location)), location, arch::DATAMODEL->size_type};
+        return ExpressionResult {size, location};
+    }
+
+    ExpressionResult SemanticAnalyzer::emit_sizeof_expression(const ExpressionResult& operand, CodeLocation location) {
+        return emit_sizeof_type(operand.type(), location);
+    }
+
 
     bool SemanticAnalyzer::is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right) {
         std::shared_ptr<Type> left_unqualified = left->dequalify(), right_unqualified = right->dequalify();
