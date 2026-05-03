@@ -30,7 +30,7 @@ namespace toycc::ir {
 
         PARAMETER    = 0x040,  // Function parameter
         TEMPORARY    = 0x080,  // Temporary variable internal to the IR
-        INTERMEDIATE = 0x100,  // Temporary variable internal to a basic block
+        INTERMEDIATE = 0x100,  // Temporary variable internal to a basic block. FIXME : Should be assigned and used exactly once
         GLOBAL       = 0x200,  // Global variable
     };
 

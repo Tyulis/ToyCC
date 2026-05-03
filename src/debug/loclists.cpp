@@ -5,7 +5,7 @@
 #include "diagnostic.h"
 #include "debug/encoder.h"
 #include "debug/dwarf.h"
-#include "debug/loclist.h"
+#include "debug/loclists.h"
 
 namespace toycc::debug {
     // -------- LocationList
@@ -83,41 +83,10 @@ namespace toycc::debug {
     // -------- LocationListsSection
     LocationListsSection::LocationListsSection(DWARFFormat format) : format(format) {}
 
-    size_t LocationListsSection::index(std::shared_ptr<ir::Declaration> declaration) {
-        get(declaration);  // Add the location list if it doesn't exist
-        return std::distance(order.begin(), std::ranges::find(order, declaration));
-    }
-
-    void LocationListsSection::copy(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location, const std::string& label) {
-        get(declaration).copy(location, label);
-    }
-
-    void LocationListsSection::move(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location, const std::string& label) {
-        get(declaration).move(location, label);
-    }
-
-    void LocationListsSection::free(std::shared_ptr<ir::Declaration> declaration, const std::string& label) {
-        get(declaration).free(label);
-    }
-
-    void LocationListsSection::set_default(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location) {
-        get(declaration).set_default(location);
-    }
-
-    std::string LocationListsSection::str() const {
-        LocationListHeader header;
-
-        Encoder content(format);
-        const size_t offset_table_size = lists.size() * offset_size(format);
-        for (std::shared_ptr<ir::Declaration> declaration : order) {
-            header.offsets.push_back(offset_table_size + content.length());
-            lists.at(declaration).emit(content);
-        }
-
-        LengthFieldEncoder section(format);
-        section.header(header);
-        section.insert(content.encode());
-        return section.str();
+    size_t LocationListsSection::add(const LocationList& loclist) {
+        const size_t index = loclists.size();
+        loclists.push_back(loclist);
+        return index;
     }
 
     size_t LocationListsSection::base() const {
@@ -128,9 +97,19 @@ namespace toycc::debug {
         __builtin_unreachable();
     }
 
-    LocationList& LocationListsSection::get(std::shared_ptr<ir::Declaration> declaration) {
-        if (!lists.contains(declaration))
-            order.push_back(declaration);
-        return lists[declaration];
+    void LocationListsSection::emit(CodeOutput& output) const {
+        LocationListHeader header;
+
+        Encoder content(format);
+        const size_t offset_table_size = loclists.size() * offset_size(format);
+        for (const LocationList& loclist : loclists) {
+            header.offsets.push_back(offset_table_size + content.length());
+            loclist.emit(content);
+        }
+
+        LengthFieldEncoder section(format);
+        section.header(header);
+        section.insert(content.encode());
+        output << section;
     }
 }

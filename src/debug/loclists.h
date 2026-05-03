@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <string>
 #include <vector>
 #include <optional>
@@ -8,7 +7,6 @@
 
 #include "debug/dwarf.h"
 #include "debug/encoder.h"
-#include "ir/declaration.h"
 
 namespace toycc::debug {
     struct LocationRange {
@@ -34,20 +32,12 @@ namespace toycc::debug {
     class LocationListsSection {
         public:
             LocationListsSection(DWARFFormat format);
-            size_t index(std::shared_ptr<ir::Declaration> declaration);
-            void copy(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location, const std::string& label);
-            void move(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location, const std::string& label);
-            void free(std::shared_ptr<ir::Declaration> declaration, const std::string& label);
-            void set_default(std::shared_ptr<ir::Declaration> declaration, const AssemblyData& location);
-            std::string str() const;
-
-            size_t base() const;  // Base offset of the offset table, for DW_AT_loclists_base
+            size_t add(const LocationList& loclist);  // Add a location list, return its index
+            size_t base() const;                      // Base offset of the offset table, for DW_AT_loclists_base
+            void emit(CodeOutput& output) const;
 
         private:
             DWARFFormat format;
-            std::vector<std::shared_ptr<ir::Declaration>> order;
-            std::unordered_map<std::shared_ptr<ir::Declaration>, LocationList> lists;
-
-            LocationList& get(std::shared_ptr<ir::Declaration> declaration);
+            std::vector<LocationList> loclists;
     };
 }

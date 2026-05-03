@@ -79,13 +79,14 @@ add_executable(${PROJECT_NAME}
 	src/arch/x86_64/symbols.cpp
 	src/arch/x86_64/transfer.cpp
 
-	src/debug/dwarf.cpp
+	src/debug/abbreviations.cpp
 	src/debug/debuginfo.cpp
+	src/debug/dwarf.cpp
 	src/debug/encoder.cpp
+	src/debug/entries.cpp
 	src/debug/expression.cpp
-	src/debug/loclist.cpp
-	src/debug/generation.cpp
-	src/debug/unit.cpp
+	src/debug/loclists.cpp
+	src/debug/sections.cpp
 
 	src/ir/declaration.cpp
 	src/ir/flow.cpp

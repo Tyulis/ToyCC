@@ -1,104 +1,68 @@
 #pragma once
 
-#include <map>
-#include <set>
-#include <vector>
-#include <utility>
+#include <deque>
+#include <memory>
+#include <unordered_map>
 
-#include "diagnostic.h"
-#include "output.h"
 #include "debug/dwarf.h"
-#include "debug/encoder.h"
+#include "debug/entries.h"
+#include "ir/flow.h"
+#include "ir/type.h"
+#include "ir/declaration.h"
+#include "ir/type_expressions.h"
 
 namespace toycc::debug {
-    // String table, encoded as the .debug_str section
-    class StringTable {
+    // Manager and generator for .debug_info entries
+    class DebugInfo{
         public:
-            // Get the label associated to a string, insert it if it doesn't exist
-            const std::string& operator[] (const std::string& string);
-            CodeOutput& emit(CodeOutput& output) const;
+            DWARFFormat format;
+
+            DebugInfo(std::string working_directory, std::string filename, DWARFFormat format = DWARFFormat::DWARF32);
+
+            // RAII object to automatically release debug info stack entries
+            struct EntryLifespan {
+                ~EntryLifespan();
+                DebugInfo& debuginfo;
+            };
+
+            // -------- Entry and stack management
+            void push(std::shared_ptr<DebugInfoEntry> entry);                // Push an entry as a node with children
+            void append(std::shared_ptr<DebugInfoEntry> entry);              // Append an entry to the children list of the current node
+            void pop();                                                      // Pop the last entry with children
+            EntryLifespan push_auto(std::shared_ptr<DebugInfoEntry> entry);  // Push an entry with children which gets automatically popped when it goes out of scope
+
+            // -------- Generate and access entries
+            std::shared_ptr<TypeEntry> type(std::shared_ptr<ir::Type> type);                     // Get the type entry for the given `type`
+            std::shared_ptr<VariableEntry> variable(std::shared_ptr<ir::Declaration> variable);  // Get the variable entry for the given `variable`
+            std::shared_ptr<SubprogramEntry> procedure(const ir::Procedure& procedure);          // Generate an entry for the given procedure
+
+            // -------- Actual code emission
+            void begin_text(CodeOutput& assembly) const;                             // Emit debugging directives after the beginning of the .text section
+            void wrap_text (CodeOutput& assembly, const std::string& text_section);  // Emit all debug information around the complete `.text` section
+            void end_text  (CodeOutput& assembly) const;                             // Emit debugging directives before the end of the .text section
+
+            // -------- Helpers
+            size_t fileno(const std::string& filename);  // Get the file number associated to this file name for line number information
+            Expression expr() const;                     // Create a new expression compatible with this debug info
 
         private:
-            const std::string& insert(const std::string& string);
+            struct TypeEqual {
+                inline bool operator() (std::shared_ptr<ir::Type> left, std::shared_ptr<ir::Type> right) const {
+                    return *left == *right;
+                }
+            };
 
-            size_t current_id = 0;
-            std::map<std::string, std::string> labels;  // String -> label map
-            CodeOutput assembly;
-    };
+            using TypeEntryMap = std::unordered_map<std::shared_ptr<ir::Type>, std::shared_ptr<TypeEntry>, std::hash<std::shared_ptr<ir::Type>>, TypeEqual>;
 
-    // Actual .debug_abbrev entry
-    struct AbbreviationEntry {
-        size_t index;
-        Tag tag;
-        ChildDetermination has_children;
-        std::vector<std::pair<Attribute, Form>> attributes;
+            DataSections data;
+            std::deque<std::shared_ptr<DebugInfoEntry>> stack;
+            TypeEntryMap types;
+            std::unordered_map<std::shared_ptr<ir::Declaration>, std::shared_ptr<VariableEntry>> variables;
 
-        Encoder& emit(Encoder& encoder) const;
-    };
-
-    using AbbreviationKey = std::tuple<Tag, ChildDetermination, std::set<Attribute>>;
-    using AbbreviationMap = std::map<AbbreviationKey, AbbreviationEntry>;
-
-    // Attribute emission
-    inline std::string asm_expression(const std::string& value) {
-        return value;
-    }
-
-    inline std::string asm_expression(std::integral auto value) {
-        return std::to_string(value);
-    }
-
-    inline std::string asm_expression(bool value) {
-        return std::to_string(static_cast<int>(value));
-    }
-
-    template <typename T> requires(std::is_enum_v<T>)
-    std::string asm_expression(T value) {
-        return std::to_string(std::to_underlying(value));
-    }
-
-    // Higher-level debug info record, that needs to be split into .debug_info and .debug_abbrev entries
-    struct AttributeValue {
-        Attribute attribute;
-        Form form;
-        std::string expression;
-        size_t expression_length = 0;  // For complex expressions (ex. exprloc)
-
-        template <typename T> requires requires (T value) {{asm_expression(value)} -> std::same_as<std::string>;}
-        AttributeValue(Attribute attribute, Form form, T value) : attribute(attribute), form(form), expression(asm_expression(value)) {
-            if (form == Form::DW_FORM_flag_present)
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "DW_FORM_flag_present can only be used with literal boolean values");
-        }
-
-        AttributeValue(Attribute attribute, Form form, bool value);
-        AttributeValue(Attribute attribute, Form form, const AssemblyData& value);
-
-        Encoder& emit(Encoder& encoder) const;
-    };
-
-    struct DebugInfoEntry {
-        Tag tag;
-        std::vector<AttributeValue> values;
-
-        DebugInfoEntry(Tag tag);
-
-        template <typename T>
-        DebugInfoEntry& add(Attribute attribute, Form form, T value) {
-            values.emplace_back(attribute, form, value);
-            return *this;
-        }
-
-        DebugInfoEntry& add(Attribute attribute, Form form, bool value) {
-            // Special encoding for DW_FORM_flag_present : don't add it at all if it's false
-            if ((form == Form::DW_FORM_flag_present && value) || form != Form::DW_FORM_flag_present)
-                values.emplace_back(attribute, form, value);
-            return *this;
-        }
-
-        DebugInfoEntry& add(Attribute attribute, Form form, const AssemblyData& expression);
-        DebugInfoEntry& location(size_t fileno, size_t line, size_t column);
-
-        AbbreviationKey abbrev_key(bool has_children) const;
-        Encoder& emit(Encoder& encoder, const AbbreviationEntry& abbreviation) const;
+            std::shared_ptr<TypeEntry>        add_type_entry        (std::shared_ptr<ir::Type>        type_expression);
+            std::shared_ptr<IntegerTypeEntry> add_integer_type_entry(std::shared_ptr<ir::IntegerType> type_expression);
+            std::shared_ptr<PointerTypeEntry> add_pointer_type_entry(std::shared_ptr<ir::PointerType> type_expression);
+            std::shared_ptr<ArrayTypeEntry>   add_array_type_entry  (std::shared_ptr<ir::ArrayType>   type_expression);
+            std::shared_ptr<StructTypeEntry>  add_struct_type_entry (std::shared_ptr<ir::StructType>  type_expression);
     };
 }

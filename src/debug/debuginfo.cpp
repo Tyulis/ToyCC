@@ -1,145 +1,214 @@
-#include <utility>
-
-#include "diagnostic.h"
+#include "config.h"
 #include "debug/debuginfo.h"
 #include "debug/dwarf.h"
+#include "debug/entries.h"
+#include "debug/settings.h"
+#include "ir/type.h"
+#include "ir/type_expressions.h"
 
 namespace toycc::debug {
-    // -------- StringTable
-    const std::string& StringTable::operator[] (const std::string& string) {
-        auto it = labels.find(string);
-        if (it == labels.end())
-            return insert(string);
-        else
+    DebugInfo::DebugInfo(std::string working_directory, std::string filename, DWARFFormat format) : format(format), data(format) {
+        const std::string length_expr = std::format("{}-{}", END_TEXT_LABEL, BEGIN_TEXT_LABEL);
+        push(std::make_shared<CompilationUnitEntry>(BEGIN_TEXT_LABEL, length_expr, filename, working_directory));
+    }
+
+    // Manager and generator for .debug_info entries
+    DebugInfo::EntryLifespan::~EntryLifespan() {
+        debuginfo.pop();
+    }
+
+
+    // -------- Stack management
+    void DebugInfo::push(std::shared_ptr<DebugInfoEntry> entry) {
+        if (!stack.empty())
+            stack.back()->children.push_back(entry);
+        stack.push_back(entry);
+    }
+
+    void DebugInfo::append(std::shared_ptr<DebugInfoEntry> entry) {
+        if (stack.empty())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't append a debug info entry with no parent");
+        stack.back()->children.push_back(entry);
+    }
+
+    void DebugInfo::pop() {
+        stack.pop_back();
+    }
+
+    DebugInfo::EntryLifespan DebugInfo::push_auto(std::shared_ptr<DebugInfoEntry> entry) {
+        push(entry);
+        return {*this};
+    }
+
+
+    // -------- Referenced entry management
+    std::shared_ptr<TypeEntry> DebugInfo::type(std::shared_ptr<ir::Type> type) {
+        auto it = types.find(type);
+        if (it != types.end())
             return it->second;
+
+        std::shared_ptr<TypeEntry> entry = add_type_entry(type);
+
+        if (stack.empty())
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't append a debug info entry with no parent");
+        stack.front()->children.push_back(entry);  // Add types to the global scope
+        return entry;
     }
 
-    const std::string& StringTable::insert(const std::string& string) {
-        std::string label = std::format(".WS{}", current_id++);
-        labels[string] = label;
+    std::shared_ptr<VariableEntry> DebugInfo::variable(std::shared_ptr<ir::Declaration> declaration) {
+        auto it = variables.find(declaration);
+        if (it != variables.end())
+            return it->second;
 
-        assembly.label(label);
-        assembly.directive(std::format(".string \"{}\"", string));
-        return labels[string];
+        // Missing : DW_AT_declaration, DW_AT_location
+        const bool exported = (declaration->storage & ir::StorageClass::GLOBAL) && !(declaration->storage & ir::StorageClass::STATIC);
+        std::shared_ptr<VariableEntry> entry = std::make_shared<VariableEntry> (declaration->name, exported, type(declaration->type), declaration->location);
+        variables[declaration] = entry;
+        return entry;
     }
 
-    CodeOutput& StringTable::emit(CodeOutput& output) const {
-        output << assembly;
-        return output;
+    std::shared_ptr<SubprogramEntry> DebugInfo::procedure(const ir::Procedure& procedure) {
+        std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
+        std::shared_ptr<ir::FunctionType> function_type = std::static_pointer_cast<ir::FunctionType>(declaration->type);
+
+        Expression frame_base(format);
+        frame_base.call_frame_cfa();
+
+        // Return type : only if the function actually returns something
+        std::shared_ptr<TypeEntry> return_type = nullptr;
+        if (function_type->return_type->category != ir::TypeCategory::VOID)
+            return_type = type(function_type->return_type);
+
+        const bool exported = !(declaration->storage & ir::StorageClass::STATIC);
+        const std::string length_expr = std::format("{}-{}", procedure.end_label(), procedure.start_label());
+        return std::make_shared<SubprogramEntry> (declaration->name, exported, procedure.start_label(), length_expr, frame_base, return_type, declaration->location);
     }
 
-    // -------- AttributeValue
-    AttributeValue::AttributeValue(Attribute attribute, Form form, bool value)
-        : attribute(attribute), form(form), expression(asm_expression(value))
-    {
-        if (form == Form::DW_FORM_flag_present && !value)
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "DW_FORM_flag_present can only be present if its value is true");
+
+    // -------- Actual code emission
+    void DebugInfo::begin_text(CodeOutput& assembly) const {
+        if (config::debug::enable)
+            assembly.label(BEGIN_TEXT_LABEL);  // Emit the label that signals the beginning of the .text section, used in debug info
     }
 
-    AttributeValue::AttributeValue(Attribute attribute, Form form, const AssemblyData& value)
-        : attribute(attribute), form(form), expression(value.assembly), expression_length(value.length)
-    {
-        if (form == Form::DW_FORM_flag_present)
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "DW_FORM_flag_present can only be used with literal boolean values");
+    void DebugInfo::end_text(CodeOutput& assembly) const {
+        if (config::debug::enable)
+            assembly.label(END_TEXT_LABEL);
     }
 
-    Encoder& AttributeValue::emit(Encoder& encoder) const {
-        switch (form) {
-            case Form::DW_FORM_addr:        encoder.address(expression);  break;
-            case Form::DW_FORM_data1:       encoder.int8   (expression);  break;
-            case Form::DW_FORM_data2:       encoder.int16  (expression);  break;
-            case Form::DW_FORM_data4:       encoder.int32  (expression);  break;
-            case Form::DW_FORM_data8:       encoder.int64  (expression);  break;
-            case Form::DW_FORM_sdata:       encoder.sleb128(expression);  break;
-            case Form::DW_FORM_udata:       encoder.uleb128(expression);  break;
-            case Form::DW_FORM_strp:        encoder.offset (expression);  break;
-            case Form::DW_FORM_sec_offset:  encoder.offset (expression);  break;
-            case Form::DW_FORM_flag:        encoder.int8   (expression);  break;
-            case Form::DW_FORM_flag_present:                              break;  // Only present if true, no actual value
-            case Form::DW_FORM_ref1:        encoder.int8   (expression);  break;
-            case Form::DW_FORM_ref2:        encoder.int16  (expression);  break;
-            case Form::DW_FORM_ref4:        encoder.int32  (expression);  break;
-            case Form::DW_FORM_ref8:        encoder.int64  (expression);  break;
-            case Form::DW_FORM_exprloc:     encoder.insert (AssemblyData {.assembly = expression, .length = expression_length});  break;
-            case Form::DW_FORM_loclistx:    encoder.uleb128(expression);  break;
-
-            case Form::DW_FORM_block2:
-            case Form::DW_FORM_block4:
-            case Form::DW_FORM_string:
-            case Form::DW_FORM_block:
-            case Form::DW_FORM_block1:
-            case Form::DW_FORM_ref_addr:
-            case Form::DW_FORM_ref_udata:
-            case Form::DW_FORM_indirect:
-            case Form::DW_FORM_strx:
-            case Form::DW_FORM_addrx:
-            case Form::DW_FORM_ref_sup4:
-            case Form::DW_FORM_strp_sup:
-            case Form::DW_FORM_data16:
-            case Form::DW_FORM_line_strp:
-            case Form::DW_FORM_ref_sig8:
-            case Form::DW_FORM_implicit_const:
-            case Form::DW_FORM_rnglistx:
-            case Form::DW_FORM_ref_sup8:
-            case Form::DW_FORM_strx1:
-            case Form::DW_FORM_strx2:
-            case Form::DW_FORM_strx3:
-            case Form::DW_FORM_strx4:
-            case Form::DW_FORM_addrx1:
-            case Form::DW_FORM_addrx2:
-            case Form::DW_FORM_addrx3:
-            case Form::DW_FORM_addrx4:
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("DWARF form {} is not implemented", std::to_underlying(form)));
+    void DebugInfo::wrap_text(CodeOutput& assembly, const std::string& text_section) {
+        if (!config::debug::enable) {
+            assembly << text_section;
+            return;
         }
+        data.encode(stack.front());     // Recursively encode the root entry
+        data.abbreviations.uleb128(0);  // The .debug_abbrev section must be null-terminated
 
-        return encoder;
+
+        // Emit the file number directive for the line number information (.loc)
+        data.filenos.emit(assembly);
+
+        assembly << text_section;
+
+        // Fill the .debug_info section
+        assembly.directive(".section .debug_info,\"\",@progbits");
+        assembly << data.debuginfo;
+
+        // Fill the .debug_abbrev section
+        assembly.directive(".section .debug_abbrev,\"\",@progbits");
+        assembly.label(BEGIN_DEBUG_ABBREV_LABEL);
+        assembly << data.abbreviations;
+
+        // Fill the .debug_loclists section
+        assembly.directive(".section .debug_loclists,\"\",@progbits");
+        data.loclists.emit(assembly);
+
+        // Fill the .debug_str section
+        assembly.directive(".section .debug_str,\"\",@progbits");
+        data.strings.emit(assembly);
     }
 
-    // -------- DebugInfoRecord
-    DebugInfoEntry::DebugInfoEntry(Tag tag) : tag(tag) {}
 
-    DebugInfoEntry& DebugInfoEntry::add(Attribute attribute, Form form, const AssemblyData& expression) {
-        values.push_back(AttributeValue {attribute, form, expression});
-        return *this;
+    // -------- Helpers
+    size_t DebugInfo::fileno(const std::string& filename) {
+        return data.filenos[filename];
     }
 
-    DebugInfoEntry& DebugInfoEntry::location(size_t fileno, size_t line, size_t column) {
-        if (fileno != 0)  add(Attribute::DW_AT_decl_file,   Form::DW_FORM_udata, fileno);
-        if (line   != 0)  add(Attribute::DW_AT_decl_line,   Form::DW_FORM_udata, line);
-        if (column != 0)  add(Attribute::DW_AT_decl_column, Form::DW_FORM_udata, column);
-        return *this;
+    Expression DebugInfo::expr() const {
+        return Expression(format);
     }
 
-    AbbreviationKey DebugInfoEntry::abbrev_key(bool has_children) const {
-        ChildDetermination child_determination = (has_children ? ChildDetermination::DW_CHILDREN_yes : ChildDetermination::DW_CHILDREN_no);
 
-        std::set<Attribute> keyset;
-        for (const AttributeValue& value : values)
-            keyset.insert(value.attribute);
+    // -------- Type entry generation
+    // Create a type entry and its children, add them to the `types` map, and return the type entry
+    // NOTE : Entries are added into the map directly because it's necessary to guard against infinite recursion around recursive type expressions
+    std::shared_ptr<TypeEntry> DebugInfo::add_type_entry(std::shared_ptr<ir::Type> type_expression) {
+        switch (type_expression->category) {
+            case ir::TypeCategory::INTEGER:  return add_integer_type_entry(std::static_pointer_cast<ir::IntegerType>(type_expression));
+            case ir::TypeCategory::POINTER:  return add_pointer_type_entry(std::static_pointer_cast<ir::PointerType>(type_expression));
+            case ir::TypeCategory::ARRAY:    return add_array_type_entry  (std::static_pointer_cast<ir::ArrayType>  (type_expression));
+            case ir::TypeCategory::STRUCT:   return add_struct_type_entry (std::static_pointer_cast<ir::StructType> (type_expression));
 
-        return {tag, child_determination, keyset};
-    }
+            case ir::TypeCategory::VOID:     throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't generate debug info for `void`", type_expression->location);
 
-    Encoder& DebugInfoEntry::emit(Encoder& encoder, const AbbreviationEntry& abbreviation) const {
-        encoder.uleb128(abbreviation.index);
-        for (const auto& [attribute, form] : abbreviation.attributes) {
-            auto value = std::ranges::find_if(values, [attribute](const AttributeValue& value) { return value.attribute == attribute; });
-            if (value == values.end())
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid abbreviation entry : attribute not found");
-
-            value->emit(encoder);
+            case ir::TypeCategory::BOOL:
+            case ir::TypeCategory::FLOAT:
+            case ir::TypeCategory::UNION:
+            case ir::TypeCategory::FUNCTION:
+            case ir::TypeCategory::BUILTIN:
+            case ir::TypeCategory::LABEL:
+            case ir::TypeCategory::ENUM:
+            case ir::TypeCategory::BITFIELD:
+            case ir::TypeCategory::QUALIFIED:
+            case ir::TypeCategory::ALIGNED:
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Debug info emission is not implemented for type `{}`", type_expression->ir_code()));
         }
-
-        return encoder;
+        __builtin_unreachable();
     }
 
-    // -------- AbbreviationEntry
-    Encoder& AbbreviationEntry::emit(Encoder& encoder) const {
-        // DWARF5 7.5.3
-        encoder.uleb128(index).uleb128(tag).int8(has_children);
-        for (const auto& [attribute, form] : attributes)
-            encoder.uleb128(attribute).uleb128(form);
-        encoder.uleb128(0).uleb128(0);
-        return encoder;
+    std::shared_ptr<IntegerTypeEntry> DebugInfo::add_integer_type_entry(std::shared_ptr<ir::IntegerType> type_expression) {
+        auto entry = std::make_shared<IntegerTypeEntry> (type_expression->name, type_expression->is_signed, type_expression->size_bits, type_expression->location);
+        types[type_expression] = entry;
+        return entry;
+    }
+
+    std::shared_ptr<PointerTypeEntry> DebugInfo::add_pointer_type_entry(std::shared_ptr<ir::PointerType> type_expression) {
+        // Defense against recursive type : add the entry shell to the map first, then resolve the referenced type
+        auto entry = std::make_shared<PointerTypeEntry> (nullptr, type_expression->location);
+        types[type_expression] = entry;
+
+        // For void*, generate a pointer type entry without referenced type
+        if (type_expression->referenced_type->category != ir::TypeCategory::VOID)
+            entry->referenced_type = type(type_expression->referenced_type);
+        return entry;
+    }
+
+    std::shared_ptr<ArrayTypeEntry> DebugInfo::add_array_type_entry(std::shared_ptr<ir::ArrayType> type_expression) {
+        std::optional<size_t> size = {};
+        if (type_expression->length.is_constant() && type_expression->length.constant().tag() == ir::Constant::INTEGER)
+            size = static_cast<size_t>(type_expression->length.constant().integer());
+
+        // Not sure if that's even possible with array types, but anyways defense against recursive type : add the entry shell to the map first, then resolve the element type
+        auto entry = std::make_shared<ArrayTypeEntry> (nullptr, size, type_expression->location);
+        types[type_expression] = entry;
+
+        entry->element_type = type(type_expression->element_type);
+        return entry;
+    }
+
+    std::shared_ptr<StructTypeEntry> DebugInfo::add_struct_type_entry(std::shared_ptr<ir::StructType> type_expression) {
+        std::optional<std::string> name = {};
+        if (type_expression->name[0] != '.')  // Skip the generated name of anonymous structs
+            name = type_expression->name;
+
+        // Defense against recursive type : add the entry shell to the map first, then resolve the member types
+        std::vector<std::shared_ptr<MemberEntry>> members;
+        auto entry = std::make_shared<StructTypeEntry> (type_expression->size(type_expression->location), name, members, type_expression->location);
+        types[type_expression] = entry;
+
+        for (const auto& [index, member] : std::ranges::enumerate_view(type_expression->members))
+            entry->children.push_back(std::make_shared<MemberEntry>(member.name, type_expression->member_offset(index), type(member.type), member.location));
+
+        return entry;
     }
 }

@@ -10,7 +10,7 @@
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
-    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, debug::DebugInfo& debuginfo) {
         ir::DependencyGraph graph = block->dependencies;
         ir::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);
@@ -49,7 +49,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches, debug::DebugInfo& debuginfo) {
         std::vector<GroupMatch> entry_matches = find_entry_matches(graph, group_matches);
         if (entry_matches.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No entry group matches");
@@ -143,7 +143,7 @@ namespace toycc::arch::x86_64 {
         return matches.at(selected_index.value());
     }
 
-    void CodeGenerator::emit_location_info(StackFrame& frame, const TranslationMatch& match, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::emit_location_info(StackFrame& frame, const TranslationMatch& match, debug::DebugInfo& debuginfo) {
         const CodeLocation& location = match.group_match.statements[0]->statement().location;
         frame.debug(std::format(".loc {} {} {}", debuginfo.fileno(location.filename), location.line, location.character));
     }

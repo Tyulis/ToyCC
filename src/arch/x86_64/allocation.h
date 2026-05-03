@@ -5,7 +5,7 @@
 #include "output.h"
 #include "ir/flow.h"
 #include "ir/allocation.h"
-#include "debug/unit.h"
+#include "debug/debuginfo.h"
 #include "gen/execmodel/x86_64/location.h"
 
 namespace toycc::arch::x86_64 {
@@ -18,7 +18,7 @@ namespace toycc::arch::x86_64 {
         using Parent = ir::StackFrame<Location>;
 
         public:
-            StackFrame(const ir::Procedure& procedure, debug::CompilationUnit& debuginfo);
+            StackFrame(const ir::Procedure& procedure, debug::DebugInfo& debuginfo);
 
             void move(std::shared_ptr<ir::Declaration> declaration, Location location);
             void copy(std::shared_ptr<ir::Declaration> declaration, Location location);
@@ -54,7 +54,7 @@ namespace toycc::arch::x86_64 {
             std::unordered_set<std::shared_ptr<ir::Declaration>> intermediates;
             CodeOutput output;
 
-            debug::CompilationUnit& debuginfo;
+            debug::DebugInfo& debuginfo;
 
             std::string dump_allocations() const;
 

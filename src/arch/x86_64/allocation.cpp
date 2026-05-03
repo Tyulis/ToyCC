@@ -14,7 +14,7 @@ namespace toycc::arch::x86_64 {
     // -------- StackFrame
     static const std::unordered_set<Location> NONUNIQUE_LOCATIONS = {Location::constant, Location::memory, Location::stack};
 
-    StackFrame::StackFrame(const ir::Procedure& procedure, debug::CompilationUnit& debuginfo)
+    StackFrame::StackFrame(const ir::Procedure& procedure, debug::DebugInfo& debuginfo)
         : Parent(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name), debuginfo(debuginfo) {}
 
     // Remove all existing locations of this variable and move it elsewhere. If there is something at `location`, it is overwritten
@@ -24,7 +24,7 @@ namespace toycc::arch::x86_64 {
 
         if (is_debug_variable(declaration)) {
             debug::AssemblyData expression = debug_location(declaration, location);
-            debuginfo.loclists.move(declaration, expression, use_instruction_label());
+            debuginfo.variable(declaration)->location.move(expression, use_instruction_label());
         }
     }
 
@@ -35,7 +35,7 @@ namespace toycc::arch::x86_64 {
 
         if (is_debug_variable(declaration)) {
             debug::AssemblyData expression = debug_location(declaration, location);
-            debuginfo.loclists.copy(declaration, expression, use_instruction_label());
+            debuginfo.variable(declaration)->location.copy(expression, use_instruction_label());
         }
     }
 
@@ -45,7 +45,7 @@ namespace toycc::arch::x86_64 {
         Parent::free(declaration);
 
         if (is_debug_variable(declaration))
-            debuginfo.loclists.free(declaration, use_instruction_label());
+            debuginfo.variable(declaration)->location.free(use_instruction_label());
     }
 
     std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
@@ -165,10 +165,10 @@ namespace toycc::arch::x86_64 {
             // If the local variable has a stack location, set it as its default location
             if (stack_offsets.contains(declaration)) {
                 debug::AssemblyData default_location = debug::Expression(debuginfo.format).stack_offset(stack_offset(*this, declaration)).encode();
-                debuginfo.loclists.set_default(declaration, default_location);
+                debuginfo.variable(declaration)->location.set_default(default_location);
             }
 
-            debuginfo.loclists.free(declaration, procedure.end_label());
+            debuginfo.variable(declaration)->location.free(procedure.end_label());
             debuginfo.append(debuginfo.variable(declaration));
         }
     }

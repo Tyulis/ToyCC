@@ -2,7 +2,7 @@
 
 #include "config.h"
 #include "debug/expression.h"
-#include "debug/unit.h"
+#include "debug/debuginfo.h"
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/allocation.h"
@@ -12,7 +12,7 @@
 
 namespace toycc::arch::x86_64 {
     void CodeGenerator::generate_translation_unit(CodeOutput& output, const ir::TranslationUnit& unit) {
-        debug::CompilationUnit debuginfo(unit.working_directory, unit.filename, config::debug::format);
+        debug::DebugInfo debuginfo(unit.working_directory, unit.filename, config::debug::format);
 
         // Emit the data sections for global variables
         CodeOutput code;
@@ -27,12 +27,10 @@ namespace toycc::arch::x86_64 {
 
         // Wrap everything in debug info
         output.directive(std::format(".file \"{}\"", std::filesystem::path(unit.filename).filename().string()));
-        debuginfo.emit_filenos(output);
-        output << code.str();
-        debuginfo.emit_debug_sections(output);
+        debuginfo.wrap_text(output, code.str());
     }
 
-    void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::DebugInfo& debuginfo) {
         StackFrame frame(procedure, debuginfo);
         std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
         auto debug_scope = debuginfo.push_auto(debuginfo.procedure(procedure));
@@ -103,7 +101,7 @@ namespace toycc::arch::x86_64 {
         output.label(procedure.end_label());
     }
 
-    void CodeGenerator::generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> uninitialized_globals;
         ir::GlobalMap rw_globals;
         ir::GlobalMap ro_globals;
@@ -132,7 +130,7 @@ namespace toycc::arch::x86_64 {
             generate_readonly_globals(output, ro_globals, debuginfo);
     }
 
-    void CodeGenerator::generate_uninitialized_globals(CodeOutput& output, const std::unordered_set<std::shared_ptr<ir::Declaration>>& globals, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::generate_uninitialized_globals(CodeOutput& output, const std::unordered_set<std::shared_ptr<ir::Declaration>>& globals, debug::DebugInfo& debuginfo) {
         output.directive(".bss");
         for (std::shared_ptr<ir::Declaration> declaration : globals) {
             generate_global_declaration(output, declaration, debuginfo);
@@ -140,7 +138,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_readwrite_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::generate_readwrite_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
         output.directive(".data");
         for (const auto& [declaration, value] : globals) {
             generate_global_declaration(output, declaration, debuginfo);
@@ -148,7 +146,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_readonly_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::generate_readonly_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
         output.directive(".rodata");
         for (const auto& [declaration, value] : globals) {
             generate_global_declaration(output, declaration, debuginfo);
@@ -157,7 +155,7 @@ namespace toycc::arch::x86_64 {
     }
 
     // Generate the symbol for a global declaration, do not fill it
-    void CodeGenerator::generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable, debug::CompilationUnit& debuginfo) {
+    void CodeGenerator::generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable, debug::DebugInfo& debuginfo) {
         if (variable->storage & ir::StorageClass::EXTERN)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "`extern` declarations should not be generated", variable->location);
 
@@ -170,7 +168,7 @@ namespace toycc::arch::x86_64 {
         output.label(variable->name);
 
         debuginfo.append(debuginfo.variable(variable));
-        debuginfo.loclists.set_default(variable, debuginfo.expr().address(variable->name).encode());
+        debuginfo.variable(variable)->location.set_default(debug::Expression(debuginfo.format).address(variable->name).encode());
     }
 
     // Set the actual value of a global declaration

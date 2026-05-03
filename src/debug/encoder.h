@@ -73,10 +73,13 @@ namespace toycc::debug {
             Encoder& sleb128(ssize_t value);
             Encoder& sleb128(std::string expression);
 
+            Encoder& string(const std::string& value);  // NULL-terminated string
+
             Encoder& header(const CompilationUnitHeader& header);  // Emit a compilation unit header *except the length field*
             Encoder& header(const LocationListHeader& header);     // Emit a location lists section header *except the length field*
 
             Encoder& insert(const AssemblyData& data);
+            Encoder& label(const std::string& name);
 
             size_t length() const;
             std::string str() const;

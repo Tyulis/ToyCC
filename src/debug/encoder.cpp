@@ -99,6 +99,11 @@ namespace toycc::debug {
         return sleb128(std::stol(value));
     }
 
+    Encoder& Encoder::string(const std::string& value) {
+        assembly.directive(std::format(".string \"{}\"", value));
+        return *this;
+    }
+
     Encoder& Encoder::header(const CompilationUnitHeader& header) {
         int16 (header.version);
         int8  (header.unit_type);
@@ -122,6 +127,11 @@ namespace toycc::debug {
     Encoder& Encoder::insert(const AssemblyData& data) {
         assembly << data.assembly;
         size += data.length;
+        return *this;
+    }
+
+    Encoder& Encoder::label(const std::string& name) {
+        assembly.label(name);
         return *this;
     }
 
