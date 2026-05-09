@@ -63,6 +63,12 @@ namespace toycc::arch::x86_64 {
         ssize_t remaining_liveness = get_remaining_liveness(graph, input_operand, group_match);
 
         std::unordered_set<Location> current_locations = frame.locate(input_operand);
+
+        // When the operand is not yet in its implicitly required location, it will be copied there while keeping its original locations,
+        // so the overwritten_location is safe to overwrite
+        if (!current_locations.contains(overwritten_location))
+            return {OperandMatch::OK, UNIQUE_LOCATIONS};
+
         remaining_liveness -= current_locations.size();
 
         // Still live / only on the stack so can't overwrite
