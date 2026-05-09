@@ -193,8 +193,8 @@ argumentExpressionList
 // GNU: https://github.com/gcc-mirror/gcc/blob/5d69161a7c36a2da8565967eb0cc2df1322a05a3/gcc/c/c-parser.cc#L10625-L10658
 unaryExpression
     : postfixExpression
-    | unaryOperator castExpression
     | ('sizeof' | Alignof) ( '(' typeName ')' | prefixExpression ) //GNU
+    | unaryOperator castExpression
     | '&&' Identifier // GCC extension address of label
     ;
 
@@ -213,8 +213,8 @@ prefixExpression
 prefixOperator
     : '++'
     | '--'
-    | 'sizeof'
     ;
+    // | 'sizeof'  // Overridden by the GNU extension
 
 
 // ISO C: unary-operator (6.5.4.1) - No ANTLR4 rule

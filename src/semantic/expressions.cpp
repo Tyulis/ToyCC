@@ -255,9 +255,7 @@ namespace toycc::semantic {
     ExpressionResult SemanticAnalyzer::decode_prefix_expression(CParser::PrefixExpressionContext* context) {
         ExpressionResult result = decode_unary_expression(context->unaryExpression());
         for (CParser::PrefixOperatorContext* op : std::ranges::reverse_view(context->prefixOperator())) {
-            if (op->Sizeof())
-                result = emit_sizeof_expression(result, locate(context));
-            else if (op->PlusPlus())
+            if (op->PlusPlus())
                 result = emit_increment(result, StatementTag::ADD, locate(context));
             else if (op->MinusMinus())
                 result = emit_increment(result, StatementTag::SUB, locate(context));
