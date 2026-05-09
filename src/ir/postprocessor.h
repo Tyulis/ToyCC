@@ -33,6 +33,7 @@ namespace toycc::ir {
             void dereference(std::shared_ptr<Scope> scope);
             Operand dereference_operand(Operand original, std::shared_ptr<Scope> scope);
             Operand fully_dereference_operand(Operand original, std::shared_ptr<Scope> scope);
+            Operand convert_to_offset(Operand index, std::shared_ptr<Scope> scope);
             Operand make_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);
             Operand make_pointer_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);
             Operand make_struct_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope> scope);

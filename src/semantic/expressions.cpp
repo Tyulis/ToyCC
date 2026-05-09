@@ -595,12 +595,12 @@ namespace toycc::semantic {
             throw Diagnostic(DiagnosticLevel::ERROR, "Operator `-` between incompatible pointer types", location);
 
         // Raw offset between the two addresses
-        std::shared_ptr<Declaration> address_difference = declare_temporary(arch::DATAMODEL->ptrdiff_type, location);
+        std::shared_ptr<Declaration> address_difference = declare_temporary(arch::DATAMODEL->offset_type, location);
         emit(Statement::make_binary_operation(location, op, left.operand(), right.operand(), address_difference));
 
         // Like in pointer + arithmetic, pointer - pointer gives the number of *elements*, not bytes -> divide by the element size
-        RValue item_size = Constant {IntegerConstant(left_referenced_type->size(location)), location, arch::DATAMODEL->ptrdiff_type};
-        std::shared_ptr<Declaration> result = declare_temporary(arch::DATAMODEL->ptrdiff_type, location);
+        RValue item_size = Constant {IntegerConstant(left_referenced_type->size(location)), location, arch::DATAMODEL->offset_type};
+        std::shared_ptr<Declaration> result = declare_temporary(arch::DATAMODEL->offset_type, location);
         emit(Statement::make_binary_operation(location, StatementTag::DIV, address_difference, item_size, result));
 
         return ExpressionResult {RValue {result}, location};

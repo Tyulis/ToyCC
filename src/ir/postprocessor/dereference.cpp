@@ -27,15 +27,17 @@ namespace toycc::ir {
 
     // Convert multi-level indices to a flat offset, ex. a[0][1][2] of type int32_t[2][4][8] -> a[40]
     Operand PostProcessor::dereference_operand(Operand operand, std::shared_ptr<Scope> scope) {
-        for (Operand& index : operand.indices)
-            index = fully_dereference_operand(index, scope);
+        for (Operand& index : operand.indices) {
+            index = fully_dereference_operand(index, scope);  // Recursively dereference the index so it's only an integer afterwards
+            index = convert_to_offset(index, scope);          // The final offset will be applied to a pointer, so the index must be converted to the offset type first
+        }
 
         if (operand.indices.empty())
             return operand;
 
         std::shared_ptr<Type> pointer_type = operand.base_type();
         Operand flat_offset = Constant {IntegerConstant(0), operand.location, arch::DATAMODEL->offset_type};
-        for (const Operand& index : operand.indices) {
+        for (Operand index : operand.indices) {
             std::shared_ptr<Type> referenced_type = pointer_type->dereference(index.as_index(), index.location);
             Operand offset = make_offset(pointer_type, index, scope);
             flat_offset = merge_offsets(flat_offset, offset, scope);
@@ -63,6 +65,42 @@ namespace toycc::ir {
         Operand result = declare_temporary(scope, dereferenced.type(), dereferenced.location);
         scope->add_statement(Statement::make_unary_operation(dereferenced.location, StatementTag::COPY, dereferenced, result));
         return result;
+    }
+
+    // Convert an index to the offset type if necessary
+    Operand PostProcessor::convert_to_offset(Operand index, std::shared_ptr<Scope> scope) {
+        std::shared_ptr<Type> index_type = index.type();
+        if (*index_type == *arch::DATAMODEL->offset_type)
+            return index;
+
+        if (index.is_constant()) {
+            if (index.constant().tag() != Constant::INTEGER)
+                throw Diagnostic(DiagnosticLevel::ERROR, "An index must resolve to an integer type", index.location);
+            return Constant {index.constant().integer(), index.location, arch::DATAMODEL->offset_type};  // Just overwrite the type
+        }
+
+        else if (index.is_variable()) {
+            std::shared_ptr<Declaration> converted = declare_temporary(scope, arch::DATAMODEL->offset_type, index.location);
+
+            switch (index_type->category) {
+                case TypeCategory::BOOL:  // Equivalent to a small unsigned type, zero-extend
+                    scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::ZERO_EXTEND, index, converted));
+                    return converted;
+
+                case TypeCategory::INTEGER: {
+                    if (std::static_pointer_cast<IntegerType>(index_type)->is_signed)
+                        scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::SIGN_EXTEND, index, converted));
+                    else
+                        scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::ZERO_EXTEND, index, converted));
+                    return converted;
+                }
+
+                default:
+                    throw Diagnostic(DiagnosticLevel::ERROR, "An index must resolve to an integer type", index.location);
+            }
+        }
+
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The index should have been already dereferenced", index.location);
     }
 
     // Compute an operand for the pointer_type[index] offset
