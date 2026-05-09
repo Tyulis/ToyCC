@@ -19,6 +19,7 @@ namespace toycc {
         AlignmentSpecifier    = 0x100,
         AtomicTypeSpecifier   = 0x200,
         EnumSpecifier         = 0x400,
+        PrefixedTypeSpecifier = 0x800,  // Type, but defined as `struct mytype`, `union mytype` or `enum mytype`, not directly `mytype`
     };
 
     struct Symbol {

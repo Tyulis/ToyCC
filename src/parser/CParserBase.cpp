@@ -127,6 +127,8 @@ namespace toycc {
             return false;
         else if (resolved->classification & TypeClassification::Function)
             return false;
+        else if (resolved->classification & TypeClassification::PrefixedTypeSpecifier)
+            return false;  // A typedef name can't have a `struct`, `union` or `enum` prefix
         else
             return true;
     }
@@ -190,7 +192,7 @@ namespace toycc {
                 // Declare any typeSpecifiers that declare something.
                 for (CParser::DeclarationSpecifierContext* ds : declaration_specifier)
                     if (ds->typeSpecifier() && ds->typeSpecifier()->structOrUnionSpecifier() && ds->typeSpecifier()->structOrUnionSpecifier()->Identifier())
-                        st.Define(std::make_shared<Symbol>(ds->typeSpecifier()->structOrUnionSpecifier()->Identifier()->getText(), TypeClassification::TypeSpecifier));
+                        st.Define(std::make_shared<Symbol>(ds->typeSpecifier()->structOrUnionSpecifier()->Identifier()->getText(), TypeClassification::PrefixedTypeSpecifier));
 
                 if (declaration_context->initDeclaratorList()) {
                     std::vector<CParser::InitDeclaratorContext*> init_declarators = declaration_context->initDeclaratorList()->initDeclarator();
