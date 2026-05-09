@@ -17,8 +17,10 @@ namespace toycc::ir {
         MUL, DIV, MOD,
         ADD, SUB,
         LT, LE, GE, GT, EQ, NE,
-        BITWISE_AND, BITWISE_XOR, BITWISE_OR, LSHIFT, RSHIFT,
+        BITWISE_AND, BITWISE_XOR, BITWISE_OR, LSHIFT, ARITHMETIC_RSHIFT, LOGICAL_RSHIFT,
         LOGICAL_AND, LOGICAL_OR,
+
+        NARROW = COPY,  // For now, with only x86_64, it's the same
     };
 
     struct Scope;

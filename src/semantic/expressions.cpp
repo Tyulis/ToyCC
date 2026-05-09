@@ -193,10 +193,16 @@ namespace toycc::semantic {
     }
 
     ExpressionResult SemanticAnalyzer::decode_shift_expression(CParser::ShiftExpressionContext* context) {
-        ExpressionResult result = decode_additive_expression(context->additiveExpression()[0]);
-        if (context->additiveExpression().size() > 1)
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Shift expressions are not implemented", locate(context));
-        return result;
+        const std::vector<CParser::AdditiveExpressionContext*> operands = context->additiveExpression();
+        const std::vector<CParser::ShiftOperatorContext*> operators = context->shiftOperator();
+
+        ExpressionResult left = decode_additive_expression(operands[0]);
+        for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
+            const CodeLocation location = locate(operators[operation_index]);
+            ExpressionResult right = decode_additive_expression(operands[operation_index + 1]);
+            left = emit_binary_operation(decode_shift_operator(operators[operation_index]), left, right, location);
+        }
+        return left;
     }
 
     ExpressionResult SemanticAnalyzer::decode_additive_expression(CParser::AdditiveExpressionContext* context) {
@@ -496,7 +502,7 @@ namespace toycc::semantic {
         else if (context->PlusAssign())        return StatementTag::ADD;
         else if (context->MinusAssign())       return StatementTag::SUB;
         else if (context->LeftShiftAssign())   return StatementTag::LSHIFT;
-        else if (context->RightShiftAssign())  return StatementTag::RSHIFT;
+        else if (context->RightShiftAssign())  return StatementTag::ARITHMETIC_RSHIFT;
         else if (context->AndAssign())         return StatementTag::BITWISE_AND;
         else if (context->XorAssign())         return StatementTag::BITWISE_XOR;
         else if (context->OrAssign())          return StatementTag::BITWISE_OR;
@@ -517,6 +523,18 @@ namespace toycc::semantic {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown relational operator {}", context->getText()), locate(context));
     }
 
+    StatementTag SemanticAnalyzer::decode_shift_operator(CParser::ShiftOperatorContext* context) {
+        if      (context->LeftShift())   return StatementTag::LSHIFT;
+        else if (context->RightShift())  return StatementTag::ARITHMETIC_RSHIFT;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown shift operator {}", context->getText()), locate(context));
+    }
+
+    StatementTag SemanticAnalyzer::decode_additive_operator(CParser::AdditiveOperatorContext* context) {
+        if      (context->Plus())  return StatementTag::ADD;
+        else if (context->Minus()) return StatementTag::SUB;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown additive operator `{}`", context->getText()), locate(context));
+    }
+
     StatementTag SemanticAnalyzer::decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context) {
         if      (context->Star())  return StatementTag::MUL;
         else if (context->Div())   return StatementTag::DIV;
@@ -524,10 +542,23 @@ namespace toycc::semantic {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown multiplicative operator `{}`", context->getText()), locate(context));
     }
 
-    StatementTag SemanticAnalyzer::decode_additive_operator(CParser::AdditiveOperatorContext* context) {
-        if      (context->Plus())  return StatementTag::ADD;
-        else if (context->Minus()) return StatementTag::SUB;
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown additive operator `{}`", context->getText()), locate(context));
+
+    ExpressionResult SemanticAnalyzer::emit_shift_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location) {
+        // The right operand must be positive
+        Operand right_operand = right.operand();
+        if (right_operand.is_constant()) {
+            const Constant& right_value = right_operand.constant();
+            if (right_value.tag() != Constant::INTEGER)
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid constant tag for a shift right operand", location);
+
+            if (right_value.integer() < 0)
+                throw Diagnostic(DiagnosticLevel::ERROR, "The right operand of a shift must be non-negative", location);
+        }
+
+        auto converted_right = emit_explicit_conversion(left.type(), right.operand(), location);
+        std::shared_ptr<Declaration> result = declare_temporary(left.type(), location);
+        emit(Statement::make_binary_operation(location, op, left.operand(), converted_right, result));
+        return ExpressionResult {RValue {result}, location};
     }
 
     ExpressionResult SemanticAnalyzer::emit_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location) {
@@ -586,6 +617,8 @@ namespace toycc::semantic {
         if (!is_operator_valid(op, left_type, right_type))
             throw Diagnostic(DiagnosticLevel::ERROR, "This operator is not valid on these operands", location);
 
+        if (op == StatementTag::LSHIFT || op == StatementTag::ARITHMETIC_RSHIFT || op == StatementTag::LOGICAL_RSHIFT)
+            return emit_shift_operation(op, left, right, location);
         if (left_type->is_arithmetic() && right_type->is_arithmetic())
             return emit_arithmetic_binary_operation(op, left, right, location);
         else if (left_dequalified->category == TypeCategory::POINTER && right_type->is_arithmetic())
@@ -645,7 +678,8 @@ namespace toycc::semantic {
                        (left_unqualified->category == TypeCategory::POINTER && right_unqualified->category == TypeCategory::POINTER);  // pointer    - pointer    -> arithmetic
 
             case StatementTag::LSHIFT:
-            case StatementTag::RSHIFT:
+            case StatementTag::LOGICAL_RSHIFT:
+            case StatementTag::ARITHMETIC_RSHIFT:
             case StatementTag::BITWISE_AND:
             case StatementTag::BITWISE_XOR:
             case StatementTag::BITWISE_OR:
@@ -676,7 +710,8 @@ namespace toycc::semantic {
             case StatementTag::ADD:
             case StatementTag::SUB:
             case StatementTag::LSHIFT:
-            case StatementTag::RSHIFT:
+            case StatementTag::LOGICAL_RSHIFT:
+            case StatementTag::ARITHMETIC_RSHIFT:
             case StatementTag::BITWISE_AND:
             case StatementTag::BITWISE_XOR:
             case StatementTag::BITWISE_OR:

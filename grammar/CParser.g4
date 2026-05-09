@@ -249,7 +249,12 @@ additiveOperator
 
 // ISO C: shift-expression (6.5.8)
 shiftExpression
-    : additiveExpression (('<<' | '>>') additiveExpression)*
+    : additiveExpression (shiftOperator additiveExpression)*
+    ;
+
+shiftOperator
+    : '<<'
+    | '>>'
     ;
 
 // ISO C: relational-expression (6.5.9)

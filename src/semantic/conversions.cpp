@@ -205,13 +205,17 @@ namespace toycc::semantic {
 
             case TypeCategory::INTEGER: {
                 std::shared_ptr<IntegerType> source_integer = std::static_pointer_cast<IntegerType>(source_type);
-                if (destination_type->is_signed == source_integer->is_signed) {
+
+                // About narrowing conversions : just truncate left bits. It's compliant for conversion to unsigned integers and
+                //     representable narrowing signed conversions, and unrepresentable signed conversions are implementation-defined anyways
+
+                if (destination_type->is_signed == source_integer->is_signed) {  // signed to signed / unsigned to unsigned
                     if (destination_type->size_bits > source_integer->size_bits)
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::SIGN_EXTEND);
                     else if (destination_type->size_bits == source_integer->size_bits)
                         return source;
-                    else  // if (destination_primitive.primitive_size < source_primitive.primitive_size)
-                        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Narrowing integer conversions are not implemented", location);
+                    else  // if (destination_type->size_bits < source_integer->size_bits) : Just truncate left bits, it's compliant for unsigned integers and narrow
+                        return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::NARROW);  //
                 } else if (destination_type->is_signed && !source_integer->is_signed) {  // unsigned to signed
                     // 6.3.1.3.1 : If the source value can be represented by the destination type if the destination type has at least one more bit, so that conversion is okay
                     // 6.3.1.3.3 : If the destination type is signed but the source value can't be represented in it, the result is implementation-defined
@@ -219,7 +223,8 @@ namespace toycc::semantic {
                     // Unsigned values are always positive regardless of the "sign" bit, so zero-extend
                     if (destination_type->size_bits >= source_integer->size_bits)
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::ZERO_EXTEND);
-                    else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Narrowing integer conversions are not implemented", location);
+                    else
+                        return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::NARROW);
                 } else /* if (!destination_type->is_signed && source_integer->is_signed) */ {  // signed to unsigned
                     // 6.3.1.3.1 : If the source value can be represented by the destination type if the destination type has at least one more bit, so that conversion is okay
                     // 6.3.1.3.2 : If the destination type is unsigned but the source value can't be represented in it, wrap around
@@ -229,7 +234,8 @@ namespace toycc::semantic {
                     // Ex. 8(-120) + 65536 -> 16(65416) <=> 0b[11111111]10001000 -> sign-extend
                     if (destination_type->size_bits >= source_integer->size_bits)
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::SIGN_EXTEND);
-                    else throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Narrowing integer conversions are not implemented", location);
+                    else
+                        return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::NARROW);
                 }
             }
 
@@ -312,13 +318,13 @@ namespace toycc::semantic {
 
     std::array<Operand, 2> SemanticAnalyzer::emit_arithmetic_conversion(Operand left, Operand right, CodeLocation location) {
         try {
-            left = emit_implicit_conversion(right.type(), left, location);
-        } catch (const Diagnostic& left_conversion_diagnostic) {
+            right = emit_implicit_conversion(left.type(), right, location);
+        } catch (const Diagnostic& right_conversion_diagnostic) {
             try {
-                right = emit_implicit_conversion(left.type(), right, location);
-            } catch (const Diagnostic& right_conversion_diagnostic) {
+                left = emit_implicit_conversion(right.type(), left, location);
+            } catch (const Diagnostic& left_conversion_diagnostic) {
                 throw Diagnostic(DiagnosticLevel::ERROR, "Can't perform any standard arithmetic conversions to make the operands compatible", location)
-                      .add_note(left_conversion_diagnostic).add_note(right_conversion_diagnostic);
+                      .add_note(right_conversion_diagnostic).add_note(left_conversion_diagnostic);
             }
         }
 

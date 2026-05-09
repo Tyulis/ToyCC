@@ -141,11 +141,13 @@ namespace toycc::semantic {
             StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
             StatementTag decode_equality_operator(CParser::EqualityOperatorContext* context);
             StatementTag decode_relational_operator(CParser::RelationalOperatorContext* context);
-            StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
+            StatementTag decode_shift_operator(CParser::ShiftOperatorContext* context);
             StatementTag decode_additive_operator(CParser::AdditiveOperatorContext* context);
+            StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
 
             ExpressionResult emit_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, const ExpressionResult& destination, CodeLocation location);
+            ExpressionResult emit_shift_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_pointer_arithmetic_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
             ExpressionResult emit_pointer_pointer_binary_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location);
