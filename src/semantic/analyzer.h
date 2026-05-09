@@ -235,7 +235,7 @@ namespace toycc::semantic {
 
             std::shared_ptr<Scope> create_function_scope(std::shared_ptr<Declaration> declaration);
 
-            std::shared_ptr<Declaration> declare(Declaration declaration);
+            std::shared_ptr<Declaration> declare(const Declaration& declaration);
             std::shared_ptr<Declaration> declare_temporary(std::shared_ptr<Type> type, CodeLocation location);
 
             std::optional<CodeLocation> locate_name(std::string name, bool current_scope_only = false);

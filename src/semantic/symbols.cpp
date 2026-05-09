@@ -32,11 +32,22 @@ namespace toycc::semantic {
         return scope;
     }
 
-    std::shared_ptr<Declaration> SemanticAnalyzer::declare(Declaration declaration) {
+    std::shared_ptr<Declaration> SemanticAnalyzer::declare(const Declaration& declaration) {
         std::optional<CodeLocation> existing_location = locate_name(declaration.name);
-        if (existing_location.has_value())
-            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name {} was already declared", declaration.name), declaration.location)
-                  .add_note(DiagnosticLevel::NOTE, "Previously declared here", existing_location.value());
+        if (existing_location.has_value()) {
+            if (declaration.type->category == TypeCategory::FUNCTION) {
+                // A function may have multiple declarations as long as they are equivalent
+                std::shared_ptr<Declaration> existing_declaration = resolve(declaration.name, declaration.location);
+                if (*existing_declaration->type != *declaration.type)
+                    throw Diagnostic(DiagnosticLevel::ERROR, std::format("Function {} was already declared with a different prototype", declaration.name), declaration.location)
+                          .add_note(DiagnosticLevel::NOTE, "Previously declared here", existing_declaration->location);
+
+                return existing_declaration;  // No need to redeclare it
+            } else {
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Name {} was already declared", declaration.name), declaration.location)
+                      .add_note(DiagnosticLevel::NOTE, "Previously declared here", existing_location.value());
+            }
+        }
 
         if (declaration.storage & StorageClass::TYPEDEF)
             return current_scope()->add_typedef(std::make_shared<Declaration>(declaration));
