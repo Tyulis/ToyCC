@@ -8,6 +8,7 @@
 #include "gen/execmodel/x86_64/location.h"
 #include "gen/execmodel/x86_64/transfer_matcher.h"
 #include "gen/execmodel/x86_64/transfer_emission.h"
+#include "ir/declaration.h"
 #include "util/sets.hpp"
 #include "util/graph.hpp"
 #include "util/strings.h"
@@ -539,6 +540,11 @@ namespace toycc::arch::x86_64 {
                     case IdentifierType::BLOCK:       allowed_locations = unordered_set_intersection(allowed_locations, LOCATION_SETS.at(LocationType::MEMORY));  break;
                 }
             }
+
+            // By default, global variables are in memory, so moving them to the stack makes no sense
+            // Since memory instructions will allow Location::memory and Location::stack every time, remove the Location::stack option to avoid any issue
+            if (value.variable.get() != nullptr && (value.variable->storage & ir::StorageClass::GLOBAL) && allowed_locations.contains(Location::stack))
+                allowed_locations.erase(Location::stack);
 
             if (allowed_locations.empty())
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Value {} has no allowed location", dump(value)));
