@@ -51,8 +51,9 @@ namespace toycc::semantic {
         }
 
         if (destination->category == TypeCategory::POINTER) {
-            // Only implicit when it's the same pointer type or conversion to void*
-            if      (source->category == TypeCategory::POINTER && destination->dereference({}, {})->category == TypeCategory::VOID)  return ConversionValidity::IMPLICIT;
+            // Only implicit when it's the same pointer type, or conversion from or to void*
+            if      (source->category == TypeCategory::POINTER && source->dereference({}, {})->category == TypeCategory::VOID)       return ConversionValidity::IMPLICIT;
+            else if (source->category == TypeCategory::POINTER && destination->dereference({}, {})->category == TypeCategory::VOID)  return ConversionValidity::IMPLICIT;
             else if (source->category == TypeCategory::POINTER)  return ConversionValidity::EXPLICIT;
             else if (source->category == TypeCategory::INTEGER)  return ConversionValidity::EXPLICIT;
             else if (source->category == TypeCategory::ARRAY) {
