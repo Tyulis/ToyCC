@@ -49,7 +49,7 @@ namespace toycc::ir {
         } else {
             // Variable offset -> explicitely add it to the pointer before dereferencing
             std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, PointerType::make(operand.location, pointer_type), operand.location);
-            scope->add_statement(Statement::make_binary_operation(operand.location, StatementTag::ADD, operand, flat_offset, offset_pointer));
+            scope->add_statement(Statement::make_binary_operation(operand.location, StatementTag::ADD, operand.pointer(), flat_offset, offset_pointer));
             return Operand {offset_pointer, operand.location, {Constant {IntegerConstant(0), operand.location, arch::DATAMODEL->offset_type}}};
         }
     }
