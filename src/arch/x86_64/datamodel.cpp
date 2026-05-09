@@ -12,8 +12,8 @@ namespace toycc::arch::x86_64 {
 
         signed_char_type        = std::make_shared<IntegerType> ("signed char",            BUILTIN_LOCATION,  8,  8, true);
         unsigned_char_type      = std::make_shared<IntegerType> ("unsigned char",          BUILTIN_LOCATION,  8,  8, false);
-        signed_short_type       = std::make_shared<IntegerType> ("signed short",           BUILTIN_LOCATION, 16, 16, true);
-        unsigned_short_type     = std::make_shared<IntegerType> ("unsigned short",         BUILTIN_LOCATION, 16, 16, false);
+        signed_short_type       = std::make_shared<IntegerType> ("signed short int",       BUILTIN_LOCATION, 16, 16, true);
+        unsigned_short_type     = std::make_shared<IntegerType> ("unsigned short int",     BUILTIN_LOCATION, 16, 16, false);
         signed_int_type         = std::make_shared<IntegerType> ("signed int",             BUILTIN_LOCATION, 32, 32, true);
         unsigned_int_type       = std::make_shared<IntegerType> ("unsigned int",           BUILTIN_LOCATION, 32, 32, false);
         signed_long_type        = std::make_shared<IntegerType> ("signed long int",        BUILTIN_LOCATION, 64, 64, true);

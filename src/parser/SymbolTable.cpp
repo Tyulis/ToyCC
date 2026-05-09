@@ -95,10 +95,6 @@ namespace toycc {
         Define(std::make_shared<Symbol>("__int32",   TypeClassification::TypeSpecifier, true)); // gcc
         Define(std::make_shared<Symbol>("__int64",   TypeClassification::TypeSpecifier, true)); // gcc
         Define(std::make_shared<Symbol>("__int128",  TypeClassification::TypeSpecifier, true)); // gcc
-        Define(std::make_shared<Symbol>("_Float16",  TypeClassification::TypeSpecifier, true)); // gcc
-        Define(std::make_shared<Symbol>("_Float32",  TypeClassification::TypeSpecifier, true)); // gcc
-        Define(std::make_shared<Symbol>("_Float64",  TypeClassification::TypeSpecifier, true)); // gcc
-        Define(std::make_shared<Symbol>("_Float128", TypeClassification::TypeSpecifier, true)); // gcc
         Define(std::make_shared<Symbol>("__v8hf",    TypeClassification::TypeSpecifier, true)); // gcc
         Define(std::make_shared<Symbol>("__bf16",    TypeClassification::TypeSpecifier, true)); // gcc
         Define(std::make_shared<Symbol>("__v16bf",   TypeClassification::TypeSpecifier, true)); // gcc
