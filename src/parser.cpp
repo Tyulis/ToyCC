@@ -58,9 +58,9 @@ namespace toycc {
 
     std::shared_ptr<ir::Scope> Parser::to_ir() {
         toycc::CParser::CompilationUnitContext* unit = parser.compilationUnit();
-        std::shared_ptr<ir::Scope> ir = semantic::generate_ir(source_map, unit);
-
         error_handler.check();
+
+        std::shared_ptr<ir::Scope> ir = semantic::generate_ir(source_map, unit);
         return ir;
     }
 }
