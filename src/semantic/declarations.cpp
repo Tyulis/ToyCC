@@ -1,5 +1,6 @@
 #include "code_location.h"
 #include "diagnostic.h"
+#include "ir/type.h"
 #include "ir/type_expressions.h"
 #include "arch/datamodel.h"
 #include "semantic/analyzer.h"
@@ -34,6 +35,9 @@ namespace toycc::semantic {
 
         std::vector<std::shared_ptr<Declaration>> declared_variables;
         for (const Declaration& declaration : declarations) {
+            if (declaration.name.empty() && (declaration.type->category == TypeCategory::STRUCT || declaration.type->category == TypeCategory::UNION || declaration.type->category == TypeCategory::ENUM))
+                continue;  // Compound type declaration, without actually declaring a variable
+
             declaration.check();
             declared_variables.push_back(declare(declaration));
         }
