@@ -90,7 +90,9 @@ namespace toycc::ir {
     };
 
     enum class FlowType {
-        FALLTHROUGH, JUMP,
+        FALLTHROUGH,  // In order in the original code, fall directly from one block to the next without jump
+        JUMP,         // Transition via any jump instruction (including `return`)
+        UNRELATED,    // Special value to handle transitions of unrelated parts of the graph during code generation
     };
 
     std::ostream& operator<< (std::ostream& stream, FlowType type);

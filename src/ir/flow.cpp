@@ -35,6 +35,7 @@ namespace toycc::ir {
         switch (type) {
             case FlowType::FALLTHROUGH:  stream << "FALLTHROUGH";  break;
             case FlowType::JUMP:         stream << "JUMP";         break;
+            case FlowType::UNRELATED:    stream << "UNRELATED";    break;
         }
         return stream;
     }

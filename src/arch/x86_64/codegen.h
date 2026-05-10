@@ -24,6 +24,7 @@ namespace toycc::arch::x86_64 {
             void generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable, debug::DebugInfo& debuginfo);
             void generate_global_value(CodeOutput& output, const ir::Constant& value);
             void generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::DebugInfo& debuginfo);
+            ir::FlowGraph::Edge next_block_transition(const ir::Procedure& procedure, const ir::FlowGraph& remaining_blocks, std::shared_ptr<ir::BasicBlock> current_block);
 
             // -------- Basic block generation -> arch/x86_64/block.cpp
             void generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, debug::DebugInfo& debuginfo);

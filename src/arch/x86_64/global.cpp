@@ -38,67 +38,75 @@ namespace toycc::arch::x86_64 {
         ir::FlowGraph remaining_blocks = procedure.blocks;
         std::shared_ptr<ir::BasicBlock> current_block = procedure.entry_block;
         while (current_block != procedure.exit_block) {
-            const ir::FlowGraph::EdgeSet transitions = remaining_blocks.out_edges(current_block);
+            const ir::FlowGraph::Edge next_transition = next_block_transition(procedure, remaining_blocks, current_block);
             remaining_blocks.pop_node(current_block);
 
             frame.enter_block(current_block, remaining_blocks.nof_nodes() <= 1);
             generate_basic_block(frame, current_block, debuginfo);
 
-            // Only the exit block remains -> exit
-            if (remaining_blocks.nof_nodes() <= 1)
-                break;
-
             // Load the parameters for the first inner block
             if (current_block == procedure.entry_block)
                 frame.load_parameters();
 
-            // Always prioritize fallthrough
-            std::shared_ptr<ir::BasicBlock> fallthrough = nullptr;
-            std::shared_ptr<ir::BasicBlock> non_fallthrough = nullptr;
-
-            for (const ir::FlowGraph::Edge& transition : transitions) {
-                if (transition.attr == ir::FlowType::FALLTHROUGH) {
-                    fallthrough = transition.exit;
-                    break;
-                } else if (transition.exit != procedure.exit_block) {
-                    non_fallthrough = transition.exit;
-                }
-            }
-
-            // This block links to yet non-generated blocks -> proceed with those
-            if (fallthrough.get() != nullptr) {
-                current_block = fallthrough;
-                continue;
-            } else if (non_fallthrough.get() != nullptr) {
-                current_block = non_fallthrough;
-                continue;
-            }
-
-            // No link to other blocks : find a source node regarding fallthrough.
-            // Fallthrough links always make a directed acyclic graph so there's always one
-            for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes()) {
-                if (block == procedure.exit_block)
-                    continue;
-
-                bool has_fallthrough_entry = false;
-                for (const ir::FlowGraph::Edge& entry_transition : remaining_blocks.in_edges(block)) {
-                    if (entry_transition.attr == ir::FlowType::FALLTHROUGH) {
-                        has_fallthrough_entry = true;
-                        break;
-                    }
-                }
-
-                if (!has_fallthrough_entry) {
-                    current_block = block;
-                    break;
-                }
-            }
+            current_block = next_transition.exit;
         }
 
         frame.end();
 
         output << frame;
         output.label(procedure.end_label());
+    }
+
+    // Get the next block transition from the `current_block`
+    // Must be called *before* popping the current block from the `remaining_blocks` graph
+    ir::FlowGraph::Edge CodeGenerator::next_block_transition(const ir::Procedure& procedure, const ir::FlowGraph& remaining_blocks, std::shared_ptr<ir::BasicBlock> current_block) {
+        // Always prioritize fallthrough
+        std::optional<ir::FlowGraph::Edge> fallthrough = {};
+        std::optional<ir::FlowGraph::Edge> non_fallthrough = {};
+
+        for (const ir::FlowGraph::Edge& transition : remaining_blocks.out_edges(current_block)) {
+            if (transition.attr == ir::FlowType::FALLTHROUGH) {
+                fallthrough = transition;
+                break;
+            } else if (transition.exit != procedure.exit_block) {
+                non_fallthrough = transition;
+            }
+        }
+
+        // This block links to yet non-generated blocks -> proceed with those
+        if (fallthrough.has_value())
+            return fallthrough.value();
+        else if (non_fallthrough.has_value())
+            return non_fallthrough.value();
+
+        // No link to other blocks : find a source node regarding fallthrough.
+        // At least for now, to keep the semantics of conditional jumps, fallthrough links must always be represented by sequential basic blocks in the generated code
+        // Fallthrough links are the sequential order of the original code, so they make a directed acyclic subgraph of the flow graph
+        // So priorize such source nodes
+        for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes()) {
+            if (block == procedure.exit_block || block == current_block)
+                continue;
+
+            bool has_fallthrough_entry = false;
+            for (const ir::FlowGraph::Edge& entry_transition : remaining_blocks.in_edges(block)) {
+                if (entry_transition.attr == ir::FlowType::FALLTHROUGH) {
+                    has_fallthrough_entry = true;
+                    break;
+                }
+            }
+
+            // No fallthrough entry transition -> this is a source node of the fallthrough DAG
+            if (!has_fallthrough_entry)
+                return {current_block, block, ir::FlowType::UNRELATED};
+        }
+
+        // The only remaining blocks are jump targets : take any one of them
+        for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes())
+            if (block != procedure.exit_block && block != current_block)
+                return {current_block, block, ir::FlowType::UNRELATED};
+
+        // No other remaining blocks, return the exit block
+        return {current_block, procedure.exit_block, ir::FlowType::UNRELATED};
     }
 
     void CodeGenerator::generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
