@@ -48,7 +48,8 @@ namespace toycc::arch::x86_64 {
             if (current_block == procedure.entry_block)
                 frame.load_parameters();
 
-            flush_locals(frame);
+            if (next_transition.exit != procedure.exit_block)
+                flush_locals(frame);
 
             current_block = next_transition.exit;
         }
@@ -84,7 +85,7 @@ namespace toycc::arch::x86_64 {
         // No link to other blocks : find a source node regarding fallthrough.
         // At least for now, to keep the semantics of conditional jumps, fallthrough links must always be represented by sequential basic blocks in the generated code
         // Fallthrough links are the sequential order of the original code, so they make a directed acyclic subgraph of the flow graph
-        // So priorize such source nodes
+        // So there is always a source node in that subgraph
         for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes()) {
             if (block == procedure.exit_block || block == current_block)
                 continue;
@@ -102,13 +103,22 @@ namespace toycc::arch::x86_64 {
                 return {current_block, block, ir::FlowType::UNRELATED};
         }
 
-        // The only remaining blocks are jump targets : take any one of them
-        for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes())
-            if (block != procedure.exit_block && block != current_block)
-                return {current_block, block, ir::FlowType::UNRELATED};
+        // No other fallthrough paths remain -> this must be the end, transition to the exit block
+        if (remaining_blocks.nof_nodes() == 2) {  // {current_block, exit_block}
+            // Defensive check of the remaining blocks before blindly returning the exit block
+            bool found_current_block = false, found_exit_block = false;
+            for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes()) {
+                if      (block == current_block)         found_current_block = true;
+                else if (block == procedure.exit_block)  found_exit_block    = true;
+            }
 
-        // No other remaining blocks, return the exit block
-        return {current_block, procedure.exit_block, ir::FlowType::UNRELATED};
+            if (!found_current_block || !found_exit_block)
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The last basic block in the flow graph is not the exit block");
+
+            return {current_block, procedure.exit_block, ir::FlowType::UNRELATED};
+        }
+
+        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The fallthrough subgraph is not a DAG");
     }
 
     void CodeGenerator::generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {

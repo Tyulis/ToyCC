@@ -222,14 +222,30 @@ namespace toycc::arch::x86_64 {
         flush_globals(frame);
 
         for (std::shared_ptr<ir::Declaration> variable : frame.allocated_variables()) {
-            if (variable->storage & ir::StorageClass::GLOBAL)
-                continue;
-
             const std::unordered_set<Location> current_locations = frame.locate(variable);
-            if (current_locations.contains(Location::stack) || current_locations.contains(Location::memory) || current_locations.contains(Location::constant))
-                continue;
 
-            transfer(frame, variable, Location::stack);
+            // Move local variables to their banked location (stack / memory), then clear other locations
+            if (current_locations.contains(Location::constant))
+                frame.move(variable, Location::constant);
+            else if (current_locations.contains(Location::stack))
+                frame.move(variable, Location::stack);
+            else if (current_locations.contains(Location::memory))
+                frame.move(variable, Location::memory);
+
+            // Flush global variables to their static memory location
+            else if (variable->storage & ir::StorageClass::GLOBAL) {
+                if (variable->type->storage_category() == ir::TypeCategory::FUNCTION)
+                    continue;
+
+                transfer(frame, variable, Location::memory);
+                frame.move(variable, Location::memory);  // Clear other locations
+            }
+
+            // Flush local variables to the stack
+            else {
+                transfer(frame, variable, Location::stack);
+                frame.move(variable, Location::stack);
+            }
         }
     }
 }
