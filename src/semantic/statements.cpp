@@ -147,6 +147,7 @@ namespace toycc::semantic {
     void SemanticAnalyzer::decode_for_statement(CParser::IterationStatementContext* context) {
         // The for loop initialization is outside of the enclosing scope, push a new scope for it
         std::shared_ptr<Scope> scope = std::make_shared<Scope>(ScopeType::BLOCK, current_scope()->function);
+        const std::string exit_label = anonymous_label();  // Right after the loop;
 
         {
             ScopeFrame frame = in_scope(scope);
@@ -159,6 +160,40 @@ namespace toycc::semantic {
                 decode_expression(for_condition->expression());
             // Otherwise that's an empty statement, no initialization
 
+            const std::string predicate_label = anonymous_label();  // To jump to the loop predicate check
+            const std::string increment_label = anonymous_label();  // To jump to the increment -> loop predicate sequence
+
+
+            CParser::ForExpressionContext* predicate_context = for_condition->forPredicate;
+            CParser::ForExpressionContext* increment_context = for_condition->forIncrement;
+
+            // First, even before entering the loop, check the predicate
+            // NOTE : No predicate means an infinite loop, in that case don't generate anything, that `predicate_label` is just the beginning of the loop body
+            emit_label(LabelType::INTERNAL, predicate_label, locate(context));
+
+            if (predicate_context) {
+                ExpressionResult predicate_expression = decode_for_expression(predicate_context);
+                emit_conditional_jump(predicate_expression, exit_label, false, locate(predicate_context));  // If the predicate is false, jump out of the loop
+            }
+
+            // Then the loop body
+            decode_statement(context->statement(), ScopeType::LOOP, /* break */ exit_label, /* continue */ increment_label);
+
+            // Then emit the increment statements
+            emit_label(LabelType::INTERNAL, increment_label, locate(context));
+            if (increment_context)
+                decode_for_expression(increment_context);
+
+            // Always loop back to the predicate, that will jump out of the loop if necessary
+            emit(Statement::make_jump(locate(context), predicate_label));
+        }
+
+        emit(Statement::make_block(locate(context->statement()), scope));
+
+        // Now after the loop
+        emit_label(LabelType::INTERNAL, exit_label, locate(context));
+
+#if 0
             const std::string entry_label    = anonymous_label();  // Beginning of the loop body
             const std::string epilogue_label = anonymous_label();  // Beginning of the code to get to the next iteration (predicate + increment)
             const std::string exit_label     = anonymous_label();  // After the loop
@@ -205,6 +240,7 @@ namespace toycc::semantic {
         }
 
         emit(Statement::make_block(locate(context->statement()), scope));
+#endif
     }
 
     void SemanticAnalyzer::decode_jump_statement(CParser::JumpStatementContext* context) {
