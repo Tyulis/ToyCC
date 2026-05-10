@@ -8,6 +8,7 @@
 #include "gen/execmodel/x86_64/group_matcher.h"
 #include "gen/execmodel/x86_64/translation_matcher.h"
 #include "gen/execmodel/x86_64/emission.h"
+#include "ir/type.h"
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
@@ -59,7 +60,7 @@ namespace toycc::arch::x86_64 {
         if (translation_matches.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No translation match");
 
-        TranslationMatch selected_match = select_translation(translation_matches);
+        TranslationMatch selected_match = select_translation(frame, translation_matches);
         if (toycc::config::dev::with_comment_trace)
             frame.comment(dump(selected_match));
 
@@ -110,7 +111,11 @@ namespace toycc::arch::x86_64 {
         return entry_matches;
     }
 
-    const TranslationMatch& CodeGenerator::select_translation(const std::vector<TranslationMatch>& matches) {
+    static inline bool contains_last_statement(const StackFrame& frame, const TranslationMatch& match) {
+        return std::ranges::contains(match.group_match.statements, frame.current_block->exit_statement);
+    }
+
+    const TranslationMatch& CodeGenerator::select_translation(const StackFrame& frame, const std::vector<TranslationMatch>& matches) {
         std::optional<size_t> selected_index = {};
         for (const auto& [index, match] : std::ranges::enumerate_view(matches)) {
             if (!selected_index.has_value()) {
@@ -120,7 +125,12 @@ namespace toycc::arch::x86_64 {
 
             const TranslationMatch& previous_match = matches.at(selected_index.value());
 
-            if (!previous_match.matches() && match.matches())
+            // The match that contains the exit statement must always go last
+            if (contains_last_statement(frame, previous_match))
+                selected_index = index;
+
+            // Only the new match fully matches -> use it
+            else if (!previous_match.matches() && match.matches())
                 selected_index = index;
 
             // Both match fully : take the largest group
@@ -157,38 +167,45 @@ namespace toycc::arch::x86_64 {
             const ir::DependencyGraph::NodeSet connected_values = graph.connected_nodes(statement);
             const ir::DependencyGraph::NodeSet sinks = graph.sinks();
 
-            // Flush outputs that are live on exit to the stack
-            for (const ir::DependencyGraph::Edge& edge : graph.out_edges(statement)) {
-                if (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT) {
-                    std::shared_ptr<ir::Declaration> variable = edge.exit->declaration();
-                    std::unordered_set<Location> current_locations = frame.locate(variable);
-                    if (variable->storage & ir::StorageClass::GLOBAL) {
-                        if (!(current_locations.contains(Location::memory) || current_locations.contains(Location::constant)))
-                            transfer(frame, edge.exit->declaration(), Location::memory);
-                    } else if (!current_locations.contains(Location::stack)) {
-                        transfer(frame, edge.exit->declaration(), Location::stack);
-                    }
-                }
-            }
+            std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_exit;
+
+            // Flush variables that are live on exit to the stack
+            auto flush_variable = [&](std::shared_ptr<ir::Declaration> variable) {
+                std::unordered_set<Location> current_locations = frame.locate(variable);
+                const Location canonical_location = frame.canonical_location(variable);
+
+                if (!current_locations.contains(canonical_location))
+                    transfer(frame, variable, canonical_location);
+
+                live_on_exit.insert(variable);
+            };
+
+            for (const ir::DependencyGraph::Edge& edge : graph.out_edges(statement))
+                if (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT)
+                    flush_variable(edge.exit->declaration());
+
+            for (const ir::DependencyGraph::Edge& edge : graph.in_edges(statement))
+                if (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT)
+                    flush_variable(edge.entry->declaration());
 
             graph.pop_node(statement);
 
-            // Only free values that are completely disconnected.
+            // Only free values that are completely disconnected and not live on exit
             // For instance, if one is both an input and an output and the input gets disconnected, it shouldn't get freed because it's still valid as an output.
             // Logically that's (variables - connected variables)
-            std::unordered_set<std::shared_ptr<ir::Declaration>> free_variables;
+            std::unordered_set<std::shared_ptr<ir::Declaration>> disconnected_variables;
             for (std::shared_ptr<ir::DependencyNode> value : connected_values)
-                free_variables.insert(value->declaration());
+                disconnected_variables.insert(value->declaration());
 
             for (std::shared_ptr<ir::DependencyNode> value : connected_values)
                 if (graph.is_connected(value))
-                    free_variables.erase(value->declaration());
+                    disconnected_variables.erase(value->declaration());
 
             // Remove value nodes that aren't connected to the remaining statements
             for (std::shared_ptr<ir::DependencyNode> value : connected_values) {
                 if (!graph.is_connected(value))
                     graph.pop_node(value);
-                if (free_variables.contains(value->declaration()))
+                if (disconnected_variables.contains(value->declaration()) && !live_on_exit.contains(value->declaration()))
                     frame.free(value->declaration());
             }
         }
@@ -219,11 +236,10 @@ namespace toycc::arch::x86_64 {
     }
 
     // At the end of a basic block, flush all local variables to the stack for the next blocks to find
-    void CodeGenerator::flush_locals(StackFrame& frame) {
-        const std::unordered_set<std::shared_ptr<ir::Declaration>> allocated_variables = frame.allocated_variables();
-        const std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_exit = frame.current_block->live_on_exit();
-
-        for (std::shared_ptr<ir::Declaration> variable : unordered_set_intersection(allocated_variables, live_on_exit)) {
+    void CodeGenerator::flush_locals(StackFrame& frame, const ir::Procedure& procedure, std::shared_ptr<ir::BasicBlock> current_block, bool is_fallthrough) {
+        const std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_exit = procedure.live_on_exit(current_block);
+        const std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_entry = procedure.live_on_entry(current_block);
+        for (std::shared_ptr<ir::Declaration> variable : live_on_exit) {
             const std::unordered_set<Location> current_locations = frame.locate(variable);
 
             // Clear non-canonical locations
@@ -233,6 +249,16 @@ namespace toycc::arch::x86_64 {
                 frame.move(variable, Location::stack);
             else if (current_locations.contains(Location::memory))
                 frame.move(variable, Location::memory);
+
+            // For fallthrough transitions, transfer the remaining variables to their canonical location
+            else if (is_fallthrough) {
+                const Location canonical_location = frame.canonical_location(variable);
+                transfer(frame, variable, canonical_location);
+                frame.move(variable, canonical_location);
+            }
+
+            // For jump transitions we can't do that since the transfers would be generated after the jump
+            // But the dependency graph should take care of flushing everything going through the jump
             else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Variable `{}` is live on exit but isn't in its canonical location upon exit", variable->name));
         }
     }

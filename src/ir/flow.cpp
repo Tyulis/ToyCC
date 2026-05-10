@@ -225,9 +225,6 @@ namespace toycc::ir {
 
         // Add edges from input variables, adding unknown ones as source nodes
         for (const auto& [input, dependency] : inputs) {
-            if (input->storage & ir::StorageClass::GLOBAL)
-                used_globals.insert(input);
-
             auto found = last_modification.find(input);
             std::shared_ptr<DependencyNode> input_node = nullptr;
             if (found == last_modification.end()) {
@@ -242,9 +239,6 @@ namespace toycc::ir {
 
         // Add edges to output variables
         for (const auto& [output, dependency] : outputs) {
-            if (output->storage & ir::StorageClass::GLOBAL)
-                used_globals.insert(output);
-
             std::shared_ptr<DependencyNode> output_node = dependencies.emplace_node(output);
             dependencies.add_edge(statement_node, output_node, dependency);
             last_modification[output] = output_node;
@@ -402,6 +396,7 @@ namespace toycc::ir {
         return declarations;
     }
 
+    // Get which variables *used by the block* are live upon entry
     std::unordered_set<std::shared_ptr<Declaration>> BasicBlock::live_on_entry() const {
         std::unordered_set<std::shared_ptr<Declaration>> live;
         for (std::shared_ptr<DependencyNode> source : dependencies.sources())
@@ -410,6 +405,7 @@ namespace toycc::ir {
         return live;
     }
 
+    // Get which variables *used by the block* are live upon exit
     std::unordered_set<std::shared_ptr<Declaration>> BasicBlock::live_on_exit() const {
         std::unordered_set<std::shared_ptr<Declaration>> live;
         for (std::shared_ptr<DependencyNode> sink : dependencies.sinks())
@@ -607,6 +603,7 @@ namespace toycc::ir {
     }
 
 
+    // Get all local variables used within the procedure
     std::unordered_set<std::shared_ptr<Declaration>> Procedure::locals() const {
         std::unordered_set<std::shared_ptr<Declaration>> declarations;
         for (std::shared_ptr<BasicBlock> block : blocks.nodes())
@@ -616,6 +613,34 @@ namespace toycc::ir {
         declarations.insert_range(parameters);
         return declarations;
     }
+
+    // Get all variables that are live through the block
+    // Variables that are live upon exit of a previous block, and upon entry of a following block, are live through the `block`
+    // That is, the block doesn't use them, but they stay live from a previous block through to a following block
+    std::unordered_set<std::shared_ptr<Declaration>> Procedure::live_through(std::shared_ptr<BasicBlock> block) const {
+        std::unordered_set<std::shared_ptr<Declaration>> previous_variables;
+        for (std::shared_ptr<BasicBlock> previous_block : blocks.can_reach(block))
+            if (previous_block != block)
+                previous_variables.insert_range(previous_block->live_on_exit());
+
+        std::unordered_set<std::shared_ptr<Declaration>> next_variables;
+        for (std::shared_ptr<BasicBlock> next_block : blocks.reachable_from(block))
+            if (next_block != block)
+                next_variables.insert_range(next_block->live_on_entry());
+
+        return unordered_set_intersection(previous_variables, next_variables);
+    }
+
+    // Get all variables live upon entry into the block, either within or through that block
+    std::unordered_set<std::shared_ptr<Declaration>> Procedure::live_on_entry(std::shared_ptr<BasicBlock> block) const {
+        return unordered_set_union(block->live_on_entry(), live_through(block));
+    }
+
+    // Get all variables live upon exit from the block, either within or through that block
+    std::unordered_set<std::shared_ptr<Declaration>> Procedure::live_on_exit(std::shared_ptr<BasicBlock> block) const {
+        return unordered_set_union(block->live_on_exit(), live_through(block));
+    }
+
 
     // To keep the semantics of conditional jumps, the basic block transitions must always follow fallthrough chains
     // Fallthrough chains make a directed acyclic subgraph of the flow graph

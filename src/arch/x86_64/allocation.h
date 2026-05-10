@@ -27,6 +27,7 @@ namespace toycc::arch::x86_64 {
             std::unordered_set<Location> locate(const ir::Operand& operand) const;
             std::optional<Location> allocate(const std::unordered_set<Location>& locations) const;
             std::unordered_set<std::shared_ptr<ir::Declaration>> allocated_variables() const;
+            Location canonical_location(std::shared_ptr<ir::Declaration> variable) const;
 
             bool is_free(Location location) const;
             bool any_free(const std::unordered_set<Location>& locations) const;

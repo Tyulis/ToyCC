@@ -84,6 +84,18 @@ namespace toycc::arch::x86_64 {
         return result;
     }
 
+    // Get the canonical location of a variable, i.e where it should go in-between basic blocks
+    Location StackFrame::canonical_location(std::shared_ptr<ir::Declaration> variable) const {
+        if (variable->storage & ir::StorageClass::GLOBAL) {
+            if (variable->type->storage_category() == ir::TypeCategory::FUNCTION)
+                return Location::constant;
+            else
+                return Location::memory;
+        } else {
+            return Location::stack;
+        }
+    }
+
      bool StackFrame::is_free(Location location) const {
          if (location == Location::constant || location == Location::memory || location == Location::stack)
              return true;
@@ -146,21 +158,8 @@ namespace toycc::arch::x86_64 {
         if (current_block->label.has_value() && current_block->label->type != ir::LabelType::FUNCTION)
             label(current_block->label->name);
 
-        for (std::shared_ptr<ir::Declaration> live : block->live_on_entry()) {
-            if (live->type->storage_category() == ir::TypeCategory::FUNCTION)
-                continue;
-            if (live->storage & ir::StorageClass::GLOBAL)
-                continue;
-
-            copy(live, Location::stack);
-        }
-
-        for (std::shared_ptr<ir::Declaration> global : block->used_globals) {
-            if (global->type->dequalify()->category == ir::TypeCategory::FUNCTION)
-                copy(global, Location::constant);
-            else
-                copy(global, Location::memory);
-        }
+        for (std::shared_ptr<ir::Declaration> live : procedure.live_on_entry(block))
+            copy(live, canonical_location(live));
     }
 
     void StackFrame::end() {

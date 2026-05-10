@@ -374,7 +374,7 @@ namespace toycc {
             }
 
             // -------- Search algorithms
-            // Build the set of all nodes reachable from the `entry_node`
+            // Build the set of all nodes reachable from the `entry_node`, including the `entry_node` itself
             inline NodeSet reachable_from(std::shared_ptr<Node> entry_node) const {
                 return breadth_first_search(entry_node, noop);
             }
@@ -384,7 +384,7 @@ namespace toycc {
                 return complement(reachable_from(entry_node));
             }
 
-            // Build the set of all nodes from which the `exit` node can be reached
+            // Build the set of all nodes from which the `exit` node can be reached, including the `entry_node` itself
             inline NodeSet can_reach(std::shared_ptr<Node> exit_node) const {
                 return transposed_breadth_first_search(exit_node, noop);
             }

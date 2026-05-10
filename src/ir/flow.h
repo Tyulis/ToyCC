@@ -66,7 +66,7 @@ namespace toycc::ir {
             BasicBlockType type;
             std::optional<Label> label;
             DependencyGraph dependencies;
-            std::unordered_set<std::shared_ptr<Declaration>> used_globals;
+            std::shared_ptr<DependencyNode> exit_statement = nullptr;
 
             BasicBlock(BasicBlockType type, std::shared_ptr<size_t> unique_id, std::optional<Label> label = {});
 
@@ -83,7 +83,6 @@ namespace toycc::ir {
 
         private:
             std::shared_ptr<size_t> unique_id;
-            std::shared_ptr<DependencyNode> exit_statement = nullptr;
             std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<DependencyNode>> last_modification;
 
             std::shared_ptr<Declaration> declare_intermediate(std::shared_ptr<Type> type, CodeLocation location);
@@ -118,6 +117,9 @@ namespace toycc::ir {
             std::string dot_subgraph(std::stringstream& dot) const;
 
             std::unordered_set<std::shared_ptr<Declaration>> locals() const;
+            std::unordered_set<std::shared_ptr<Declaration>> live_through(std::shared_ptr<BasicBlock> block) const;
+            std::unordered_set<std::shared_ptr<Declaration>> live_on_entry(std::shared_ptr<BasicBlock> block) const;
+            std::unordered_set<std::shared_ptr<Declaration>> live_on_exit(std::shared_ptr<BasicBlock> block) const;
             std::vector<FallthroughChain> fallthrough_chains() const;
 
         private:

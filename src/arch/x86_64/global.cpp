@@ -47,11 +47,12 @@ namespace toycc::arch::x86_64 {
                 remaining_blocks -= 1;
                 frame.enter_block(block, remaining_blocks == 1);
                 generate_basic_block(frame, block, debuginfo);
-                flush_locals(frame);
 
                 // Load the parameters for the first inner block
                 if (block == procedure.entry_block)
                     frame.load_parameters();
+
+                flush_locals(frame, procedure, block, block != chain.back());
             }
         }
 

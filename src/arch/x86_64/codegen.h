@@ -30,12 +30,12 @@ namespace toycc::arch::x86_64 {
             void code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches, debug::DebugInfo& debuginfo);
 
             std::vector<GroupMatch> find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches);
-            const TranslationMatch& select_translation(const std::vector<TranslationMatch>& matches);
+            const TranslationMatch& select_translation(const StackFrame& frame, const std::vector<TranslationMatch>& matches);
             void emit_location_info(StackFrame& frame, const TranslationMatch& match, debug::DebugInfo& debuginfo);
             void clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match);
             void clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const ir::DependencyGraph& graph);
             void flush_globals(StackFrame& frame);
-            void flush_locals(StackFrame& frame);
+            void flush_locals(StackFrame& frame, const ir::Procedure& procedure, std::shared_ptr<ir::BasicBlock> current_block, bool is_fallthrough);
 
             // -------- Transfer management -> arch/x86_64/transfer.cpp
             void emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match);
