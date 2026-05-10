@@ -42,6 +42,7 @@ namespace toycc::arch::x86_64 {
             void directive(std::string code);
             void comment(std::string content);
             void debug(std::string content);
+            void linebreak();
             std::string str() const;
             std::string dump() const;
 

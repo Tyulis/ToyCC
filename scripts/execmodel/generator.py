@@ -538,7 +538,8 @@ def generate_emission_translation(translation: Translation, translation_model: T
             operand_code = ", ".join(operand_arguments)
             asm_format = f"{target.form.gas_name} " + ", ".join("{}" for _ in operand_order)
             function_content += f'    frame.statement(std::format("{asm_format}", {operand_code}));\n'
-        function_content += operand_moves
+
+        function_content = operand_moves + function_content
 
     prototype = f"template<> void emit_translation<TranslationTag::{translation.tag}> (StackFrame& frame, const TranslationMatch&{' match' if uses_match else ''})"
     header_content = f"{prototype};\n"

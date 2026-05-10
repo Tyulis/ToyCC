@@ -13,6 +13,7 @@ namespace toycc {
             void directive(std::string code, std::optional<std::string> comment = {});
             void comment(std::string content);
             void debug(std::string content, std::optional<std::string> comment = {});
+            void linebreak();
 
             std::string str() const;
 

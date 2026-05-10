@@ -1006,6 +1006,12 @@ namespace toycc::arch::x86_64 {
         if (operand.is_constant() || operand.is_dereference())
             operand = frame.declare_intermediate(operand.type(), operand.location);
 
+        if (toycc::config::dev::with_comment_trace) {
+            std::stringstream comment;
+            comment << "TRANSFER " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")";
+            frame.comment(comment.str());
+        }
+
         toycc::execmodel::x86_64::emit_transfer(frame, source_operand, operand, match.value(), source, destination);
 
         // Then the internal move (required to be after emitting the instruction)
@@ -1015,12 +1021,6 @@ namespace toycc::arch::x86_64 {
             // Constants and dereference operands were previously converted to an intermediate declaration
             frame.copy(operand.declaration(), destination);
         } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
-
-        if (toycc::config::dev::with_comment_trace) {
-            std::stringstream comment;
-            comment << "TRANSFER " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")";
-            frame.comment(comment.str());
-        }
 
         if (toycc::config::dev::with_translation_trace) {
             std::cerr << "        Transfer " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")" << "\n";

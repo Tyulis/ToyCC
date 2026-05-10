@@ -74,6 +74,9 @@ namespace toycc::arch::x86_64 {
                 diagnostic.add_note(DiagnosticLevel::NOTE, dump(selected_match));
             throw diagnostic;
         }
+
+        if (toycc::config::dev::with_comment_trace)
+            frame.linebreak();
     }
 
     std::vector<GroupMatch> CodeGenerator::find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {

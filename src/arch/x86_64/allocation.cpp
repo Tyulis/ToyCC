@@ -138,6 +138,11 @@ namespace toycc::arch::x86_64 {
         current_block = block;
         is_last_block = is_last;
 
+        if (config::dev::with_comment_trace) {
+            linebreak();
+            comment("-------------------------------------------------------------");
+        }
+
         if (current_block->label.has_value() && current_block->label->type != ir::LabelType::FUNCTION)
             label(current_block->label->name);
 
@@ -261,6 +266,10 @@ namespace toycc::arch::x86_64 {
 
     void StackFrame::debug(std::string content) {
         output.debug(content);
+    }
+
+    void StackFrame::linebreak() {
+        output.linebreak();
     }
 
     std::string StackFrame::dump_allocations() const {

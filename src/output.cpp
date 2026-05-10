@@ -48,6 +48,10 @@ namespace toycc {
         output << "\n";
     }
 
+    void CodeOutput::linebreak() {
+        output << "\n";
+    }
+
     std::string CodeOutput::str() const {
         return output.str();
     }
