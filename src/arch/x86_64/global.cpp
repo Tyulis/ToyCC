@@ -48,6 +48,8 @@ namespace toycc::arch::x86_64 {
             if (current_block == procedure.entry_block)
                 frame.load_parameters();
 
+            flush_locals(frame);
+
             current_block = next_transition.exit;
         }
 

@@ -36,6 +36,7 @@ namespace toycc::arch::x86_64 {
             void clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match);
             void clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const ir::DependencyGraph& graph);
             void flush_globals(StackFrame& frame);
+            void flush_locals(StackFrame& frame);
 
             // -------- Transfer management -> arch/x86_64/transfer.cpp
             void emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match);

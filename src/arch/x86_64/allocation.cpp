@@ -133,6 +133,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
+    // Enter a block, set up the initial locations of the block local variables
     void StackFrame::enter_block(std::shared_ptr<ir::BasicBlock> block, bool is_last) {
         current_block = block;
         is_last_block = is_last;

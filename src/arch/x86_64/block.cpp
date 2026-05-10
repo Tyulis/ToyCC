@@ -213,4 +213,20 @@ namespace toycc::arch::x86_64 {
             if (variable->storage & ir::StorageClass::GLOBAL && variable->type->storage_category() != ir::TypeCategory::FUNCTION && !frame.locate(variable).contains(Location::memory))
                 transfer(frame, variable, Location::memory);
     }
+
+    // At the end of a basic block, flush all local variables to the stack for the next blocks to find
+    void CodeGenerator::flush_locals(StackFrame& frame) {
+        flush_globals(frame);
+
+        for (std::shared_ptr<ir::Declaration> variable : frame.allocated_variables()) {
+            if (variable->storage & ir::StorageClass::GLOBAL)
+                continue;
+
+            const std::unordered_set<Location> current_locations = frame.locate(variable);
+            if (current_locations.contains(Location::stack) || current_locations.contains(Location::memory) || current_locations.contains(Location::constant))
+                continue;
+
+            transfer(frame, variable, Location::stack);
+        }
+    }
 }
