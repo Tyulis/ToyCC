@@ -148,6 +148,8 @@ namespace toycc::semantic {
         // The for loop initialization is outside of the enclosing scope, push a new scope for it
         std::shared_ptr<Scope> scope = std::make_shared<Scope>(ScopeType::BLOCK, current_scope()->function);
         const std::string exit_label = anonymous_label();  // Right after the loop;
+        const std::string predicate_label = anonymous_label();  // To jump to the loop predicate check
+        const std::string increment_label = anonymous_label();  // To jump to the increment -> loop predicate sequence
 
         {
             ScopeFrame frame = in_scope(scope);
@@ -159,10 +161,6 @@ namespace toycc::semantic {
             else if (for_condition->expression())
                 decode_expression(for_condition->expression());
             // Otherwise that's an empty statement, no initialization
-
-            const std::string predicate_label = anonymous_label();  // To jump to the loop predicate check
-            const std::string increment_label = anonymous_label();  // To jump to the increment -> loop predicate sequence
-
 
             CParser::ForExpressionContext* predicate_context = for_condition->forPredicate;
             CParser::ForExpressionContext* increment_context = for_condition->forIncrement;

@@ -35,23 +35,24 @@ namespace toycc::arch::x86_64 {
         std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
         auto debug_scope = debuginfo.push_auto(debuginfo.procedure(procedure));
 
-        ir::FlowGraph remaining_blocks = procedure.blocks;
-        std::shared_ptr<ir::BasicBlock> current_block = procedure.entry_block;
-        while (current_block != procedure.exit_block) {
-            const ir::FlowGraph::Edge next_transition = next_block_transition(procedure, remaining_blocks, current_block);
-            remaining_blocks.pop_node(current_block);
+        // Generate the basic blocks following the fallthrough chains
+        const std::vector<ir::FallthroughChain> chains = procedure.fallthrough_chains();
 
-            frame.enter_block(current_block, remaining_blocks.nof_nodes() <= 1);
-            generate_basic_block(frame, current_block, debuginfo);
+        size_t remaining_blocks = 0;
+        for (const ir::FallthroughChain& chain : chains)
+            remaining_blocks += chain.size();
 
-            // Load the parameters for the first inner block
-            if (current_block == procedure.entry_block)
-                frame.load_parameters();
-
-            if (next_transition.exit != procedure.exit_block)
+        for (const ir::FallthroughChain& chain : procedure.fallthrough_chains()) {
+            for (std::shared_ptr<ir::BasicBlock> block : chain) {
+                remaining_blocks -= 1;
+                frame.enter_block(block, remaining_blocks == 1);
+                generate_basic_block(frame, block, debuginfo);
                 flush_locals(frame);
 
-            current_block = next_transition.exit;
+                // Load the parameters for the first inner block
+                if (block == procedure.entry_block)
+                    frame.load_parameters();
+            }
         }
 
         frame.end();
@@ -60,66 +61,6 @@ namespace toycc::arch::x86_64 {
         output.label(procedure.end_label());
     }
 
-    // Get the next block transition from the `current_block`
-    // Must be called *before* popping the current block from the `remaining_blocks` graph
-    ir::FlowGraph::Edge CodeGenerator::next_block_transition(const ir::Procedure& procedure, const ir::FlowGraph& remaining_blocks, std::shared_ptr<ir::BasicBlock> current_block) {
-        // Always prioritize fallthrough
-        std::optional<ir::FlowGraph::Edge> fallthrough = {};
-        std::optional<ir::FlowGraph::Edge> non_fallthrough = {};
-
-        for (const ir::FlowGraph::Edge& transition : remaining_blocks.out_edges(current_block)) {
-            if (transition.attr == ir::FlowType::FALLTHROUGH) {
-                fallthrough = transition;
-                break;
-            } else if (transition.exit != procedure.exit_block) {
-                non_fallthrough = transition;
-            }
-        }
-
-        // This block links to yet non-generated blocks -> proceed with those
-        if (fallthrough.has_value())
-            return fallthrough.value();
-        else if (non_fallthrough.has_value())
-            return non_fallthrough.value();
-
-        // No link to other blocks : find a source node regarding fallthrough.
-        // At least for now, to keep the semantics of conditional jumps, fallthrough links must always be represented by sequential basic blocks in the generated code
-        // Fallthrough links are the sequential order of the original code, so they make a directed acyclic subgraph of the flow graph
-        // So there is always a source node in that subgraph
-        for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes()) {
-            if (block == procedure.exit_block || block == current_block)
-                continue;
-
-            bool has_fallthrough_entry = false;
-            for (const ir::FlowGraph::Edge& entry_transition : remaining_blocks.in_edges(block)) {
-                if (entry_transition.attr == ir::FlowType::FALLTHROUGH) {
-                    has_fallthrough_entry = true;
-                    break;
-                }
-            }
-
-            // No fallthrough entry transition -> this is a source node of the fallthrough DAG
-            if (!has_fallthrough_entry)
-                return {current_block, block, ir::FlowType::UNRELATED};
-        }
-
-        // No other fallthrough paths remain -> this must be the end, transition to the exit block
-        if (remaining_blocks.nof_nodes() == 2) {  // {current_block, exit_block}
-            // Defensive check of the remaining blocks before blindly returning the exit block
-            bool found_current_block = false, found_exit_block = false;
-            for (std::shared_ptr<ir::BasicBlock> block : remaining_blocks.nodes()) {
-                if      (block == current_block)         found_current_block = true;
-                else if (block == procedure.exit_block)  found_exit_block    = true;
-            }
-
-            if (!found_current_block || !found_exit_block)
-                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The last basic block in the flow graph is not the exit block");
-
-            return {current_block, procedure.exit_block, ir::FlowType::UNRELATED};
-        }
-
-        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The fallthrough subgraph is not a DAG");
-    }
 
     void CodeGenerator::generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> uninitialized_globals;

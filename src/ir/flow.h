@@ -92,13 +92,13 @@ namespace toycc::ir {
     enum class FlowType {
         FALLTHROUGH,  // In order in the original code, fall directly from one block to the next without jump
         JUMP,         // Transition via any jump instruction (including `return`)
-        UNRELATED,    // Special value to handle transitions of unrelated parts of the graph during code generation
     };
 
     std::ostream& operator<< (std::ostream& stream, FlowType type);
 
     using FlowGraph = Graph<BasicBlock, FlowType>;
     using GlobalMap = std::unordered_map<std::shared_ptr<Declaration>, std::optional<Constant>>;
+    using FallthroughChain = std::vector<std::shared_ptr<BasicBlock>>;
 
     struct Procedure {
         public:
@@ -118,6 +118,7 @@ namespace toycc::ir {
             std::string dot_subgraph(std::stringstream& dot) const;
 
             std::unordered_set<std::shared_ptr<Declaration>> locals() const;
+            std::vector<FallthroughChain> fallthrough_chains() const;
 
         private:
             std::shared_ptr<size_t> unique_id;

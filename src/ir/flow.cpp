@@ -35,7 +35,6 @@ namespace toycc::ir {
         switch (type) {
             case FlowType::FALLTHROUGH:  stream << "FALLTHROUGH";  break;
             case FlowType::JUMP:         stream << "JUMP";         break;
-            case FlowType::UNRELATED:    stream << "UNRELATED";    break;
         }
         return stream;
     }
@@ -617,6 +616,51 @@ namespace toycc::ir {
         declarations.insert_range(parameters);
         return declarations;
     }
+
+    // To keep the semantics of conditional jumps, the basic block transitions must always follow fallthrough chains
+    // Fallthrough chains make a directed acyclic subgraph of the flow graph
+    // Moreover, a block can only fall through to at most one other block, so fallthrough chains are always non-branching paths
+    // Return the list of fallthrough chains, in the order they should be generated (entry chain first, exit chain last)
+    std::vector<FallthroughChain> Procedure::fallthrough_chains() const {
+        // Filter the flow graph to only keep the fallthrough transitions
+        FlowGraph fallthrough_graph;
+        for (std::shared_ptr<BasicBlock> block : blocks.nodes())
+            fallthrough_graph.add_node(block);
+
+        for (const FlowGraph::Edge& transition : blocks.edges())
+            if (transition.attr == FlowType::FALLTHROUGH)
+                fallthrough_graph.add_edge(transition);
+
+        // Then extract the sequential fallthrough chains
+        std::vector<FallthroughChain> chains;
+        for (std::shared_ptr<BasicBlock> block : fallthrough_graph.sources()) {
+            chains.emplace_back();
+            chains.back().push_back(block);
+
+            // Follow the chain
+            while (!fallthrough_graph.is_sink(block)) {
+                const FlowGraph::EdgeSet fallthrough_transitions = fallthrough_graph.out_edges(block);
+                if (fallthrough_transitions.size() != 1)
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Encountered a branching path in the fallthrough subgraph");
+
+                block = fallthrough_transitions.begin()->exit;
+                chains.back().push_back(block);
+            }
+        }
+
+        // Now properly order the chains : entry chain first, exit chain last, for now no particular order for the rest
+        auto chain_order = [&](const FallthroughChain& left, const FallthroughChain& right) {
+            if      (left.front() == entry_block)   return true;   // Entry chain first
+            else if (right.front() == entry_block)  return false;
+            else if (left.back() == exit_block)     return false;  // Exit chain last
+            else if (right.back() == exit_block)    return true;
+            else return true;  // No particular order for the rest
+        };
+
+        std::ranges::sort(chains, chain_order);
+        return chains;
+    }
+
 
     // Find which variables are procedure-level or basic block-level temporaries, and really live on exit of blocks
     void Procedure::resolve_intermediates() {

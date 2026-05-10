@@ -1,3 +1,4 @@
+#include "arch/x86_64/allocation.h"
 #include "config.h"
 #include "diagnostic.h"
 #include "ir/declaration.h"
@@ -219,33 +220,20 @@ namespace toycc::arch::x86_64 {
 
     // At the end of a basic block, flush all local variables to the stack for the next blocks to find
     void CodeGenerator::flush_locals(StackFrame& frame) {
-        flush_globals(frame);
+        const std::unordered_set<std::shared_ptr<ir::Declaration>> allocated_variables = frame.allocated_variables();
+        const std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_exit = frame.current_block->live_on_exit();
 
-        for (std::shared_ptr<ir::Declaration> variable : frame.allocated_variables()) {
+        for (std::shared_ptr<ir::Declaration> variable : unordered_set_intersection(allocated_variables, live_on_exit)) {
             const std::unordered_set<Location> current_locations = frame.locate(variable);
 
-            // Move local variables to their banked location (stack / memory), then clear other locations
+            // Clear non-canonical locations
             if (current_locations.contains(Location::constant))
                 frame.move(variable, Location::constant);
             else if (current_locations.contains(Location::stack))
                 frame.move(variable, Location::stack);
             else if (current_locations.contains(Location::memory))
                 frame.move(variable, Location::memory);
-
-            // Flush global variables to their static memory location
-            else if (variable->storage & ir::StorageClass::GLOBAL) {
-                if (variable->type->storage_category() == ir::TypeCategory::FUNCTION)
-                    continue;
-
-                transfer(frame, variable, Location::memory);
-                frame.move(variable, Location::memory);  // Clear other locations
-            }
-
-            // Flush local variables to the stack
-            else {
-                transfer(frame, variable, Location::stack);
-                frame.move(variable, Location::stack);
-            }
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Variable `{}` is live on exit but isn't in its canonical location upon exit", variable->name));
         }
     }
 }

@@ -215,7 +215,7 @@ namespace toycc::arch::x86_64 {
         // Emit the exit block : restore saved registers then return
         if (emit_instruction_label)
             code.label(get_instruction_label());  // Instruction label with the last index = valid until the end of the procedure (before popping the stack frame)
-        code.label(procedure.exit_block->label->name);
+
         for (Location reg : std::ranges::reverse_view(CALLEE_SAVED_REGISTERS))
             if (used_locations.contains(reg))
                 code.statement(std::format("popq {}", emit_operand(reg, 8)));
