@@ -619,6 +619,7 @@ namespace toycc::ir {
     // That is, the block doesn't use them, but they stay live from a previous block through to a following block
     std::unordered_set<std::shared_ptr<Declaration>> Procedure::live_through(std::shared_ptr<BasicBlock> block) const {
         std::unordered_set<std::shared_ptr<Declaration>> previous_variables;
+        previous_variables.insert_range(parameters);
         for (std::shared_ptr<BasicBlock> previous_block : blocks.can_reach(block))
             if (previous_block != block)
                 previous_variables.insert_range(previous_block->live_on_exit());

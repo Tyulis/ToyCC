@@ -158,8 +158,12 @@ namespace toycc::arch::x86_64 {
         if (current_block->label.has_value() && current_block->label->type != ir::LabelType::FUNCTION)
             label(current_block->label->name);
 
+        if (block == procedure.entry_block)
+            load_parameters();
+
         for (std::shared_ptr<ir::Declaration> live : procedure.live_on_entry(block))
-            copy(live, canonical_location(live));
+            if (!(block == procedure.entry_block && std::ranges::contains(procedure.parameters, live)))  // In the entry block, parameters are handled by load_parameters()
+                copy(live, canonical_location(live));
     }
 
     void StackFrame::end() {
