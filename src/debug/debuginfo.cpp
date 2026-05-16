@@ -148,12 +148,12 @@ namespace toycc::debug {
             case ir::TypeCategory::POINTER:  return add_pointer_type_entry(std::static_pointer_cast<ir::PointerType>(type_expression));
             case ir::TypeCategory::ARRAY:    return add_array_type_entry  (std::static_pointer_cast<ir::ArrayType>  (type_expression));
             case ir::TypeCategory::STRUCT:   return add_struct_type_entry (std::static_pointer_cast<ir::StructType> (type_expression));
+            case ir::TypeCategory::UNION:    return add_union_type_entry  (std::static_pointer_cast<ir::UnionType>  (type_expression));
 
             case ir::TypeCategory::VOID:     throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't generate debug info for `void`", type_expression->location);
 
             case ir::TypeCategory::BOOL:
             case ir::TypeCategory::FLOAT:
-            case ir::TypeCategory::UNION:
             case ir::TypeCategory::FUNCTION:
             case ir::TypeCategory::BUILTIN:
             case ir::TypeCategory::LABEL:
@@ -196,18 +196,34 @@ namespace toycc::debug {
         return entry;
     }
 
-    std::shared_ptr<StructTypeEntry> DebugInfo::add_struct_type_entry(std::shared_ptr<ir::StructType> type_expression) {
+    std::shared_ptr<CompoundTypeEntry> DebugInfo::add_struct_type_entry(std::shared_ptr<ir::StructType> type_expression) {
         std::optional<std::string> name = {};
         if (type_expression->name[0] != '.')  // Skip the generated name of anonymous structs
             name = type_expression->name;
 
         // Defense against recursive type : add the entry shell to the map first, then resolve the member types
         std::vector<std::shared_ptr<MemberEntry>> members;
-        auto entry = std::make_shared<StructTypeEntry> (type_expression->size(type_expression->location), name, members, type_expression->location);
+        auto entry = std::make_shared<CompoundTypeEntry> (Tag::DW_TAG_structure_type, type_expression->size(type_expression->location), name, members, type_expression->location);
         types[type_expression] = entry;
 
         for (const auto& [index, member] : std::ranges::enumerate_view(type_expression->members))
             entry->children.push_back(std::make_shared<MemberEntry>(member.name, type_expression->member_offset(index), type(member.type), member.location));
+
+        return entry;
+    }
+
+    std::shared_ptr<CompoundTypeEntry> DebugInfo::add_union_type_entry(std::shared_ptr<ir::UnionType> type_expression) {
+        std::optional<std::string> name = {};
+        if (type_expression->name[0] != '.')  // Skip the generated name of anonymous structs
+            name = type_expression->name;
+
+        // Defense against recursive type : add the entry shell to the map first, then resolve the member types
+        std::vector<std::shared_ptr<MemberEntry>> members;
+        auto entry = std::make_shared<CompoundTypeEntry> (Tag::DW_TAG_union_type, type_expression->size(type_expression->location), name, members, type_expression->location);
+        types[type_expression] = entry;
+
+        for (const auto& [index, member] : std::ranges::enumerate_view(type_expression->members))
+            entry->children.push_back(std::make_shared<MemberEntry>(member.name, 0, type(member.type), member.location));
 
         return entry;
     }

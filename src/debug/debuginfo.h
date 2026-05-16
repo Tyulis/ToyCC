@@ -59,10 +59,11 @@ namespace toycc::debug {
             TypeEntryMap types;
             std::unordered_map<std::shared_ptr<ir::Declaration>, std::shared_ptr<VariableEntry>> variables;
 
-            std::shared_ptr<TypeEntry>        add_type_entry        (std::shared_ptr<ir::Type>        type_expression);
-            std::shared_ptr<IntegerTypeEntry> add_integer_type_entry(std::shared_ptr<ir::IntegerType> type_expression);
-            std::shared_ptr<PointerTypeEntry> add_pointer_type_entry(std::shared_ptr<ir::PointerType> type_expression);
-            std::shared_ptr<ArrayTypeEntry>   add_array_type_entry  (std::shared_ptr<ir::ArrayType>   type_expression);
-            std::shared_ptr<StructTypeEntry>  add_struct_type_entry (std::shared_ptr<ir::StructType>  type_expression);
+            std::shared_ptr<TypeEntry>         add_type_entry        (std::shared_ptr<ir::Type>        type_expression);
+            std::shared_ptr<IntegerTypeEntry>  add_integer_type_entry(std::shared_ptr<ir::IntegerType> type_expression);
+            std::shared_ptr<PointerTypeEntry>  add_pointer_type_entry(std::shared_ptr<ir::PointerType> type_expression);
+            std::shared_ptr<ArrayTypeEntry>    add_array_type_entry  (std::shared_ptr<ir::ArrayType>   type_expression);
+            std::shared_ptr<CompoundTypeEntry> add_struct_type_entry (std::shared_ptr<ir::StructType>  type_expression);
+            std::shared_ptr<CompoundTypeEntry> add_union_type_entry  (std::shared_ptr<ir::UnionType>   type_expression);
     };
 }

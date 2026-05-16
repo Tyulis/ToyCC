@@ -151,7 +151,7 @@ namespace toycc::ir {
     }
 
     Operand PostProcessor::make_union_offset(std::shared_ptr<Type>, Operand index, std::shared_ptr<Scope>) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Union member access is not implemented", index.location);
+        return Constant {IntegerConstant(0), index.location, arch::DATAMODEL->offset_type};
     }
 
     // Compute an operand for flat_offset + index * size

@@ -85,11 +85,11 @@ namespace toycc::debug {
         virtual AbbreviationEntry emit(Encoder& encoder, DataSections& data) const override;
     };
 
-    struct StructTypeEntry : public TypeEntry {
+    struct CompoundTypeEntry : public TypeEntry {
         size_t byte_size;
         std::optional<std::string> name;
 
-        StructTypeEntry(size_t byte_size, std::optional<std::string> name, const std::vector<std::shared_ptr<MemberEntry>> members, CodeLocation code_location);
+        CompoundTypeEntry(Tag tag, size_t byte_size, std::optional<std::string> name, const std::vector<std::shared_ptr<MemberEntry>> members, CodeLocation code_location);
         virtual AbbreviationEntry emit(Encoder& encoder, DataSections& data) const override;
     };
 

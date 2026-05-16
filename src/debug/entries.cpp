@@ -104,13 +104,13 @@ namespace toycc::debug {
 
 
     // -------- StructTypeEntry
-    StructTypeEntry::StructTypeEntry(size_t byte_size, std::optional<std::string> name, const std::vector<std::shared_ptr<MemberEntry>> members, CodeLocation code_location)
-        : TypeEntry(Tag::DW_TAG_structure_type, code_location), byte_size(byte_size), name(name)
+    CompoundTypeEntry::CompoundTypeEntry(Tag tag, size_t byte_size, std::optional<std::string> name, const std::vector<std::shared_ptr<MemberEntry>> members, CodeLocation code_location)
+        : TypeEntry(tag, code_location), byte_size(byte_size), name(name)
     {
         children.append_range(members);
     }
 
-    AbbreviationEntry StructTypeEntry::emit(Encoder& encoder, DataSections& data) const {
+    AbbreviationEntry CompoundTypeEntry::emit(Encoder& encoder, DataSections& data) const {
         AbbreviationEntry abbreviation = new_abbreviation()
             .add(encoder, Attribute::DW_AT_byte_size, Form::DW_FORM_data8, byte_size)
             .location(encoder, data.filenos[code_location.filename], code_location.line, code_location.character);
