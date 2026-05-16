@@ -85,8 +85,7 @@ namespace toycc::semantic {
         if (!declaration.storage)  // No specific keyword used -> auto storage duration
             declaration.storage = StorageClass::AUTO;
 
-        const bool is_typedef = declaration.storage & StorageClass::TYPEDEF;
-        declaration.type = resolve_type_specifiers(type_specifiers, is_typedef);
+        declaration.type = resolve_type_specifiers(type_specifiers);
         if (qualifiers)
             declaration.type = QualifiedType::make(declaration.location, declaration.type, qualifiers);
         if (custom_alignment_bits.has_value())
@@ -116,7 +115,7 @@ namespace toycc::semantic {
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown specifier qualifier `{}`", specifier->getText()), locate(specifier));
         }
 
-        std::shared_ptr<Type> type = resolve_type_specifiers(type_specifiers, false);
+        std::shared_ptr<Type> type = resolve_type_specifiers(type_specifiers);
         if (qualifiers)
             type = QualifiedType::make(location, type, qualifiers);
         if (custom_alignment_bits.has_value())
@@ -162,14 +161,14 @@ namespace toycc::semantic {
         throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Alignment specifiers are not implemented", locate(context));
     }
 
-    std::shared_ptr<Type> SemanticAnalyzer::resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> type_specifiers, bool is_typedef) {
+    std::shared_ptr<Type> SemanticAnalyzer::resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> type_specifiers) {
         const CodeLocation location = locate(type_specifiers[0]);
 
         TypeIdentifier identifier = decode_type_specifiers(type_specifiers);
         std::shared_ptr<Type> type = resolve_type_without_error(identifier);
 
-        // Declare incomplete types in typedefs
-        if (type.get() == nullptr && is_typedef && (identifier.tag == TypeTag::STRUCT || identifier.tag == TypeTag::UNION || identifier.tag == TypeTag::ENUM)) {
+        // Declare incomplete types
+        if (type.get() == nullptr && (identifier.tag == TypeTag::STRUCT || identifier.tag == TypeTag::UNION || identifier.tag == TypeTag::ENUM)) {
             switch (identifier.tag) {
                 case TypeTag::STRUCT:  type = current_scope()->add_type(StructType::make(identifier.name, location, false));                                  break;
                 case TypeTag::UNION:   type = current_scope()->add_type(UnionType::make (identifier.name, location, false));                                  break;

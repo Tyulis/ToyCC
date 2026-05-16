@@ -62,7 +62,7 @@ namespace toycc::ir {
 
     std::shared_ptr<Type> Scope::add_type(std::shared_ptr<Type> type) {
         auto existing_type = types.find(type->identifier());
-        if (existing_type != types.end())
+        if (existing_type != types.end() && existing_type->second->complete())  // Incomplete type declarations may be overridden by the complete declaration
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Type `{}` is already defined in this scope", type->identifier().name), type->location)
                   .add_note(DiagnosticLevel::NOTE, "Already defined here", existing_type->second->location);
 

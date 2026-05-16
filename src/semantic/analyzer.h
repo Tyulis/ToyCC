@@ -74,7 +74,7 @@ namespace toycc::semantic {
             Flags<TypeQualifier> decode_type_qualifier(CParser::TypeQualifierContext* context);
             Flags<FunctionSpecifier> decode_function_specifier(CParser::FunctionSpecifierContext* context);
 
-            std::shared_ptr<Type> resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> specifiers, bool is_typedef);
+            std::shared_ptr<Type> resolve_type_specifiers(std::vector<CParser::TypeSpecifierContext*> specifiers);
             TypeIdentifier decode_type_specifiers(std::vector<CParser::TypeSpecifierContext*> specifiers);
             TypeIdentifier decode_struct_or_union_specifier(CParser::StructOrUnionSpecifierContext* context);
             std::vector<Member> decode_member_declaration(CParser::MemberDeclarationContext* context);

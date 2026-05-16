@@ -4,6 +4,7 @@
 
 #include "arch/datamodel.h"
 #include "diagnostic.h"
+#include "ir/type_expressions.h"
 #include "ir/declaration.h"
 
 namespace toycc::ir {
@@ -66,6 +67,9 @@ namespace toycc::ir {
 
         if (storage == StorageClass::TYPEDEF && function_spec)
             throw Diagnostic(DiagnosticLevel::ERROR, "Typedef declaration can't have function specifiers", location);
+
+        if (!type->complete())
+            throw Diagnostic(DiagnosticLevel::ERROR, std::format("Can't declare `{}` with incomplete type `{}`", name, type->repr()), location);
     }
 
     std::string Declaration::ir_code() const {
