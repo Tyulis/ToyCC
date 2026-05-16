@@ -24,7 +24,7 @@ namespace toycc::ir {
 
             // -------- Access block types (struct, array, ...) using pointers to members -> ir/postprocessor/blocks.cpp
             void split_blocks(std::shared_ptr<Scope> scope);
-            Operand split_operand_blocks(Operand operand, std::shared_ptr<Scope> scope);
+            Operand split_operand_blocks(Operand operand, std::shared_ptr<Scope> scope, const CodeLocation& location);
 
             // -------- Flatten all functions -> ir/postprocessor/descope.cpp
             void descope(std::shared_ptr<Scope> scope);

@@ -12,20 +12,20 @@ namespace toycc::ir {
                 split_blocks(statement.block);
             } else {
                 if (statement.output.has_value())
-                    statement.output = split_operand_blocks(*statement.output, scope);
+                    statement.output = split_operand_blocks(*statement.output, scope, statement.location);
 
                 for (auto it = statement.inputs.begin(); it != statement.inputs.end(); it++)
-                    *it = split_operand_blocks(*it, scope);
+                    *it = split_operand_blocks(*it, scope, statement.location);
             }
 
             scope->statements.push_back(statement);
         }
     }
 
-    Operand PostProcessor::split_operand_blocks(Operand operand, std::shared_ptr<Scope> scope) {
+    Operand PostProcessor::split_operand_blocks(Operand operand, std::shared_ptr<Scope> scope, const CodeLocation& location) {
         // First, split block accesses recursively in indices
         for (Operand& index : operand.indices)
-            split_operand_blocks(index, scope);
+            split_operand_blocks(index, scope, location);
 
         if (operand.indices.empty())
             return operand;
@@ -45,7 +45,7 @@ namespace toycc::ir {
                     std::shared_ptr<PointerType> pointer_type = PointerType::make(index.location, referenced_type);
                     std::shared_ptr<Declaration> member_pointer = declare_temporary(scope, pointer_type, index.location);
                     const Operand reference = Operand {block.value, block.location, {operand.indices.begin() + top_level, operand.indices.begin() + level + 1}};
-                    scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::ADDRESSOF, reference, member_pointer));
+                    scope->add_statement(Statement::make_unary_operation(location, StatementTag::ADDRESSOF, reference, member_pointer));
                     std::vector<Operand> new_indices(operand.indices.begin() + level + 1, operand.indices.end());
                     new_indices.insert(new_indices.begin(), Constant {IntegerConstant(0), index.location, arch::DATAMODEL->offset_type});
                     block = Operand {member_pointer, operand.location, new_indices};
