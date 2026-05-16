@@ -11,7 +11,7 @@ namespace toycc::ir {
         JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, RETURN, RETURN_VAL,
 
         // Unary operators
-        COPY, PLUS, MINUS, ADDRESSOF, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT, SIGN_EXTEND, ZERO_EXTEND,
+        COPY, PLUS, MINUS, ADDRESSOF, FLOAT_TO_FLOAT, INT_TO_FLOAT, FLOAT_TO_INT, SIGN_EXTEND, ZERO_EXTEND, NARROW,
 
         // Binary operators
         MUL, DIV, MOD,
@@ -19,8 +19,6 @@ namespace toycc::ir {
         LT, LE, GE, GT, EQ, NE,
         BITWISE_AND, BITWISE_XOR, BITWISE_OR, LSHIFT, ARITHMETIC_RSHIFT, LOGICAL_RSHIFT,
         LOGICAL_AND, LOGICAL_OR,
-
-        NARROW = COPY,  // For now, with only x86_64, it's the same
     };
 
     struct Scope;
