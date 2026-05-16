@@ -20,6 +20,7 @@ namespace toycc::debug {
             void copy(const AssemblyData& location, const std::string& label);
             void move(const AssemblyData& location, const std::string& label);
             void free(const std::string& label);
+            void free_location(const AssemblyData& location, const std::string& label);
             void set_default(const AssemblyData& location);
             Encoder& emit(Encoder& encoder) const;
 

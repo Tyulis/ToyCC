@@ -106,6 +106,14 @@ namespace toycc::ir {
                 declaration_index.erase(declaration);
             }
 
+            // Remove one location of this variable
+            void free_location(std::shared_ptr<Declaration> declaration, Location location) {
+                auto& location_index = allocations.template get<location_tag>();
+                auto it = location_index.find(location);
+                if (it->declaration == declaration)
+                    location_index.erase(it);
+            }
+
         protected:
             const std::unordered_set<Location> nonunique_locations;
 

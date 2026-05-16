@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ranges>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -49,5 +50,16 @@ namespace toycc {
         std::stringstream stream;
         stream << value;
         return stream.str();
+    }
+
+    template <typename R> requires std::ranges::input_range<R> && std::ranges::sized_range<R>
+    std::string join(R&& range, const std::string& delimiter) {
+        std::stringstream output;
+        for (const auto& [index, item] : std::ranges::enumerate_view(range)) {
+            output << item;
+            if (static_cast<size_t>(index) != std::ranges::size(range) - 1)
+                output << delimiter;
+        }
+        return output.str();
     }
 }

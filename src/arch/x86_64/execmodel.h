@@ -30,6 +30,9 @@ namespace toycc::arch::x86_64 {
     // Register indices for use in the DWARF location informations. Ref. https://gitlab.com/x86-psABIs/x86-64-ABI, section 3.7, table 3.36
     extern const std::unordered_map<Location, size_t> DWARF_REGISTER_MAPPING;
 
+    // Offset from the CFA (call frame address) to the stack frame base pointer (%rbp)
+    constexpr ssize_t CALL_FRAME_BASE_OFFSET = 16;  // Return address (8 bytes) + saved %rbp (8 bytes)
+
     struct GroupMatch {
        TranslationGroupTag group;
        std::vector<std::shared_ptr<ir::DependencyNode>> statements;

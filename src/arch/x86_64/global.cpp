@@ -48,6 +48,7 @@ namespace toycc::arch::x86_64 {
                 frame.enter_block(block, remaining_blocks == 1);
                 generate_basic_block(frame, block, debuginfo);
                 flush_locals(frame, procedure, block, block != chain.back());
+                frame.exit_block();
             }
         }
 

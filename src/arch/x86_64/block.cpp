@@ -5,6 +5,7 @@
 #include "ir/flow.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/execmodel.h"
+#include "arch/x86_64/transfer.h"
 #include "gen/execmodel/x86_64/group_matcher.h"
 #include "gen/execmodel/x86_64/translation_matcher.h"
 #include "gen/execmodel/x86_64/emission.h"

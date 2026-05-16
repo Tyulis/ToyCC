@@ -16,6 +16,7 @@ namespace toycc::config {
 
     namespace dev {
         extern bool with_comment_trace;           // Trace the code generation process in the generated assembly code
+        extern bool with_location_trace;          // Add the variable movements to the comment trace
         extern bool with_translation_trace;       // Trace the code generation process on the standard output
     }
 

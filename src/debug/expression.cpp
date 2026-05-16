@@ -93,12 +93,6 @@ namespace toycc::debug {
         return *this;
     }
 
-    Expression& Expression::stack_offset(ssize_t offset) {
-        int8(Operation::DW_OP_fbreg);
-        sleb128(offset);
-        return *this;
-    }
-
     Expression& Expression::call_frame_cfa() {
         int8(Operation::DW_OP_call_frame_cfa);
         return *this;

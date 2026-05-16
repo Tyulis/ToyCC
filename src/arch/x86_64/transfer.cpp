@@ -3,8 +3,8 @@
 
 #include "config.h"
 #include "diagnostic.h"
-#include "arch/x86_64/codegen.h"
 #include "arch/x86_64/execmodel.h"
+#include "arch/x86_64/transfer.h"
 #include "gen/execmodel/x86_64/location.h"
 #include "gen/execmodel/x86_64/transfer_matcher.h"
 #include "gen/execmodel/x86_64/transfer_emission.h"
@@ -126,15 +126,8 @@ namespace toycc::arch::x86_64 {
         if (value.variable.get() != nullptr)
             stream << value.variable->name;
 
-        if (value.operands.size() > 0) {
-            stream << "{";
-            for (const auto& [index, id] : std::ranges::enumerate_view(value.operands)) {
-                if (index > 0)
-                    stream << ", ";
-                stream << id;
-            }
-            stream << "}";
-        }
+        if (value.operands.size() > 0)
+            stream << "{" << join(value.operands, ", ") << "}";
 
         return stream;
     }
@@ -921,7 +914,7 @@ namespace toycc::arch::x86_64 {
             allocation_map.push_back(*node);
     }
 
-    void CodeGenerator::emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match) {
+    void emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> indirects;
         std::unordered_set<std::shared_ptr<ir::Declaration>> reads;
         find_indirects(indirects, reads, graph, match);
@@ -982,12 +975,12 @@ namespace toycc::arch::x86_64 {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "There are still non-matching operands in the translation match after transfers");
     }
 
-    void CodeGenerator::transfer(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location destination) {
+    void transfer(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location destination) {
         ir::Operand operand(variable, variable->location);
         transfer(frame, operand, destination);
     }
 
-    void CodeGenerator::transfer(StackFrame& frame, ir::Operand& operand, Location destination) {
+    void transfer(StackFrame& frame, ir::Operand& operand, Location destination) {
         const std::unordered_set<Location> current_locations = frame.locate(operand);
         if (current_locations.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Attempted a transfer on operand {} that has no location", operand.ir_code()), operand.location);

@@ -1,10 +1,11 @@
 #include "diagnostic.h"
 #include "gen/execmodel/x86_64/location.h"
+#include "ir/flow.h"
 #include "ir/declaration.h"
 #include "arch/x86_64/assembly.h"
-#include "arch/x86_64/execmodel.h"
-#include "ir/flow.h"
 #include "arch/x86_64/custom_targets.h"
+#include "arch/x86_64/execmodel.h"
+#include "arch/x86_64/transfer.h"
 
 namespace toycc::arch::x86_64 {
     // --------- ADDRESSOF : Necessary because a generated translation model would unnecessarily transfer the operand to the stack
@@ -75,26 +76,19 @@ namespace toycc::arch::x86_64 {
         const ir::Statement& statement = match.group_match.statements[0]->statement();
         std::shared_ptr<ir::Declaration> function = statement.inputs[0].declaration();
 
-        // Save caller-saved register contents
-        std::deque<std::pair<Location, std::shared_ptr<ir::Declaration>>> saved_registers;
-        for (Location saved_register : CALLER_SAVED_REGISTERS) {
-            // Don't save rax if there's a return value, the matcher reserved it for the output operand already and popping would overwrite the return value
-            if (statement.output.has_value() && saved_register == RETURN_VALUE_LOCATION)
-                continue;
-
-            std::shared_ptr<ir::Declaration> to_save = frame.content(saved_register);
-            if (to_save.get() != nullptr) {
-                frame.statement(std::format("pushq {}", emit_operand(saved_register, 8)));
-                saved_registers.emplace_front(saved_register, to_save);
-            }
-        }
+        // NOTE : The transfer step should flush all variables to memory regardless,
+        //        so for now no need to save caller-saved registers
 
         frame.statement(std::format("call {}", function->name));
 
-        // Pop the saved registers
-        for (const auto& [saved_register, to_restore] : saved_registers)
-            frame.statement(std::format("popq {}", emit_operand(saved_register, 8)));
+        // All variables in caller-saved registers are invalidated
+        for (Location reg : CALLER_SAVED_REGISTERS) {
+            std::shared_ptr<ir::Declaration> variable = frame.content(reg);
+            if (variable.get() != nullptr)
+                frame.free_location(variable, reg);
+        }
 
+        // Set the return value location
         if (statement.output.has_value())
             move_operand(frame, statement.output.value(), RETURN_VALUE_LOCATION);
     }

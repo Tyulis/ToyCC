@@ -420,6 +420,16 @@ namespace toycc::ir {
     }
 
 
+    // Get whether any statement in the block is a call
+    bool BasicBlock::has_calls() const {
+        for (std::shared_ptr<DependencyNode> node : dependencies.nodes())
+            if (node->is_statement())
+                if (node->statement().tag == ir::StatementTag::CALL)
+                    return true;
+        return false;
+    }
+
+
     // -------- Procedure
     Procedure::Procedure(const Statement& function, const GlobalMap& globals, std::shared_ptr<size_t> unique_id)
             : declaration(function.output->declaration()), location(function.location), unique_id(unique_id)
@@ -685,6 +695,16 @@ namespace toycc::ir {
 
         std::ranges::sort(chains, chain_order);
         return chains;
+    }
+
+
+    // Get whether this is a leaf procedure.
+    // A leaf procedure does no call, it's a leaf of the program call tree
+    bool Procedure::is_leaf() const {
+        for (std::shared_ptr<BasicBlock> block : blocks.nodes())
+            if (block->has_calls())
+                return false;
+        return true;
     }
 
 

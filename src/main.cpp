@@ -61,10 +61,12 @@ void read_config(const boost::program_options::variables_map& options) {
         toycc::config::debug::with_default_location = true;
 
     // Developer options
-    if (options.count("vtranslation-trace"))
-        toycc::config::dev::with_translation_trace = true;
     if (options.count("vcomment-trace"))
         toycc::config::dev::with_comment_trace = true;
+    if (options.count("vlocation-trace"))
+        toycc::config::dev::with_location_trace = true;
+    if (options.count("vtranslation-trace"))
+        toycc::config::dev::with_translation_trace = true;
 
     // Config dump
     if (options.count("vdump-config")) {
@@ -105,6 +107,7 @@ int main(int argc, char** argv) {
     boost::program_options::options_description dev_options("Compiler developer options");
     dev_options.add_options()("vtranslation-trace", "Log all translation model steps")
                              ("vcomment-trace",     "Add comments with the translation process in the assembly code output")
+                             ("vlocation-trace",    "Add variable movements to the location trace")
                              ("vdump-config",       "Begin by printing the compiler config");
 
     boost::program_options::options_description all_options;

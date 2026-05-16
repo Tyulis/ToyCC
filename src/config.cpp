@@ -33,12 +33,14 @@ namespace toycc::config {
 
     namespace dev {
         bool with_comment_trace = false;
+        bool with_location_trace = false;
         bool with_translation_trace = false;
 
         std::string dump() {
             std::stringstream output;
             output << std::boolalpha;
             output << "- with_comment_trace : " << with_comment_trace << "\n";
+            output << "- with_location_trace : " << with_location_trace << "\n";
             output << "- with_translation_trace : " << with_translation_trace << "\n";
             return output.str();
         }

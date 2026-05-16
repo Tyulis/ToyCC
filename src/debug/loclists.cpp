@@ -27,7 +27,7 @@ namespace toycc::debug {
 
             range.end_label = label;
             ranges.push_back(range);
-            freed_locations.insert(location);
+            freed_locations.insert(current_location);
         }
 
         for (const AssemblyData& current_location : freed_locations)
@@ -47,6 +47,17 @@ namespace toycc::debug {
         current_locations.clear();
     }
 
+    // Unset one location at the given end `label`
+    void LocationList::free_location(const AssemblyData& location, const std::string& label) {
+        auto it = current_locations.find(location);
+        if (it != current_locations.end()) {
+            LocationRange& range = it->second;
+            range.end_label = label;
+            ranges.push_back(range);
+            current_locations.erase(it);
+        }
+    }
+
     void LocationList::set_default(const AssemblyData& location) {
         default_location = location;
     }
@@ -56,6 +67,9 @@ namespace toycc::debug {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to encode a location list with current locations");
 
         for (const LocationRange& range : ranges) {
+            if (range.start_label.value() == range.end_label.value())
+                continue;  // Zero-length range, don't emit it
+
             encoder.int8(LocationListEntryType::DW_LLE_start_end);
             encoder.address(range.start_label.value());
             encoder.address(range.end_label.value());

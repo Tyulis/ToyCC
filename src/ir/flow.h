@@ -81,6 +81,8 @@ namespace toycc::ir {
             std::unordered_set<std::shared_ptr<Declaration>> live_on_entry() const;
             std::unordered_set<std::shared_ptr<Declaration>> live_on_exit() const;
 
+            bool has_calls() const;
+
         private:
             std::shared_ptr<size_t> unique_id;
             std::unordered_map<std::shared_ptr<Declaration>, std::shared_ptr<DependencyNode>> last_modification;
@@ -121,6 +123,8 @@ namespace toycc::ir {
             std::unordered_set<std::shared_ptr<Declaration>> live_on_entry(std::shared_ptr<BasicBlock> block) const;
             std::unordered_set<std::shared_ptr<Declaration>> live_on_exit(std::shared_ptr<BasicBlock> block) const;
             std::vector<FallthroughChain> fallthrough_chains() const;
+
+            bool is_leaf() const;
 
         private:
             std::shared_ptr<size_t> unique_id;

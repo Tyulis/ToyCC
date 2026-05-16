@@ -37,13 +37,6 @@ namespace toycc::arch::x86_64 {
             void flush_globals(StackFrame& frame);
             void flush_locals(StackFrame& frame, const ir::Procedure& procedure, std::shared_ptr<ir::BasicBlock> current_block, bool is_fallthrough);
 
-            // -------- Transfer management -> arch/x86_64/transfer.cpp
-            void emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match);
-
-            void transfer(StackFrame& frame, std::shared_ptr<ir::Declaration> variable, Location destination);
-            void transfer(StackFrame& frame, ir::Operand& operand, Location destination);
-
-
             // -------- Symbol management -> arch/x86_64/symbols.cpp
             size_t unique_id = 0;
             std::string anonymous_identifier();

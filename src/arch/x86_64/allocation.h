@@ -23,6 +23,7 @@ namespace toycc::arch::x86_64 {
             void move(std::shared_ptr<ir::Declaration> declaration, Location location);
             void copy(std::shared_ptr<ir::Declaration> declaration, Location location);
             void free(std::shared_ptr<ir::Declaration> declaration);
+            void free_location(std::shared_ptr<ir::Declaration> declaration, Location location);
 
             std::unordered_set<Location> locate(const ir::Operand& operand) const;
             std::optional<Location> allocate(const std::unordered_set<Location>& locations) const;
@@ -33,9 +34,11 @@ namespace toycc::arch::x86_64 {
             bool any_free(const std::unordered_set<Location>& locations) const;
 
             std::shared_ptr<ir::Declaration> declare_intermediate(std::shared_ptr<ir::Type> type, CodeLocation code_location);
+            bool is_intermediate(std::shared_ptr<ir::Declaration> variable) const;
             void flush_intermediates();
             void load_parameters();
             void enter_block(std::shared_ptr<ir::BasicBlock> block, bool is_last);
+            void exit_block();
             void end();
 
             void label(std::string name);
@@ -67,6 +70,7 @@ namespace toycc::arch::x86_64 {
 
             bool is_debug_variable(std::shared_ptr<ir::Declaration> declaration);
             debug::AssemblyData debug_location(std::shared_ptr<ir::Declaration> declaration, Location location);
+            void debug_clear_location(Location location);
     };
 
     CodeOutput& operator<< (CodeOutput& output, const StackFrame& code);

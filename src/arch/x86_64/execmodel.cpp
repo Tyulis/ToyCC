@@ -199,29 +199,18 @@ namespace toycc::arch::x86_64 {
             case OperandMatch::KO:                 stream << "KO";  break;
         }
 
-        if (match.locations == toycc::execmodel::x86_64::ALL_LOCATIONS) {
+        if (match.locations == toycc::execmodel::x86_64::ALL_LOCATIONS)
             stream << "(any)";
-        } else if (!match.locations.empty()) {
-            stream << "(";
-            for (const auto& [index, location] : std::ranges::enumerate_view(match.locations)) {
-                if (index > 0)  stream << ", ";
-                stream << location;
-            }
-            stream << ")";
-        }
+        else if (!match.locations.empty())
+            stream << "(" << join(match.locations, ", ") << ")";
+
         return stream;
     }
 
     std::ostream& operator<< (std::ostream& stream, const TransferMatch& match) {
         stream << match.transfer;
-        if (!match.source_locations.empty()) {
-            stream << " from (";
-            for (const auto& [index, location] : std::ranges::enumerate_view(match.source_locations)) {
-                if (index > 0)  stream << ", ";
-                stream << location;
-            }
-            stream << ")";
-        }
+        if (!match.source_locations.empty())
+            stream << " from (" << join(match.source_locations, ", ") << ")";
         return stream;
     }
 
@@ -229,14 +218,7 @@ namespace toycc::arch::x86_64 {
         stream << "{";
 
         if (!match.input.empty()) {
-            stream << "input: [";
-            for (const auto& [index, operand] : std::ranges::enumerate_view(match.input)) {
-                stream << operand;
-                if (static_cast<size_t>(index) != match.input.size() - 1)
-                    stream << ", ";
-            }
-
-            stream << "]";
+            stream << "input: [" << join(match.input, ", ") << "]";
             if (match.output.has_value())
                 stream << ", ";
         }
