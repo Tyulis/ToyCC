@@ -1,8 +1,8 @@
 #include <memory>
 #include <unordered_map>
 
-#include "ir/postprocessor.h"
 #include "ir/statement.h"
+#include "ir/postprocessor/postprocessor.h"
 #include "util/strings.h"
 
 namespace toycc::ir {

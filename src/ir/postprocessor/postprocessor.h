@@ -45,6 +45,9 @@ namespace toycc::ir {
             std::unordered_map<std::shared_ptr<Declaration>, std::string> extract_string_literals(std::shared_ptr<Scope> scope);
             void extract_string_literals(std::unordered_map<std::shared_ptr<Declaration>, std::string>& literals, Operand& operand);
 
+            // -------- Mark global variables with StorageClass::GLOBAL -> ir/postprocessor/mark_globals.cpp
+            void mark_globals(std::shared_ptr<Scope> global_scope);
+
             // -------- State management -> ir/postprocessor/state.cpp
             std::string anonymous_identifier();
             std::string anonymous_label();

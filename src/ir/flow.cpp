@@ -743,10 +743,8 @@ namespace toycc::ir {
         : working_directory(working_directory), filename(filename), unique_id(std::make_shared<size_t>(0))
     {
         // After descoping, only procedures and static declarations remain
-        for (std::shared_ptr<Declaration> declaration : global_scope->locals_list()) {
-            declaration->storage = StorageClass::GLOBAL;
+        for (std::shared_ptr<Declaration> declaration : global_scope->locals_list())
             globals[declaration] = {};
-        }
 
         for (const Statement& statement : global_scope->statements) {
             switch (statement.tag) {
@@ -769,6 +767,8 @@ namespace toycc::ir {
                     found->second = statement.inputs[0].constant();
                     break;
                 }
+
+
 
                 default:  throw Diagnostic(DiagnosticLevel::ERROR, std::format("{} can't be a global statement", statement.ir_code()), statement.location);
             }

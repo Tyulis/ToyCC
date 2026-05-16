@@ -1,4 +1,4 @@
-#include "ir/postprocessor.h"
+#include "ir/postprocessor/postprocessor.h"
 
 namespace toycc::ir {
     std::string PostProcessor::anonymous_identifier() {

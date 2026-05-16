@@ -1,7 +1,7 @@
 #include "diagnostic.h"
 #include "arch/datamodel.h"
-#include "ir/postprocessor.h"
 #include "ir/type_expressions.h"
+#include "ir/postprocessor/postprocessor.h"
 
 namespace toycc::ir {
     // Process pointer dereferences and array indices to flatten multi-dimensional and dynamic indexing, and resolve all array indices to static offsets

@@ -1,4 +1,4 @@
-#include "ir/postprocessor.h"
+#include "ir/postprocessor/postprocessor.h"
 
 namespace toycc::ir {
     void PostProcessor::split_indirections(std::shared_ptr<Scope> scope) {

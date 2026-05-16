@@ -21,6 +21,9 @@ NOF_TESTS_KO=0
 echo "" > ${TEST_SUMMARY}
 echo "" > ${TEST_LOG}
 
+MODE=$1
+shift
+
 for testsuite_dir in ${TESTSUITE_DIRS} ; do
     rm -f ${testsuite_dir}/*.bin
     rm -f ${testsuite_dir}/*.out
@@ -37,9 +40,9 @@ for testsuite_dir in ${TESTSUITE_DIRS} ; do
 
         NOF_TESTS_RUN=$(($NOF_TESTS_RUN + 1))
 
-        case $1 in
+        case $MODE in
             --parse-ir|--process-ir|--flow)
-                CMD="$CC $1 -o ${test_compiled} ${test_source}"
+                CMD="$CC ${MODE} $@ -o ${test_compiled} ${test_source}"
                 echo "" >> ${TEST_LOG}
                 echo ${CMD} >> ${TEST_LOG}
                 if ${CMD} >> ${TEST_LOG} 2>&1 && [ -f ${test_compiled} ] ; then
@@ -52,11 +55,8 @@ for testsuite_dir in ${TESTSUITE_DIRS} ; do
                 fi
                 ;;
 
-            --compile|--debug)
-            if [ "$1" == "--debug" ]; then
-                    debug_flag="-g"
-                fi
-                CMD="$CC ${debug_flag} -o ${test_compiled} ${test_source}"
+            --compile)
+                CMD="$CC $@ -o ${test_compiled} ${test_source}"
                 echo "" >> ${TEST_LOG}
                 echo ${CMD} >> ${TEST_LOG}
                 if ! ${CMD} >> ${TEST_LOG} 2>&1 || ! [ -f ${test_compiled} ] ; then

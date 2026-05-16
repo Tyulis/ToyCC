@@ -112,8 +112,9 @@ add_executable(${PROJECT_NAME}
 	src/ir/postprocessor/blocks.cpp
 	src/ir/postprocessor/dereference.cpp
 	src/ir/postprocessor/descope.cpp
-	src/ir/postprocessor/exports.cpp
 	src/ir/postprocessor/indirection.cpp
+	src/ir/postprocessor/mark_globals.cpp
+	src/ir/postprocessor/postprocessor.cpp
 	src/ir/postprocessor/state.cpp
 	src/ir/postprocessor/strings.cpp
 

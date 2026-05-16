@@ -16,7 +16,7 @@
 #include "diagnostic.h"
 #include "preprocess.h"
 #include "ir/scope.h"
-#include "ir/postprocessor.h"
+#include "ir/postprocessor/postprocessor.h"
 
 #include "util/log.h"
 #include "util/strings.h"
