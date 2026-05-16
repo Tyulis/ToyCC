@@ -46,3 +46,6 @@ compile_commands.json
 # Python stuff
 *.pyc
 __pycache__/
+
+# Test results
+test/*.bin

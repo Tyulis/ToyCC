@@ -1,3 +1,5 @@
+// This checks deep function calls, recursivity, CFI
+
 int a(int y) {
     return y + 1;
 }
@@ -9,6 +11,6 @@ int b(int x, int y) {
         return a(x);
 }
 
-int main(int argc, char* argv) {
-    return b(10, 2) + a(0);
+int main() {
+    return b(10, 2) - a(65);
 }

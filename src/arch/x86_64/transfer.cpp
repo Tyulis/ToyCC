@@ -914,6 +914,7 @@ namespace toycc::arch::x86_64 {
             allocation_map.push_back(*node);
     }
 
+    // Allocate operand locations and emit all necessary transfers before emitting the translation `match`
     void emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> indirects;
         std::unordered_set<std::shared_ptr<ir::Declaration>> reads;

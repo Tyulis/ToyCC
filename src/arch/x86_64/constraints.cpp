@@ -2,6 +2,7 @@
 #include "gen/execmodel/x86_64/location.h"
 
 namespace toycc::arch::x86_64 {
+    // Compute how many uses of the current value of `input_operand` remain after this match (excluding the current group match)
     static ssize_t get_remaining_liveness(const ir::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match) {
         const std::unordered_set<std::shared_ptr<ir::DependencyNode>> group_statements(group_match.statements.begin(), group_match.statements.end());
         std::shared_ptr<ir::Declaration> input_variable = input_operand.declaration();
@@ -43,7 +44,7 @@ namespace toycc::arch::x86_64 {
         ssize_t remaining_liveness = get_remaining_liveness(graph, input_operand, group_match);
 
         std::unordered_set<Location> current_locations = frame.locate(input_operand);
-        remaining_liveness -= current_locations.size();
+        remaining_liveness -= (current_locations.size() - 1);
 
         // Still live / only on the stack so can't overwrite
         if (remaining_liveness > 0 || current_locations.empty())
