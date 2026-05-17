@@ -1,3 +1,4 @@
+#include "config.h"
 #include "diagnostic.h"
 #include "flow/unit.h"
 
@@ -19,7 +20,7 @@ namespace toycc::flow {
             switch (statement.tag) {
                 case ir::StatementTag::FUNCTION: {
                     std::shared_ptr<ir::Declaration> function = statement.output->declaration();
-                    procedures[function->name] = Procedure {statement, globals, unique_id};
+                    procedures[function->name] = Procedure {statement, {}, unique_id};
                     break;
                 }
 
@@ -53,6 +54,17 @@ namespace toycc::flow {
                     global_block->add_statement(statement, global_decls);
             }
         }
+    }
+
+
+    // -------- Optimization passes
+    // Apply the graph optimization passes enabled in the config
+    void TranslationUnit::optimize() {
+        // The split-intermediates pass is useful to optimize constant folding
+        if (config::optimization::split_intermediates)
+            opt_split_intermediates();
+        if (config::optimization::constant_folding)
+            opt_constant_folding();
     }
 
 

@@ -1,4 +1,3 @@
-#include "config.h"
 #include "diagnostic.h"
 #include "flow/procedure.h"
 #include "ir/type_expressions.h"
@@ -13,7 +12,7 @@ namespace toycc::flow {
     }
 
     // -------- Procedure
-    Procedure::Procedure(const ir::Statement& function, const GlobalMap& globals, std::shared_ptr<size_t> unique_id)
+    Procedure::Procedure(const ir::Statement& function, const ConstantMap& globals, std::shared_ptr<size_t> unique_id)
     : declaration(function.output->declaration()), location(function.location), unique_id(unique_id)
     {
         if (function.tag != ir::StatementTag::FUNCTION)
@@ -60,7 +59,7 @@ namespace toycc::flow {
         return block_nodes.begin()->second;
     }
 
-    void Procedure::build_flow_graph(std::shared_ptr<ir::Scope> scope, const GlobalMap& globals) {
+    void Procedure::build_flow_graph(std::shared_ptr<ir::Scope> scope, const ConstantMap& globals) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> defined_decls;
         for (const auto& [declaration, value] : globals)
             if (declaration->type->category != ir::TypeCategory::FUNCTION)
@@ -314,9 +313,6 @@ namespace toycc::flow {
                 if (reachable.get() != block.get())
                     not_live_on_exit = unordered_set_difference(not_live_on_exit, live_on_entry[reachable]);
             block->not_live_on_exit(not_live_on_exit);
-
-            if (toycc::config::optimization::split_intermediates)
-                block->split_intermediate_values();
         }
     }
 }

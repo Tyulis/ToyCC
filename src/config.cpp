@@ -21,12 +21,28 @@ namespace toycc::config {
     }
 
     namespace optimization {
-        bool split_intermediates = true;
+        bool split_intermediates = false;
+        bool constant_folding = false;
+
+        void set_level(size_t level) {
+            // Everything starts at false, work our way down the levels
+            switch (level) {
+                default:
+                case 1:
+                    split_intermediates = true;
+                    constant_folding = true;
+                    [[fallthrough]];
+
+                case 0:
+                    break;
+            }
+        }
 
         std::string dump() {
             std::stringstream output;
             output << std::boolalpha;
             output << "- split_intermediates : " << split_intermediates << "\n";
+            output << "- constant_folding : " << constant_folding << "\n";
             return output.str();
         }
     }

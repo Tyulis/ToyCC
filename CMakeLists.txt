@@ -88,7 +88,10 @@ add_executable(${PROJECT_NAME}
 	src/debug/loclists.cpp
 	src/debug/sections.cpp
 
+	src/flow/optimization/constant_folding.cpp
+	src/flow/optimization/split_intermediates.cpp
 	src/flow/block.cpp
+	src/flow/dependencies.cpp
 	src/flow/procedure.cpp
 	src/flow/unit.cpp
 

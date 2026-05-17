@@ -562,5 +562,27 @@ namespace toycc {
 
                 return order;
             }
+
+            // Get a list of nodes in any order that could come from a breadth-first search from the given start nodes
+            std::vector<std::shared_ptr<Node>> breadth_first_order(const NodeSet& start) const {
+                std::vector<std::shared_ptr<Node>> order;
+                auto callback = [&](std::shared_ptr<Node> node) {
+                    order.push_back(node);
+                };
+
+                breadth_first_search(start, callback);
+                return order;
+            }
+
+            // Get a list of nodes in any order that could come from a breadth-first search from the given start node
+            std::vector<std::shared_ptr<Node>> breadth_first_order(std::shared_ptr<Node> start) const {
+                std::unordered_set<std::shared_ptr<Node>> start_set = {start};
+                return breadth_first_order({start});
+            }
+
+            // Get a list of nodes in any order that could come from a breadth-first search from all source nodes
+            std::vector<std::shared_ptr<Node>> breadth_first_order() const {
+                return breadth_first_order(sources());
+            }
     };
 }

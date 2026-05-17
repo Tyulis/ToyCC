@@ -28,4 +28,13 @@ namespace toycc {
                 result.insert(element);
         return result;
     }
+
+    // Check whether `left` is included in `right` (i.e all elements of `left` are found in `right`)
+    template <typename T>
+    inline bool unordered_set_included(const std::unordered_set<T>& left, const std::unordered_set<T>& right) {
+        for (const T& element : left)
+            if (!right.contains(element))
+                return false;
+        return true;
+    }
 }

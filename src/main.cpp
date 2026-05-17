@@ -1,4 +1,5 @@
 #include <boost/program_options.hpp>
+#include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/errors.hpp>
 #include <boost/program_options/positional_options.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -43,10 +44,18 @@ constexpr static std::string DEFAULT_OBJECT_FILE_NAME = "a.out";
 
 void read_config(const boost::program_options::variables_map& options) {
     // Optimization options
+    if (options.count("O0"))
+        toycc::config::optimization::set_level(0);
+    else if (options.count("O1"))
+        toycc::config::optimization::set_level(1);
     if (options.count("fsplit-intermediates"))
         toycc::config::optimization::split_intermediates = true;
     else if (options.count("fno-split-intermediates"))
         toycc::config::optimization::split_intermediates = false;
+    if (options.count("fconstant-folding"))
+        toycc::config::optimization::constant_folding = true;
+    else if (options.count("fno-constant-folding"))
+        toycc::config::optimization::constant_folding = false;
 
     // Debug options
     if (options.count("debug"))
@@ -102,8 +111,12 @@ int main(int argc, char** argv) {
                                ("gdefault-location", "Emit more reliable default location entries (not supported by current GDB)");
 
     boost::program_options::options_description optimization_options("Optimization options");
-    optimization_options.add_options()("fsplit-intermediates",    "Split intermediate values in basic blocks")
-                                      ("fno-split-intermediates", "Don't split intermediate values in basic blocks");
+    optimization_options.add_options()("O0",                      "Don't apply any optimization pass")
+                                      ("O1",                      "Apply basic optimizations")
+                                      ("fsplit-intermediates",    "Split intermediate values in basic blocks")
+                                      ("fno-split-intermediates", "Don't split intermediate values in basic blocks")
+                                      ("fconstant-folding",       "Apply constant folding to function code")
+                                      ("fno-constant-folding",    "Don't apply constant folding to function code");
 
     boost::program_options::options_description dev_options("Compiler developer options");
     dev_options.add_options()("vtranslation-trace", "Log all translation model steps")
@@ -120,7 +133,17 @@ int main(int argc, char** argv) {
     boost::program_options::variables_map options;
 
     try {
-        boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(all_options).positional(positional).run(), options);
+        boost::program_options::command_line_parser parser = boost::program_options::command_line_parser(argc, argv)
+            .options(all_options)
+            .positional(positional)
+            .style(boost::program_options::command_line_style::allow_short
+                 | boost::program_options::command_line_style::allow_long
+                 | boost::program_options::command_line_style::allow_sticky
+                 | boost::program_options::command_line_style::allow_long_disguise
+                 | boost::program_options::command_line_style::allow_dash_for_short
+                 | boost::program_options::command_line_style::short_allow_next | boost::program_options::command_line_style::short_allow_adjacent
+                 | boost::program_options::command_line_style::long_allow_next  | boost::program_options::command_line_style::long_allow_adjacent);
+        boost::program_options::store(parser.run(), options);
         boost::program_options::notify(options);
     } catch (boost::program_options::error const& exc) {
         std::cerr << exc.what() << std::endl;
@@ -211,6 +234,7 @@ int main(int argc, char** argv) {
 
         // -------- Flow analysis
         toycc::flow::TranslationUnit unit(processed_ir, std::filesystem::current_path().string(), input_file_name);
+        unit.optimize();
         if (target_step == SequenceStep::FLOW) {
             output_stream.get() << unit.dot_graph() << std::endl;
             return 0;

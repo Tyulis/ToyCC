@@ -15,7 +15,6 @@ namespace toycc::flow {
     std::ostream& operator<< (std::ostream& stream, FlowType type);
 
     using FlowGraph = Graph<BasicBlock, FlowType>;
-    using GlobalMap = std::unordered_map<std::shared_ptr<ir::Declaration>, std::optional<ir::Constant>>;
     using FallthroughChain = std::vector<std::shared_ptr<BasicBlock>>;
 
     struct Procedure {
@@ -28,7 +27,7 @@ namespace toycc::flow {
             std::vector<std::shared_ptr<ir::Declaration>> parameters;
 
             Procedure() = default;
-            Procedure(const ir::Statement& function, const GlobalMap& globals, std::shared_ptr<size_t> unique_id);
+            Procedure(const ir::Statement& function, const ConstantMap& globals, std::shared_ptr<size_t> unique_id);
 
             std::string start_label() const;
             std::string end_label() const;
@@ -43,10 +42,14 @@ namespace toycc::flow {
 
             bool is_leaf() const;
 
+            // NOTE : Optimization passes have all levels (unit, procedure, block) in a single separate file
+            void opt_split_intermediates();                                  // -> flow/optimization/split_intermediates.cpp
+            void opt_constant_folding(const ConstantMap& global_constants);  // -> flow/optimization/constant_folding.cpp
+
         private:
             std::shared_ptr<size_t> unique_id;
 
-            void build_flow_graph(std::shared_ptr<ir::Scope> scope, const GlobalMap& globals);
+            void build_flow_graph(std::shared_ptr<ir::Scope> scope, const ConstantMap& globals);
             void resolve_intermediates();
     };
 }

@@ -1,163 +1,7 @@
 #include "diagnostic.h"
 #include "flow/block.h"
-#include "util/strings.h"
 
 namespace toycc::flow {
-    static std::string dependency_type_repr(DependencyType type) {
-        switch (type) {
-            case DependencyType::READ:          return "READ";
-            case DependencyType::WRITE:         return "WRITE";
-            case DependencyType::CALL:          return "CALL";
-            case DependencyType::DEREFERENCE:   return "DEREFERENCE";
-            case DependencyType::LIVE_ON_EXIT:  return "LIVE_ON_EXIT";
-        }
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown dependency type");
-    }
-
-    static std::string operand_group_repr(OperandGroup type) {
-        switch (type) {
-            case OperandGroup::INDIRECT:  return "INDIRECT";
-            case OperandGroup::INPUT:     return "INPUT";
-            case OperandGroup::OUTPUT:    return "OUTPUT";
-        }
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Unknown operand group");
-    }
-
-    static std::string dependency_repr(const Dependency& dependency) {
-        std::stringstream repr;
-        repr << "(";
-        size_t type_index = 0;
-        for (DependencyType type : dependency.type) {
-            if (type_index++ > 0)
-                repr << "|";
-            repr << dependency_type_repr(type);
-        }
-
-        repr << ") " << operand_group_repr(dependency.operand_group);
-        if (dependency.operand_group == OperandGroup::INPUT)
-            repr << "[" << dependency.operand_index << "]";
-        return repr.str();
-    }
-
-    std::string dot_graph(const DependencyGraph& graph, std::string cluster_name) {
-        std::stringstream dot;
-        dot << "digraph " << cluster_name << " {\n";
-        size_t node_index = 0;
-        std::unordered_map<std::shared_ptr<DependencyNode>, std::string> node_names;
-        for (std::shared_ptr<DependencyNode> node : graph.nodes()) {
-            const std::string node_name = node_names[node] = std::format("{}_{}", cluster_name, node_index++);
-            if (node->is_statement())
-                dot << "    " << node_name << " [label=\"" << node->statement().ir_code() << "\" shape=box];\n";
-            else if (node->is_value())
-                dot << "    " << node_name << " [label=\"" << node->declaration()->name << "\" shape=ellipse];\n";
-            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
-        }
-
-        for (const DependencyGraph::Edge& edge : graph.edges())
-            dot << "    " << node_names[edge.entry] << " -> " << node_names[edge.exit] << " [label=\"" << dependency_repr(edge.attr) << "\"];\n";
-
-        dot << "}";
-        return dot.str();
-    }
-
-    DependencyMatrix to_dependency_matrix(const DependencyGraph& graph) {
-        DependencyMatrix result;
-        std::unordered_map<std::shared_ptr<DependencyNode>, size_t> value_indices;
-        for (std::shared_ptr<DependencyNode> node : graph.nodes()) {
-            if (node->is_statement()) {
-                result.statements.push_back(node);
-            } else if (node->is_value()) {
-                value_indices[node] = result.values.size();
-                result.values.push_back(node);
-            }
-        }
-
-        result.matrix = arma::imat(result.statements.size(), result.values.size(), arma::fill::zeros);
-        for (const auto& [row, statement_node] : std::ranges::enumerate_view(result.statements)) {
-            for (const DependencyGraph::Edge& input : graph.in_edges(statement_node))
-                if (input.attr.operand_group == OperandGroup::INPUT && (input.attr.type & DependencyType::READ))
-                    result.matrix(row, value_indices[input.entry]) = 1 + input.attr.operand_index;
-
-            for (const DependencyGraph::Edge& output : graph.out_edges(statement_node))
-                if (output.attr.operand_group == OperandGroup::OUTPUT && (output.attr.type & DependencyType::WRITE))
-                    result.matrix(row, value_indices[output.exit]) = -(1 + output.attr.operand_index);
-        }
-
-        return result;
-    }
-
-    std::ostream& operator<< (std::ostream& stream, const DependencyMatrix& graph) {
-        size_t statement_width = 0;
-        for (std::shared_ptr<DependencyNode> statement : graph.statements)
-            statement_width = std::max(statement_width, statement->statement().ir_code().size());
-        statement_width += 1;
-
-        stream << justify_right("", statement_width);
-        std::vector<size_t> column_widths;
-        for (std::shared_ptr<DependencyNode> value : graph.values) {
-            const std::string name = value->declaration()->name;
-            const size_t column_width = std::max(size_t(2), name.size()) + 1;
-            column_widths.push_back(column_width);
-            stream << center(name, column_width);
-        }
-        stream << "\n";
-
-        for (size_t row = 0; row < graph.matrix.n_rows; row++) {
-            stream << justify_right(graph.statements[row]->statement().ir_code(), statement_width);
-            for (size_t col = 0; col < graph.matrix.n_cols; col++)
-                stream << center(std::to_string(graph.matrix(row, col)), column_widths[col]);
-            stream << "\n";
-        }
-
-        return stream;
-    }
-
-    // -------- DependencyNode
-    DependencyNode::DependencyNode(const ir::Statement& statement) : node(statement) {}
-    DependencyNode::DependencyNode(std::shared_ptr<ir::Declaration> variable) : node(ValueNode {variable, {}}) {}
-    DependencyNode::DependencyNode(std::shared_ptr<ir::Declaration> variable, ir::Constant value) : node(ValueNode {variable, value}) {}
-
-    bool DependencyNode::is_statement() const {
-        return std::holds_alternative<ir::Statement>(node);
-    }
-
-    bool DependencyNode::is_value() const {
-        return std::holds_alternative<ValueNode>(node);
-    }
-
-    CodeLocation DependencyNode::location() const {
-        if      (is_statement())  return statement().location;
-        else if (is_value())      return declaration()->location;
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
-    }
-
-    ir::Statement& DependencyNode::statement() {
-        return std::get<ir::Statement>(node);
-    }
-
-    const ir::Statement& DependencyNode::statement() const {
-        return std::get<ir::Statement>(node);
-    }
-
-    std::shared_ptr<ir::Declaration> DependencyNode::declaration() const {
-        return std::get<ValueNode>(node).variable;
-    }
-
-    std::optional<ir::Constant> DependencyNode::value() const {
-        return std::get<ValueNode>(node).value;
-    }
-
-    bool DependencyNode::operator== (const DependencyNode& rhs) const {
-        if (is_value() && rhs.is_value())
-            return declaration() == rhs.declaration();
-        return false;
-    }
-
-    bool DependencyNode::operator== (std::shared_ptr<ir::Declaration> variable) const {
-        return is_value() && declaration() == variable;
-    }
-
-
     // -------- BasicBlock
     BasicBlock::BasicBlock(BasicBlockType type, std::shared_ptr<size_t> unique_id, std::optional<ir::Label> label) : type(type), label(label), unique_id(unique_id) {}
 
@@ -277,60 +121,6 @@ namespace toycc::flow {
         }
     }
 
-    static void replace_declaration(ir::Operand& operand, std::shared_ptr<ir::Declaration> initial, std::shared_ptr<ir::Declaration> replacement) {
-        if (operand.has_variable_base() && operand.declaration() == initial)
-            operand.value = replacement;
-    }
-
-    // Make intermediate values of external variables into internal temporaries
-    void BasicBlock::split_intermediate_values() {
-        for (std::shared_ptr<ir::Declaration> local : locals()) {
-            for (std::shared_ptr<DependencyNode> value_node : dependencies.find_nodes(local)) {
-                // Values live on entry and exit are not intermediates
-                if (dependencies.is_source(value_node) || dependencies.is_sink(value_node))
-                    continue;
-
-                Flags<DependencyType> dependency_types;
-                for (DependencyGraph::Edge edge : dependencies.connected_edges(value_node))
-                    dependency_types |= edge.attr.type;
-
-                // Also keep variables affected by dereferences and calls
-                if (dependency_types & (DependencyType::LIVE_ON_EXIT | DependencyType::CALL | DependencyType::DEREFERENCE))
-                    continue;
-
-                // At this point, this value node is an intermediate value : replace it with an intermediate declaration
-                std::shared_ptr<ir::Declaration> intermediate = declare_intermediate(local->type, local->location);
-                *value_node = DependencyNode {intermediate};
-
-                auto replace_operands = [&](std::shared_ptr<DependencyNode> statement_node, const Dependency& dependency) {
-                    if (!statement_node->is_statement())
-                        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Value node connected to another value node", value_node->location());
-                    ir::Statement& statement = statement_node->statement();
-
-                    switch (dependency.operand_group) {
-                        case OperandGroup::INDIRECT: return;  // INDIRECT dependency are there to account for side effects of dereferences and calls, they're not actual operands of the statement
-
-                        case OperandGroup::INPUT:
-                            for (ir::Operand& input : statement.inputs)
-                                replace_declaration(input, local, intermediate);
-                        break;
-
-                        case OperandGroup::OUTPUT:
-                            if (!statement.output.has_value())
-                                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Found an OUTPUT edge to a statement without outputs", value_node->location());
-                        replace_declaration(statement.output.value(), local, intermediate);
-                    }
-                };
-
-                for (DependencyGraph::Edge edge : dependencies.in_edges(value_node))
-                    replace_operands(edge.entry, edge.attr);
-
-                for (DependencyGraph::Edge edge : dependencies.out_edges(value_node))
-                    replace_operands(edge.exit, edge.attr);
-            }
-        }
-    }
-
     std::shared_ptr<ir::Declaration> BasicBlock::declare_intermediate(std::shared_ptr<ir::Type> type, CodeLocation location) {
         const std::string name = std::format(".BBI{}", *unique_id);
         *unique_id += 1;
@@ -374,7 +164,7 @@ namespace toycc::flow {
         }
 
         for (const DependencyGraph::Edge& edge : dependencies.edges())
-            dot << node_names[edge.entry] << " -> " << node_names[edge.exit] << " [label=\"" << dependency_repr(edge.attr) << "\"];\n";
+            dot << node_names[edge.entry] << " -> " << node_names[edge.exit] << " [label=\"" << edge.attr << "\"];\n";
 
         dot << "}\n";
         return node_names.begin()->second;
@@ -411,6 +201,20 @@ namespace toycc::flow {
         return live;
     }
 
+
+    // Get a map of known constant values at the end of a block after constant propagation
+    ConstantMap BasicBlock::output_constants() const {
+        ConstantMap constants;
+        for (std::shared_ptr<DependencyNode> node : dependencies.sinks())
+            if (node->is_value() && node->value().has_value())
+                constants[node->declaration()] = node->value().value();
+
+        for (DependencyGraph::Edge edge : dependencies.edges())
+            if (edge.attr.type & DependencyType::LIVE_ON_EXIT && edge.entry->is_value() && edge.entry->value().has_value())
+                constants[edge.entry->declaration()] = edge.entry->value().value();
+
+        return constants;
+    }
 
     // Get whether any statement in the block is a call
     bool BasicBlock::has_calls() const {

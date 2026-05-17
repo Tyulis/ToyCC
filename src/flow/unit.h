@@ -9,6 +9,8 @@
 #include "ir/scope.h"
 
 namespace toycc::flow {
+    using GlobalMap = std::unordered_map<std::shared_ptr<ir::Declaration>, std::optional<ir::Constant>>;
+
     class TranslationUnit {
         public:
             std::string working_directory;
@@ -19,10 +21,16 @@ namespace toycc::flow {
             TranslationUnit() = default;
             TranslationUnit(std::shared_ptr<ir::Scope> global_scope, std::string working_directory, std::string filename);
 
+            void optimize();
+
             std::string dot_graph() const;
 
         private:
             std::shared_ptr<size_t> unique_id = 0;
             std::shared_ptr<BasicBlock> global_block;
+
+            // NOTE : Optimization passes have all levels (unit, procedure, block) in a single separate file
+            void opt_split_intermediates();  // -> flow/optimization/split_intermediates.cpp
+            void opt_constant_folding();     // -> flow/optimization/constant_folding.cpp
     };
 }

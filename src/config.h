@@ -12,6 +12,9 @@ namespace toycc::config {
 
     namespace optimization {
         extern bool split_intermediates;          // Split temporaries local to a building block as separate intermediate variables
+        extern bool constant_folding;             // Apply constant folding
+
+        void set_level(size_t level);                // Set the optimizations for a standard optimization level
     }
 
     namespace dev {

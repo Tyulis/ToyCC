@@ -454,7 +454,7 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
     source_content +=  "    return matches;\n"
     source_content +=  "}\n"
 
-    write_header(header_content, output_dir / "translation_matcher.h", ["flow/block.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector", "optional"])
+    write_header(header_content, output_dir / "translation_matcher.h", ["flow/dependencies.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector", "optional"])
     write_source(source_content, output_dir / "translation_matcher.cpp", [output_dir / "translation_matcher.h"] + sorted(group_headers))
 
 
