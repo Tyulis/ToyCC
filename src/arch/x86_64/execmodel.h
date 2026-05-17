@@ -5,7 +5,7 @@
 #include <optional>
 #include <unordered_set>
 
-#include "ir/flow.h"
+#include "flow/block.h"
 #include "gen/execmodel/x86_64/location.h"
 #include "gen/execmodel/x86_64/transfer_tag.h"
 #include "gen/execmodel/x86_64/translation_tag.h"
@@ -35,11 +35,11 @@ namespace toycc::arch::x86_64 {
 
     struct GroupMatch {
        TranslationGroupTag group;
-       std::vector<std::shared_ptr<ir::DependencyNode>> statements;
-       std::unordered_set<std::shared_ptr<ir::DependencyNode>> link_values;
+       std::vector<std::shared_ptr<flow::DependencyNode>> statements;
+       std::unordered_set<std::shared_ptr<flow::DependencyNode>> link_values;
     };
 
-    std::vector<GroupMatch> match_dependency_subgraph(TranslationGroupTag group, const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag>& statements, const arma::imat& subgraph);
+    std::vector<GroupMatch> match_dependency_subgraph(TranslationGroupTag group, const flow::DependencyMatrix& graph, const std::vector<ir::StatementTag>& statements, const arma::imat& subgraph);
 
     struct OperandMatch {
         enum MatchResult {OK, REQUIRES_TRANSFER, KO};

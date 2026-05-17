@@ -43,7 +43,7 @@ namespace toycc::arch::x86_64 {
     };
 
     // Return the indices of the inner values, or an empty optional if this combination doesn't match
-    static std::optional<std::vector<size_t>> match_statement_combination(const ir::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
+    static std::optional<std::vector<size_t>> match_statement_combination(const flow::DependencyMatrix& graph, const arma::imat& subgraph, std::vector<size_t> statement_combination) {
         // Find which values are links between the selected statements (= which values have more than two edges in the statement combination)
         std::vector<size_t> link_columns;
         for (size_t column = 0; column < graph.values.size(); column++) {
@@ -80,7 +80,7 @@ namespace toycc::arch::x86_64 {
         return {};
     }
 
-    std::vector<GroupMatch> match_dependency_subgraph(TranslationGroupTag group, const ir::DependencyMatrix& graph, const std::vector<ir::StatementTag>& subgraph_tags, const arma::imat& subgraph) {
+    std::vector<GroupMatch> match_dependency_subgraph(TranslationGroupTag group, const flow::DependencyMatrix& graph, const std::vector<ir::StatementTag>& subgraph_tags, const arma::imat& subgraph) {
         if (graph.statements.size() < subgraph_tags.size())
             return {};
 
@@ -88,7 +88,7 @@ namespace toycc::arch::x86_64 {
 
         // Special case : no need for subgraph matching when the subgraph only has one node
         if (subgraph_tags.size() == 1) {
-            for (std::shared_ptr<ir::DependencyNode> statement : graph.statements)
+            for (std::shared_ptr<flow::DependencyNode> statement : graph.statements)
                 if (statement->statement().tag == subgraph_tags[0])
                     matches.push_back(GroupMatch {.group = group, .statements = {statement}, .link_values = {}});
             return matches;
@@ -183,7 +183,7 @@ namespace toycc::arch::x86_64 {
 
     std::ostream& operator<< (std::ostream& stream, const GroupMatch& match) {
         stream << match.group << " {";
-        for (std::shared_ptr<ir::DependencyNode> node : match.statements)
+        for (std::shared_ptr<flow::DependencyNode> node : match.statements)
             stream << node->statement().ir_code() << ", ";
         stream << "}";
         return stream;

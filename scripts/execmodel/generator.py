@@ -147,16 +147,16 @@ def generate_group_subgraph(group: TranslationGroup|CustomIRSpec) -> str:
     return content
 
 def generate_group_matcher_functions(translation_model: TranslationModel) -> tuple[str, str]:
-    prototype = "std::vector<GroupMatch> match_groups(const ir::DependencyMatrix& dependencies)"
+    prototype = "std::vector<GroupMatch> match_groups(const flow::DependencyMatrix& dependencies)"
     header_content = f"{prototype};\n"
 
     source_content = ""
     source_content += f"template <TranslationGroupTag group>\n"
-    source_content += f"void match_subgraph_group(std::vector<GroupMatch>& matches, const ir::DependencyMatrix& matrix);\n\n"
+    source_content += f"void match_subgraph_group(std::vector<GroupMatch>& matches, const flow::DependencyMatrix& matrix);\n\n"
 
     for group in translation_model.translations.values():
         source_content += f"template<> inline void match_subgraph_group<TranslationGroupTag::{group.tag()}>"
-        source_content += f"(std::vector<GroupMatch>& matches, const ir::DependencyMatrix& matrix) {{\n"
+        source_content += f"(std::vector<GroupMatch>& matches, const flow::DependencyMatrix& matrix) {{\n"
 
         subgraph_name = "TRIVIAL_SUBGRAPH" if isinstance(group, CustomIRSpec) or len(group.subgraph) == 0 else f"SUBGRAPH_{group.tag()}"
         source_content += f"    matches.insert_range(matches.begin(), match_dependency_subgraph(TranslationGroupTag::{group.tag()}, matrix, STATEMENTS_{group.tag()}, {subgraph_name}));\n"
@@ -270,7 +270,7 @@ def generate_operand_condition(operand_condition_name: str, operand: Constraint|
     group_match_arg = " group_match" if arg_usage["group_match"] else ""
     operand_arg     = " operand"     if arg_usage["operand"]     else ""
 
-    source  = f"static inline OperandMatch {operand_condition_name}(const StackFrame&{frame_arg}, const ir::DependencyGraph&{graph_arg}, const GroupMatch&{group_match_arg}, const ir::Operand&{operand_arg}"
+    source  = f"static inline OperandMatch {operand_condition_name}(const StackFrame&{frame_arg}, const flow::DependencyGraph&{graph_arg}, const GroupMatch&{group_match_arg}, const ir::Operand&{operand_arg}"
     if len(operand_overwrites) > 0:
         source += ", " + ", ".join(f"const ir::Operand& overwrite_{index}" for index in range(len(operand_overwrites)))
     source += "){\n"
@@ -378,7 +378,7 @@ def generate_translation_matcher_function(translation: TranslationSpec, translat
     source_content += "\n".join(operand_conditions.values()) + "\n"
     source_content += allocation_set_code
     source_content += f"template<> TranslationMatch match_translation<TranslationTag::{translation.tag}> "
-    source_content += f"(const StackFrame&{frame_arg}, const ir::DependencyGraph&{graph_arg}, const GroupMatch& group_match) {{\n"
+    source_content += f"(const StackFrame&{frame_arg}, const flow::DependencyGraph&{graph_arg}, const GroupMatch& group_match) {{\n"
     source_content +=       statements_code
     source_content += f"    return {{.translation = TranslationTag::{translation.tag}, .group_match = group_match, .statements = statements,\n"
     if allocation_match_code == "":
@@ -395,11 +395,11 @@ def generate_translation_group(group: TranslationGroup, translation_model: Trans
     header_content = "using namespace toycc::arch::x86_64;\n\n"
     source_content = "using namespace toycc::arch::x86_64;\n\n"
 
-    prototype = f"template<> std::optional<TranslationMatch> match_translation_group<TranslationGroupTag::{group.tag()}> (const StackFrame& frame, const ir::DependencyGraph& graph, const GroupMatch& group_match)"
+    prototype = f"template<> std::optional<TranslationMatch> match_translation_group<TranslationGroupTag::{group.tag()}> (const StackFrame& frame, const flow::DependencyGraph& graph, const GroupMatch& group_match)"
     header_content += f"{prototype};\n"
 
     source_content += f"template <TranslationTag tag>\n"
-    source_content += f"TranslationMatch match_translation(const StackFrame& frame, const ir::DependencyGraph& graph, const GroupMatch& group_match);\n\n"
+    source_content += f"TranslationMatch match_translation(const StackFrame& frame, const flow::DependencyGraph& graph, const GroupMatch& group_match);\n\n"
 
     if isinstance(group, TranslationGroup):
         for translation in group.translations:
@@ -433,9 +433,9 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
     source_content = "using namespace toycc::arch::x86_64;\n\n"
 
     header_content += "template <TranslationGroupTag group>\n"
-    header_content += "std::optional<TranslationMatch> match_translation_group(const StackFrame& frame, const ir::DependencyGraph& graph, const GroupMatch& group_match);\n\n"
+    header_content += "std::optional<TranslationMatch> match_translation_group(const StackFrame& frame, const flow::DependencyGraph& graph, const GroupMatch& group_match);\n\n"
 
-    prototype = "std::vector<TranslationMatch> match_translations(const StackFrame& frame, const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches)"
+    prototype = "std::vector<TranslationMatch> match_translations(const StackFrame& frame, const flow::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches)"
     header_content += f"{prototype};\n"
 
     source_content += f"{prototype} {{\n"
@@ -454,7 +454,7 @@ def generate_translation_matcher(translation_model: TranslationModel, output_dir
     source_content +=  "    return matches;\n"
     source_content +=  "}\n"
 
-    write_header(header_content, output_dir / "translation_matcher.h", ["ir/flow.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector", "optional"])
+    write_header(header_content, output_dir / "translation_matcher.h", ["flow/block.h", "arch/x86_64/allocation.h", "arch/x86_64/execmodel.h"], ["vector", "optional"])
     write_source(source_content, output_dir / "translation_matcher.cpp", [output_dir / "translation_matcher.h"] + sorted(group_headers))
 
 

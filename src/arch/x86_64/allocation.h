@@ -3,7 +3,8 @@
 #include <string>
 
 #include "output.h"
-#include "ir/flow.h"
+#include "flow/block.h"
+#include "flow/procedure.h"
 #include "ir/allocation.h"
 #include "debug/debuginfo.h"
 #include "gen/execmodel/x86_64/location.h"
@@ -18,7 +19,7 @@ namespace toycc::arch::x86_64 {
         using Parent = ir::StackFrame<Location>;
 
         public:
-            StackFrame(const ir::Procedure& procedure, debug::DebugInfo& debuginfo);
+            StackFrame(const flow::Procedure& procedure, debug::DebugInfo& debuginfo);
 
             void move(std::shared_ptr<ir::Declaration> declaration, Location location);
             void copy(std::shared_ptr<ir::Declaration> declaration, Location location);
@@ -37,7 +38,7 @@ namespace toycc::arch::x86_64 {
             bool is_intermediate(std::shared_ptr<ir::Declaration> variable) const;
             void flush_intermediates();
             void load_parameters();
-            void enter_block(std::shared_ptr<ir::BasicBlock> block, bool is_last);
+            void enter_block(std::shared_ptr<flow::BasicBlock> block, bool is_last);
             void exit_block();
             void end();
 
@@ -50,7 +51,7 @@ namespace toycc::arch::x86_64 {
             std::string str() const;
             std::string dump() const;
 
-            std::shared_ptr<ir::BasicBlock> current_block;
+            std::shared_ptr<flow::BasicBlock> current_block;
             bool is_last_block = false;
 
         private:

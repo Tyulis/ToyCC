@@ -15,8 +15,9 @@
 #include "source_map.h"
 #include "diagnostic.h"
 #include "preprocess.h"
+#include "flow/unit.h"
 #include "ir/scope.h"
-#include "ir/postprocessor/postprocessor.h"
+#include "postprocessing/postprocessor.h"
 
 #include "util/log.h"
 #include "util/strings.h"
@@ -209,7 +210,7 @@ int main(int argc, char** argv) {
         }
 
         // -------- Flow analysis
-        toycc::ir::TranslationUnit unit(processed_ir, std::filesystem::current_path().string(), input_file_name);
+        toycc::flow::TranslationUnit unit(processed_ir, std::filesystem::current_path().string(), input_file_name);
         if (target_step == SequenceStep::FLOW) {
             output_stream.get() << unit.dot_graph() << std::endl;
             return 0;

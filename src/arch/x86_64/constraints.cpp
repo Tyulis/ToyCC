@@ -3,12 +3,12 @@
 
 namespace toycc::arch::x86_64 {
     // Compute how many uses of the current value of `input_operand` remain after this match (excluding the current group match)
-    static ssize_t get_remaining_liveness(const ir::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match) {
-        const std::unordered_set<std::shared_ptr<ir::DependencyNode>> group_statements(group_match.statements.begin(), group_match.statements.end());
+    static ssize_t get_remaining_liveness(const flow::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match) {
+        const std::unordered_set<std::shared_ptr<flow::DependencyNode>> group_statements(group_match.statements.begin(), group_match.statements.end());
         std::shared_ptr<ir::Declaration> input_variable = input_operand.declaration();
-        std::shared_ptr<ir::DependencyNode> input_node = nullptr;
-        for (std::shared_ptr<ir::DependencyNode> statement : group_statements) {
-            for (std::shared_ptr<ir::DependencyNode> node : graph.previous_nodes(statement)) {
+        std::shared_ptr<flow::DependencyNode> input_node = nullptr;
+        for (std::shared_ptr<flow::DependencyNode> statement : group_statements) {
+            for (std::shared_ptr<flow::DependencyNode> node : graph.previous_nodes(statement)) {
                 if (node->is_value() && node->declaration() == input_variable) {
                     input_node = node;
                     goto exit_find_input_node;
@@ -21,13 +21,13 @@ namespace toycc::arch::x86_64 {
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The input variable is not found in the dependency graph", input_operand.location);
 
         ssize_t remaining_liveness = 0;
-        for (const ir::DependencyGraph::Edge& edge : graph.out_edges(input_node))
-            if (!group_statements.contains(edge.exit) || (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT))
+        for (const flow::DependencyGraph::Edge& edge : graph.out_edges(input_node))
+            if (!group_statements.contains(edge.exit) || (edge.attr.type & flow::DependencyType::LIVE_ON_EXIT))
                 remaining_liveness += 1;
         return remaining_liveness;
     }
 
-    OperandMatch check_overwrite(const StackFrame& frame, const ir::DependencyGraph& graph, const ir::Operand& input_operand, const ir::Operand& output_operand, const GroupMatch& group_match) {
+    OperandMatch check_overwrite(const StackFrame& frame, const flow::DependencyGraph& graph, const ir::Operand& input_operand, const ir::Operand& output_operand, const GroupMatch& group_match) {
         using toycc::execmodel::x86_64::UNIQUE_LOCATIONS;
 
         if (input_operand.is_constant() || input_operand.is_label())
@@ -53,7 +53,7 @@ namespace toycc::arch::x86_64 {
             return {OperandMatch::OK, UNIQUE_LOCATIONS};
     }
 
-    OperandMatch check_implicit_overwrite(const StackFrame& frame, const ir::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match, Location overwritten_location) {
+    OperandMatch check_implicit_overwrite(const StackFrame& frame, const flow::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match, Location overwritten_location) {
         using toycc::execmodel::x86_64::UNIQUE_LOCATIONS;
 
         if (input_operand.is_constant() || input_operand.is_label())

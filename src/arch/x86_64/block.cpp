@@ -1,8 +1,8 @@
-#include "arch/x86_64/allocation.h"
 #include "config.h"
 #include "diagnostic.h"
+#include "flow/block.h"
 #include "ir/declaration.h"
-#include "ir/flow.h"
+#include "arch/x86_64/allocation.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/execmodel.h"
 #include "arch/x86_64/transfer.h"
@@ -13,15 +13,15 @@
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
-    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<ir::BasicBlock> block, debug::DebugInfo& debuginfo) {
-        ir::DependencyGraph graph = block->dependencies;
-        ir::DependencyMatrix matrix = to_dependency_matrix(graph);
+    void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<flow::BasicBlock> block, debug::DebugInfo& debuginfo) {
+        flow::DependencyGraph graph = block->dependencies;
+        flow::DependencyMatrix matrix = to_dependency_matrix(graph);
         std::vector<GroupMatch> group_matches = toycc::execmodel::x86_64::match_groups(matrix);
 
         if (toycc::config::dev::with_translation_trace) {
             std::cerr << "New basic block :\n";
             std::cerr << "    Dependency graph :\n";
-            std::cerr << indent(ir::dot_graph(block->dependencies, "block"), true, "        ") << "\n";
+            std::cerr << indent(flow::dot_graph(block->dependencies, "block"), true, "        ") << "\n";
             std::cerr << "    Dependency matrix :\n";
             std::cerr << indent(dump(matrix), true, "        ") << "\n";
             std::cerr << "    Group matches :\n";
@@ -33,7 +33,7 @@ namespace toycc::arch::x86_64 {
             if (toycc::config::dev::with_translation_trace) {
                 std::cerr << "    New iteration :\n";
                 std::cerr << "        Dependency graph :\n";
-                std::cerr << indent(ir::dot_graph(graph, "remainder"), true, "            ") << "\n";
+                std::cerr << indent(flow::dot_graph(graph, "remainder"), true, "            ") << "\n";
                 std::cerr << "        Stack frame :\n";
                 std::cerr << indent(frame.dump(), true, "            ") << "\n";
             }
@@ -43,7 +43,7 @@ namespace toycc::arch::x86_64 {
                 clear_obsolete_matches(group_matches, graph);
             } catch (Diagnostic& diagnostic) {
                 if (diagnostic.level() == DiagnosticLevel::INTERNAL_ERROR || diagnostic.level() == DiagnosticLevel::NOT_IMPLEMENTED) {
-                    diagnostic.add_note(DiagnosticLevel::NOTE, frame.dump()).add_note(DiagnosticLevel::NOTE, ir::dot_graph(graph, "remainder"));
+                    diagnostic.add_note(DiagnosticLevel::NOTE, frame.dump()).add_note(DiagnosticLevel::NOTE, flow::dot_graph(graph, "remainder"));
                     for (const GroupMatch& match : group_matches)
                         diagnostic.add_note(DiagnosticLevel::NOTE, dump(match));
                 }
@@ -52,7 +52,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::code_generation_iteration(StackFrame& frame, ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::code_generation_iteration(StackFrame& frame, flow::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches, debug::DebugInfo& debuginfo) {
         std::vector<GroupMatch> entry_matches = find_entry_matches(graph, group_matches);
         if (entry_matches.empty())
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "No entry group matches");
@@ -82,12 +82,12 @@ namespace toycc::arch::x86_64 {
             frame.linebreak();
     }
 
-    std::vector<GroupMatch> CodeGenerator::find_entry_matches(const ir::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
+    std::vector<GroupMatch> CodeGenerator::find_entry_matches(const flow::DependencyGraph& graph, const std::vector<GroupMatch>& group_matches) {
         std::vector<GroupMatch> entry_matches;
         for (const GroupMatch& match : group_matches) {
             bool is_entry_match = true;
-            for (std::shared_ptr<ir::DependencyNode> statement : match.statements) {
-                for (ir::DependencyGraph::Edge input : graph.in_edges(statement)) {
+            for (std::shared_ptr<flow::DependencyNode> statement : match.statements) {
+                for (flow::DependencyGraph::Edge input : graph.in_edges(statement)) {
                     if (match.link_values.contains(input.entry))
                         continue;
 
@@ -163,10 +163,10 @@ namespace toycc::arch::x86_64 {
         frame.debug(std::format(".loc {} {} {}", debuginfo.fileno(location.filename), location.line, location.character));
     }
 
-    void CodeGenerator::clear_processed_statements(StackFrame& frame, ir::DependencyGraph& graph, const GroupMatch& match) {
-        for (std::shared_ptr<ir::DependencyNode> statement : match.statements) {
-            const ir::DependencyGraph::NodeSet connected_values = graph.connected_nodes(statement);
-            const ir::DependencyGraph::NodeSet sinks = graph.sinks();
+    void CodeGenerator::clear_processed_statements(StackFrame& frame, flow::DependencyGraph& graph, const GroupMatch& match) {
+        for (std::shared_ptr<flow::DependencyNode> statement : match.statements) {
+            const flow::DependencyGraph::NodeSet connected_values = graph.connected_nodes(statement);
+            const flow::DependencyGraph::NodeSet sinks = graph.sinks();
 
             std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_exit;
 
@@ -181,12 +181,12 @@ namespace toycc::arch::x86_64 {
                 live_on_exit.insert(variable);
             };
 
-            for (const ir::DependencyGraph::Edge& edge : graph.out_edges(statement))
-                if (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT)
+            for (const flow::DependencyGraph::Edge& edge : graph.out_edges(statement))
+                if (edge.attr.type & flow::DependencyType::LIVE_ON_EXIT)
                     flush_variable(edge.exit->declaration());
 
-            for (const ir::DependencyGraph::Edge& edge : graph.in_edges(statement))
-                if (edge.attr.type & ir::DependencyType::LIVE_ON_EXIT)
+            for (const flow::DependencyGraph::Edge& edge : graph.in_edges(statement))
+                if (edge.attr.type & flow::DependencyType::LIVE_ON_EXIT)
                     flush_variable(edge.entry->declaration());
 
             graph.pop_node(statement);
@@ -195,15 +195,15 @@ namespace toycc::arch::x86_64 {
             // For instance, if one is both an input and an output and the input gets disconnected, it shouldn't get freed because it's still valid as an output.
             // Logically that's (variables - connected variables)
             std::unordered_set<std::shared_ptr<ir::Declaration>> disconnected_variables;
-            for (std::shared_ptr<ir::DependencyNode> value : connected_values)
+            for (std::shared_ptr<flow::DependencyNode> value : connected_values)
                 disconnected_variables.insert(value->declaration());
 
-            for (std::shared_ptr<ir::DependencyNode> value : connected_values)
+            for (std::shared_ptr<flow::DependencyNode> value : connected_values)
                 if (graph.is_connected(value))
                     disconnected_variables.erase(value->declaration());
 
             // Remove value nodes that aren't connected to the remaining statements
-            for (std::shared_ptr<ir::DependencyNode> value : connected_values) {
+            for (std::shared_ptr<flow::DependencyNode> value : connected_values) {
                 if (!graph.is_connected(value))
                     graph.pop_node(value);
                 if (disconnected_variables.contains(value->declaration()) && !live_on_exit.contains(value->declaration()))
@@ -212,12 +212,12 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const ir::DependencyGraph& graph) {
+    void CodeGenerator::clear_obsolete_matches(std::vector<GroupMatch>& group_matches, const flow::DependencyGraph& graph) {
         const std::vector<GroupMatch> staging = group_matches;
         group_matches.clear();
         for (const GroupMatch& match : staging) {
             bool keep_match = true;
-            for (std::shared_ptr<ir::DependencyNode> statement : match.statements) {
+            for (std::shared_ptr<flow::DependencyNode> statement : match.statements) {
                 if (!graph.contains(statement)) {
                     keep_match = false;
                     break;
@@ -237,7 +237,7 @@ namespace toycc::arch::x86_64 {
     }
 
     // At the end of a basic block, flush all local variables to the stack for the next blocks to find
-    void CodeGenerator::flush_locals(StackFrame& frame, const ir::Procedure& procedure, std::shared_ptr<ir::BasicBlock> current_block, bool is_fallthrough) {
+    void CodeGenerator::flush_locals(StackFrame& frame, const flow::Procedure& procedure, std::shared_ptr<flow::BasicBlock> current_block, bool is_fallthrough) {
         const std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_exit = procedure.live_on_exit(current_block);
         const std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_entry = procedure.live_on_entry(current_block);
         for (std::shared_ptr<ir::Declaration> variable : live_on_exit) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "diagnostic.h"
-#include "ir/flow.h"
+#include "flow/block.h"
 #include "ir/type.h"
 #include "ir/declaration.h"
 #include "arch/x86_64/execmodel.h"
@@ -106,6 +106,6 @@ namespace toycc::arch::x86_64 {
         return (integer_type->is_signed == expect_signed ? OperandMatch::OK : OperandMatch::KO);
     }
 
-    OperandMatch check_overwrite(const StackFrame& frame, const ir::DependencyGraph& graph, const ir::Operand& input_operand, const ir::Operand& output_operand, const GroupMatch& group_match);
-    OperandMatch check_implicit_overwrite(const StackFrame& frame, const ir::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match, Location overwritten_location);
+    OperandMatch check_overwrite(const StackFrame& frame, const flow::DependencyGraph& graph, const ir::Operand& input_operand, const ir::Operand& output_operand, const GroupMatch& group_match);
+    OperandMatch check_implicit_overwrite(const StackFrame& frame, const flow::DependencyGraph& graph, const ir::Operand& input_operand, const GroupMatch& group_match, Location overwritten_location);
 }

@@ -1,7 +1,7 @@
 #include "arch/x86_64/codegen.h"
 
 namespace toycc::arch::x86_64 {
-    CodeGenerator::CodeGenerator(const ir::TranslationUnit& unit) : toycc::arch::CodeGenerator(unit) {}
+    CodeGenerator::CodeGenerator(const flow::TranslationUnit& unit) : toycc::arch::CodeGenerator(unit) {}
 
     void CodeGenerator::operator() (std::ostream& output) {
         CodeOutput code;

@@ -67,7 +67,7 @@ namespace toycc::debug {
         return entry;
     }
 
-    std::shared_ptr<SubprogramEntry> DebugInfo::procedure(const ir::Procedure& procedure) {
+    std::shared_ptr<SubprogramEntry> DebugInfo::procedure(const flow::Procedure& procedure) {
         std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
         std::shared_ptr<ir::FunctionType> function_type = std::static_pointer_cast<ir::FunctionType>(declaration->type);
 

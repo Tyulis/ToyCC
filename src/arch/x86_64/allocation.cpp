@@ -36,7 +36,7 @@ namespace toycc::arch::x86_64 {
     // -------- StackFrame
     static const std::unordered_set<Location> NONUNIQUE_LOCATIONS = {Location::constant, Location::memory, Location::stack};
 
-    StackFrame::StackFrame(const ir::Procedure& procedure, debug::DebugInfo& debuginfo)
+    StackFrame::StackFrame(const flow::Procedure& procedure, debug::DebugInfo& debuginfo)
         : Parent(procedure, NONUNIQUE_LOCATIONS), name(procedure.declaration->name), debuginfo(debuginfo) {}
 
     // Remove all existing locations of this variable and move it elsewhere. If there is something at `location`, it is overwritten
@@ -192,7 +192,7 @@ namespace toycc::arch::x86_64 {
     }
 
     // Enter a block, set up the initial locations of the block local variables
-    void StackFrame::enter_block(std::shared_ptr<ir::BasicBlock> block, bool is_last) {
+    void StackFrame::enter_block(std::shared_ptr<flow::BasicBlock> block, bool is_last) {
         current_block = block;
         is_last_block = is_last;
 

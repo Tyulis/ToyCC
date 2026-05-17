@@ -1,6 +1,6 @@
 #include "arch/datamodel.h"
 #include "ir/type_expressions.h"
-#include "ir/postprocessor/postprocessor.h"
+#include "postprocessing/postprocessor.h"
 
 namespace toycc::ir {
     void PostProcessor::split_blocks(std::shared_ptr<Scope> scope) {

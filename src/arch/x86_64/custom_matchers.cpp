@@ -6,7 +6,7 @@
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
-    std::optional<TranslationMatch> match_call(const StackFrame& frame, const ir::DependencyGraph&, const GroupMatch& group_match) {
+    std::optional<TranslationMatch> match_call(const StackFrame& frame, const flow::DependencyGraph&, const GroupMatch& group_match) {
         const ir::Statement& statement = group_match.statements[0]->statement();
         const ir::Operand& function = statement.inputs[0];
         if (function.type()->storage_category() != ir::TypeCategory::FUNCTION)

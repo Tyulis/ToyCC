@@ -6,12 +6,13 @@
 #include "diagnostic.h"
 #include "arch/x86_64/codegen.h"
 #include "arch/x86_64/allocation.h"
+#include "flow/block.h"
+#include "flow/procedure.h"
 #include "ir/declaration.h"
-#include "ir/flow.h"
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
-    void CodeGenerator::generate_translation_unit(CodeOutput& output, const ir::TranslationUnit& unit) {
+    void CodeGenerator::generate_translation_unit(CodeOutput& output, const flow::TranslationUnit& unit) {
         debug::DebugInfo debuginfo(unit.working_directory, unit.filename, config::debug::format);
 
         // Emit the data sections for global variables
@@ -30,20 +31,20 @@ namespace toycc::arch::x86_64 {
         debuginfo.wrap_text(output, code.str());
     }
 
-    void CodeGenerator::generate_procedure(CodeOutput& output, const ir::Procedure& procedure, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::generate_procedure(CodeOutput& output, const flow::Procedure& procedure, debug::DebugInfo& debuginfo) {
         StackFrame frame(procedure, debuginfo);
         std::shared_ptr<ir::Declaration> declaration = procedure.declaration;
         auto debug_scope = debuginfo.push_auto(debuginfo.procedure(procedure));
 
         // Generate the basic blocks following the fallthrough chains
-        const std::vector<ir::FallthroughChain> chains = procedure.fallthrough_chains();
+        const std::vector<flow::FallthroughChain> chains = procedure.fallthrough_chains();
 
         size_t remaining_blocks = 0;
-        for (const ir::FallthroughChain& chain : chains)
+        for (const flow::FallthroughChain& chain : chains)
             remaining_blocks += chain.size();
 
-        for (const ir::FallthroughChain& chain : procedure.fallthrough_chains()) {
-            for (std::shared_ptr<ir::BasicBlock> block : chain) {
+        for (const flow::FallthroughChain& chain : procedure.fallthrough_chains()) {
+            for (std::shared_ptr<flow::BasicBlock> block : chain) {
                 remaining_blocks -= 1;
                 frame.enter_block(block, remaining_blocks == 1);
                 generate_basic_block(frame, block, debuginfo);
@@ -59,10 +60,10 @@ namespace toycc::arch::x86_64 {
     }
 
 
-    void CodeGenerator::generate_global_declarations(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::generate_global_declarations(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> uninitialized_globals;
-        ir::GlobalMap rw_globals;
-        ir::GlobalMap ro_globals;
+        flow::GlobalMap rw_globals;
+        flow::GlobalMap ro_globals;
 
         for (const auto& [declaration, initializer] : globals) {
             if (declaration->storage & ir::StorageClass::EXTERN)
@@ -96,7 +97,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_readwrite_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::generate_readwrite_globals(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo) {
         output.directive(".data");
         for (const auto& [declaration, value] : globals) {
             generate_global_declaration(output, declaration, debuginfo);
@@ -104,7 +105,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_readonly_globals(CodeOutput& output, const ir::GlobalMap& globals, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::generate_readonly_globals(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo) {
         output.directive(".rodata");
         for (const auto& [declaration, value] : globals) {
             generate_global_declaration(output, declaration, debuginfo);

@@ -6,7 +6,7 @@
 
 #include "debug/dwarf.h"
 #include "debug/entries.h"
-#include "ir/flow.h"
+#include "flow/procedure.h"
 #include "ir/type.h"
 #include "ir/declaration.h"
 #include "ir/type_expressions.h"
@@ -34,7 +34,7 @@ namespace toycc::debug {
             // -------- Generate and access entries
             std::shared_ptr<TypeEntry> type(std::shared_ptr<ir::Type> type);                     // Get the type entry for the given `type`
             std::shared_ptr<VariableEntry> variable(std::shared_ptr<ir::Declaration> variable);  // Get the variable entry for the given `variable`
-            std::shared_ptr<SubprogramEntry> procedure(const ir::Procedure& procedure);          // Generate an entry for the given procedure
+            std::shared_ptr<SubprogramEntry> procedure(const flow::Procedure& procedure);          // Generate an entry for the given procedure
 
             // -------- Actual code emission
             void begin_text(CodeOutput& assembly) const;                             // Emit debugging directives after the beginning of the .text section

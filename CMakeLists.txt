@@ -88,8 +88,11 @@ add_executable(${PROJECT_NAME}
 	src/debug/loclists.cpp
 	src/debug/sections.cpp
 
+	src/flow/block.cpp
+	src/flow/procedure.cpp
+	src/flow/unit.cpp
+
 	src/ir/declaration.cpp
-	src/ir/flow.cpp
 	src/ir/scope.cpp
 	src/ir/scopeframe.cpp
 	src/ir/statement.cpp
@@ -109,14 +112,14 @@ add_executable(${PROJECT_NAME}
 	src/semantic/temporarygenerator.cpp
 	src/semantic/values.cpp
 
-	src/ir/postprocessor/blocks.cpp
-	src/ir/postprocessor/dereference.cpp
-	src/ir/postprocessor/descope.cpp
-	src/ir/postprocessor/indirection.cpp
-	src/ir/postprocessor/mark_globals.cpp
-	src/ir/postprocessor/postprocessor.cpp
-	src/ir/postprocessor/state.cpp
-	src/ir/postprocessor/strings.cpp
+	src/postprocessing/blocks.cpp
+	src/postprocessing/dereference.cpp
+	src/postprocessing/descope.cpp
+	src/postprocessing/indirection.cpp
+	src/postprocessing/mark_globals.cpp
+	src/postprocessing/postprocessor.cpp
+	src/postprocessing/state.cpp
+	src/postprocessing/strings.cpp
 
 	src/parser/CParserBase.cpp
 	src/parser/SymbolTable.cpp

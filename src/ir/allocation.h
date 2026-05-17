@@ -9,7 +9,7 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 
-#include "ir/flow.h"
+#include "flow/procedure.h"
 #include "ir/declaration.h"
 #include "util/alignment.hpp"
 
@@ -33,9 +33,9 @@ namespace toycc::ir {
     template <typename Location>
     class StackFrame {
         public:
-            const Procedure& procedure;
+            const flow::Procedure& procedure;
 
-            StackFrame(const Procedure& procedure, const std::unordered_set<Location>& nonunique_locations)
+            StackFrame(const flow::Procedure& procedure, const std::unordered_set<Location>& nonunique_locations)
                 : procedure(procedure), nonunique_locations(nonunique_locations) {}
 
             // -------- Stack variables management

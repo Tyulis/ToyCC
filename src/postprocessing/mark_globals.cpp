@@ -1,4 +1,4 @@
-#include "ir/postprocessor/postprocessor.h"
+#include "postprocessing/postprocessor.h"
 
 namespace toycc::ir {
     void PostProcessor::mark_globals(std::shared_ptr<Scope> global_scope) {

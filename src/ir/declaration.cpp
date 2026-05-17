@@ -4,7 +4,6 @@
 
 #include "arch/datamodel.h"
 #include "diagnostic.h"
-#include "ir/type_expressions.h"
 #include "ir/declaration.h"
 
 namespace toycc::ir {

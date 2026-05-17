@@ -2,7 +2,7 @@
 #include <unordered_map>
 
 #include "ir/statement.h"
-#include "ir/postprocessor/postprocessor.h"
+#include "postprocessing/postprocessor.h"
 #include "util/strings.h"
 
 namespace toycc::ir {

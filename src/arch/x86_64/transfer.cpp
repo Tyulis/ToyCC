@@ -467,17 +467,17 @@ namespace toycc::arch::x86_64 {
     }
 
     static void find_indirects(std::unordered_set<std::shared_ptr<ir::Declaration>>& indirects, std::unordered_set<std::shared_ptr<ir::Declaration>>& reads,
-                               const ir::DependencyGraph& graph, const TranslationMatch& match)
+                               const flow::DependencyGraph& graph, const TranslationMatch& match)
     {
-        for (std::shared_ptr<ir::DependencyNode> statement : match.group_match.statements) {
-            for (ir::DependencyGraph::Edge edge : graph.connected_edges(statement)) {
-                std::shared_ptr<ir::DependencyNode> value = (edge.entry == statement ? edge.exit : edge.entry);
+        for (std::shared_ptr<flow::DependencyNode> statement : match.group_match.statements) {
+            for (flow::DependencyGraph::Edge edge : graph.connected_edges(statement)) {
+                std::shared_ptr<flow::DependencyNode> value = (edge.entry == statement ? edge.exit : edge.entry);
                 std::shared_ptr<ir::Declaration> variable = value->declaration();
 
-                if (edge.attr.operand_group == ir::OperandGroup::INDIRECT && (edge.attr.type & (ir::DependencyType::DEREFERENCE | ir::DependencyType::CALL | ir::DependencyType::LIVE_ON_EXIT)))
+                if (edge.attr.operand_group == flow::OperandGroup::INDIRECT && (edge.attr.type & (flow::DependencyType::DEREFERENCE | flow::DependencyType::CALL | flow::DependencyType::LIVE_ON_EXIT)))
                     indirects.insert(variable);
 
-                if (edge.attr.type & ir::DependencyType::READ)
+                if (edge.attr.type & flow::DependencyType::READ)
                     reads.insert(variable);
             }
         }
@@ -915,7 +915,7 @@ namespace toycc::arch::x86_64 {
     }
 
     // Allocate operand locations and emit all necessary transfers before emitting the translation `match`
-    void emit_transfers(StackFrame& frame, const ir::DependencyGraph& graph, TranslationMatch& match) {
+    void emit_transfers(StackFrame& frame, const flow::DependencyGraph& graph, TranslationMatch& match) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> indirects;
         std::unordered_set<std::shared_ptr<ir::Declaration>> reads;
         find_indirects(indirects, reads, graph, match);

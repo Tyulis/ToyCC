@@ -2,15 +2,15 @@
 
 #include <iostream>
 
-#include "ir/flow.h"
+#include "flow/unit.h"
 
 namespace toycc::arch {
     class CodeGenerator {
         public:
-            CodeGenerator(const ir::TranslationUnit& unit);
+            CodeGenerator(const flow::TranslationUnit& unit);
             virtual void operator() (std::ostream& output) = 0;
 
         protected:
-            ir::TranslationUnit unit;
+            flow::TranslationUnit unit;
     };
 }
