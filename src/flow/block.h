@@ -33,19 +33,31 @@ namespace toycc::flow {
         size_t operand_index = std::numeric_limits<size_t>::max();
     };
 
-    struct DependencyNode {
-        std::variant<ir::Statement, std::shared_ptr<ir::Declaration>> node;
+    struct ValueNode {
+        std::shared_ptr<ir::Declaration> variable;
+        std::optional<ir::Constant> value;
+    };
 
-        bool is_statement() const;
-        bool is_value() const;
-        CodeLocation location() const;
+    class DependencyNode {
+        public:
+            DependencyNode(const ir::Statement& statement);
+            DependencyNode(std::shared_ptr<ir::Declaration> variable);
+            DependencyNode(std::shared_ptr<ir::Declaration> variable, ir::Constant value);
 
-        ir::Statement& statement();
-        const ir::Statement& statement() const;
-        std::shared_ptr<ir::Declaration> declaration() const;
+            bool is_statement() const;
+            bool is_value() const;
+            CodeLocation location() const;
 
-        bool operator== (const DependencyNode& rhs) const;
-        bool operator== (std::shared_ptr<ir::Declaration> rhs) const;
+            ir::Statement& statement();
+            const ir::Statement& statement() const;
+            std::shared_ptr<ir::Declaration> declaration() const;
+            std::optional<ir::Constant> value() const;
+
+            bool operator== (const DependencyNode& rhs) const;
+            bool operator== (std::shared_ptr<ir::Declaration> rhs) const;
+
+        private:
+            std::variant<ir::Statement, ValueNode> node;
     };
 
     using DependencyGraph = Graph<DependencyNode, Dependency>;

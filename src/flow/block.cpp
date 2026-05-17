@@ -113,12 +113,16 @@ namespace toycc::flow {
     }
 
     // -------- DependencyNode
+    DependencyNode::DependencyNode(const ir::Statement& statement) : node(statement) {}
+    DependencyNode::DependencyNode(std::shared_ptr<ir::Declaration> variable) : node(ValueNode {variable, {}}) {}
+    DependencyNode::DependencyNode(std::shared_ptr<ir::Declaration> variable, ir::Constant value) : node(ValueNode {variable, value}) {}
+
     bool DependencyNode::is_statement() const {
         return std::holds_alternative<ir::Statement>(node);
     }
 
     bool DependencyNode::is_value() const {
-        return std::holds_alternative<std::shared_ptr<ir::Declaration>>(node);
+        return std::holds_alternative<ValueNode>(node);
     }
 
     CodeLocation DependencyNode::location() const {
@@ -136,7 +140,11 @@ namespace toycc::flow {
     }
 
     std::shared_ptr<ir::Declaration> DependencyNode::declaration() const {
-        return std::get<std::shared_ptr<ir::Declaration>>(node);
+        return std::get<ValueNode>(node).variable;
+    }
+
+    std::optional<ir::Constant> DependencyNode::value() const {
+        return std::get<ValueNode>(node).value;
     }
 
     bool DependencyNode::operator== (const DependencyNode& rhs) const {
@@ -292,7 +300,7 @@ namespace toycc::flow {
 
                 // At this point, this value node is an intermediate value : replace it with an intermediate declaration
                 std::shared_ptr<ir::Declaration> intermediate = declare_intermediate(local->type, local->location);
-                value_node->node = intermediate;
+                *value_node = DependencyNode {intermediate};
 
                 auto replace_operands = [&](std::shared_ptr<DependencyNode> statement_node, const Dependency& dependency) {
                     if (!statement_node->is_statement())
