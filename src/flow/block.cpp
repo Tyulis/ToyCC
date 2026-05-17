@@ -153,7 +153,7 @@ namespace toycc::flow {
     // -------- BasicBlock
     BasicBlock::BasicBlock(BasicBlockType type, std::shared_ptr<size_t> unique_id, std::optional<ir::Label> label) : type(type), label(label), unique_id(unique_id) {}
 
-    void BasicBlock::add_statement(const ir::Statement& statement, std::unordered_set<std::shared_ptr<ir::Declaration>> defined_decls) {
+    void BasicBlock::add_statement(const ir::Statement& statement, const std::unordered_set<std::shared_ptr<ir::Declaration>>& defined_decls) {
         if (statement.block.get() != nullptr)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Statements in local blocks can't have subblocks", statement.location);
 

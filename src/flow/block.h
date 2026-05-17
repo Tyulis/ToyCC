@@ -74,7 +74,7 @@ namespace toycc::flow {
 
             std::string dot_subgraph(std::stringstream& dot, std::string cluster_name) const;
 
-            void add_statement(const ir::Statement& statement, std::unordered_set<std::shared_ptr<ir::Declaration>> defined_decls);
+            void add_statement(const ir::Statement& statement, const std::unordered_set<std::shared_ptr<ir::Declaration>>& defined_decls);
             void finish();
             void not_live_on_exit(const std::unordered_set<std::shared_ptr<ir::Declaration>>& intermediate);
             void split_intermediate_values();

@@ -6,9 +6,14 @@ namespace toycc::flow {
     TranslationUnit::TranslationUnit(std::shared_ptr<ir::Scope> global_scope, std::string working_directory, std::string filename)
         : working_directory(working_directory), filename(filename), unique_id(std::make_shared<size_t>(0))
     {
-        // After descoping, only procedures and static declarations remain
-        for (std::shared_ptr<ir::Declaration> declaration : global_scope->locals_list())
-            globals[declaration] = {};
+        global_block = std::make_shared<BasicBlock> (BasicBlockType::INNER, unique_id);
+
+        std::unordered_set<std::shared_ptr<ir::Declaration>> global_decls;
+        for (std::shared_ptr<ir::Declaration> variable : global_scope->locals_list()) {
+            globals[variable] = {};
+            if (!(variable->storage & ir::INTERNAL_STORAGE) && variable->type->category != ir::TypeCategory::FUNCTION)
+                global_decls.insert(variable);
+        }
 
         for (const ir::Statement& statement : global_scope->statements) {
             switch (statement.tag) {
@@ -17,6 +22,17 @@ namespace toycc::flow {
                     procedures[function->name] = Procedure {statement, globals, unique_id};
                     break;
                 }
+
+                // The global scope must be all constexpr and a single basic block, so no jumps, no calls
+                case ir::StatementTag::BLOCK:
+                case ir::StatementTag::JUMP:
+                case ir::StatementTag::JUMP_IF_TRUE:
+                case ir::StatementTag::JUMP_IF_FALSE:
+                case ir::StatementTag::RETURN:
+                case ir::StatementTag::RETURN_VAL:
+                case ir::StatementTag::MARKER:
+                case ir::StatementTag::CALL:
+                    throw Diagnostic(DiagnosticLevel::ERROR, std::format("{} can't be a global statement", statement.ir_code()), statement.location);
 
                 case ir::StatementTag::COPY: {
                     if (!statement.inputs[0].is_constant())
@@ -31,12 +47,14 @@ namespace toycc::flow {
                     found->second = statement.inputs[0].constant();
                     break;
                 }
+                [[fallthrough]];
 
                 default:
-                    throw Diagnostic(DiagnosticLevel::ERROR, std::format("{} can't be a global statement", statement.ir_code()), statement.location);
+                    global_block->add_statement(statement, global_decls);
             }
         }
     }
+
 
     std::string TranslationUnit::dot_graph() const {
         std::stringstream dot;
