@@ -47,6 +47,7 @@ namespace toycc::ir {
             virtual std::shared_ptr<Type> dereference(std::optional<size_t> index, CodeLocation location) const override;
             virtual std::shared_ptr<Type> dequalify() const override;
 
+            virtual bool is_const() const override;
             virtual std::string repr() const override;
             virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
 

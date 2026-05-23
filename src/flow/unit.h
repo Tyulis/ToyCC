@@ -9,14 +9,12 @@
 #include "ir/scope.h"
 
 namespace toycc::flow {
-    using GlobalMap = std::unordered_map<std::shared_ptr<ir::Declaration>, std::optional<ir::Constant>>;
-
     class TranslationUnit {
         public:
             std::string working_directory;
             std::string filename;
             std::unordered_map<std::string, Procedure> procedures;
-            GlobalMap globals;
+            ConstantMap globals;
 
             TranslationUnit() = default;
             TranslationUnit(std::shared_ptr<ir::Scope> global_scope, std::string working_directory, std::string filename);

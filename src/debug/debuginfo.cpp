@@ -144,11 +144,12 @@ namespace toycc::debug {
     // NOTE : Entries are added into the map directly because it's necessary to guard against infinite recursion around recursive type expressions
     std::shared_ptr<TypeEntry> DebugInfo::add_type_entry(std::shared_ptr<ir::Type> type_expression) {
         switch (type_expression->category) {
-            case ir::TypeCategory::INTEGER:  return add_integer_type_entry(std::static_pointer_cast<ir::IntegerType>(type_expression));
-            case ir::TypeCategory::POINTER:  return add_pointer_type_entry(std::static_pointer_cast<ir::PointerType>(type_expression));
-            case ir::TypeCategory::ARRAY:    return add_array_type_entry  (std::static_pointer_cast<ir::ArrayType>  (type_expression));
-            case ir::TypeCategory::STRUCT:   return add_struct_type_entry (std::static_pointer_cast<ir::StructType> (type_expression));
-            case ir::TypeCategory::UNION:    return add_union_type_entry  (std::static_pointer_cast<ir::UnionType>  (type_expression));
+            case ir::TypeCategory::INTEGER:   return add_integer_type_entry  (std::static_pointer_cast<ir::IntegerType>   (type_expression));
+            case ir::TypeCategory::POINTER:   return add_pointer_type_entry  (std::static_pointer_cast<ir::PointerType>   (type_expression));
+            case ir::TypeCategory::ARRAY:     return add_array_type_entry    (std::static_pointer_cast<ir::ArrayType>     (type_expression));
+            case ir::TypeCategory::STRUCT:    return add_struct_type_entry   (std::static_pointer_cast<ir::StructType>    (type_expression));
+            case ir::TypeCategory::UNION:     return add_union_type_entry    (std::static_pointer_cast<ir::UnionType>     (type_expression));
+            case ir::TypeCategory::QUALIFIED: return add_qualified_type_entry(std::static_pointer_cast<ir::QualifiedType> (type_expression));
 
             case ir::TypeCategory::VOID:     throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't generate debug info for `void`", type_expression->location);
 
@@ -159,7 +160,6 @@ namespace toycc::debug {
             case ir::TypeCategory::LABEL:
             case ir::TypeCategory::ENUM:
             case ir::TypeCategory::BITFIELD:
-            case ir::TypeCategory::QUALIFIED:
             case ir::TypeCategory::ALIGNED:
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Debug info emission is not implemented for type `{}`", type_expression->ir_code()));
         }

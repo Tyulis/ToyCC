@@ -66,6 +66,5 @@ namespace toycc::debug {
             std::shared_ptr<CompoundTypeEntry>  add_struct_type_entry   (std::shared_ptr<ir::StructType>    type_expression);
             std::shared_ptr<CompoundTypeEntry>  add_union_type_entry    (std::shared_ptr<ir::UnionType>     type_expression);
             std::shared_ptr<QualifiedTypeEntry> add_qualified_type_entry(std::shared_ptr<ir::QualifiedType> type_expression);
-
     };
 }

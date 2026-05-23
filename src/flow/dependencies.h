@@ -3,6 +3,7 @@
 #include <limits>
 #include <memory>
 #include <variant>
+#include <expected>
 #include <optional>
 #include <armadillo>
 
@@ -26,6 +27,13 @@ namespace toycc::flow {
         INDIRECT, INPUT, OUTPUT
     };
 
+    enum class ValueStatus {
+        UNKNOWN,        // The value of that variable couldn't be inferred at compile-time
+        UNINITIALIZED,  // That variable wasn't initialized at all
+    };
+
+    using FoldedValue = std::expected<ir::Constant, ValueStatus>;
+
     struct Dependency {
         Flags<DependencyType> type;
         OperandGroup operand_group = OperandGroup::INDIRECT;  // Which kind of operand requires this dependency (INPUT or OUTPUT)
@@ -38,7 +46,7 @@ namespace toycc::flow {
 
     struct ValueNode {
         std::shared_ptr<ir::Declaration> variable;
-        std::optional<ir::Constant> value;
+        FoldedValue value;
     };
 
     class DependencyNode {
@@ -54,8 +62,8 @@ namespace toycc::flow {
             ir::Statement& statement();
             const ir::Statement& statement() const;
             std::shared_ptr<ir::Declaration> declaration() const;
-            const std::optional<ir::Constant>& value() const;
-            std::optional<ir::Constant>& value();
+            const FoldedValue& value() const;
+            FoldedValue& value();
 
             bool operator== (const DependencyNode& rhs) const;
             bool operator== (std::shared_ptr<ir::Declaration> rhs) const;
@@ -75,5 +83,5 @@ namespace toycc::flow {
     DependencyMatrix to_dependency_matrix(const DependencyGraph& graph);
     std::ostream& operator<< (std::ostream& stream, const DependencyMatrix& graph);
 
-    using ConstantMap = std::unordered_map<std::shared_ptr<ir::Declaration>, ir::Constant>;
+    using ConstantMap = std::unordered_map<std::shared_ptr<ir::Declaration>, FoldedValue>;
 }

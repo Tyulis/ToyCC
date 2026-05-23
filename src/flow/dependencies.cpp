@@ -46,11 +46,14 @@ namespace toycc::flow {
         std::unordered_map<std::shared_ptr<DependencyNode>, std::string> node_names;
         for (std::shared_ptr<DependencyNode> node : graph.nodes()) {
             const std::string node_name = node_names[node] = std::format("{}_{}", cluster_name, node_index++);
-            if (node->is_statement())
+            if (node->is_statement()) {
                 dot << "    " << node_name << " [label=\"" << node->statement().ir_code() << "\" shape=box];\n";
-            else if (node->is_value())
-                dot << "    " << node_name << " [label=\"" << node->declaration()->name << "\" shape=ellipse];\n";
-            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
+            } else if (node->is_value()) {
+                dot << "    " << node_name << " [label=\"" << node->declaration()->name;
+                if (node->value().has_value())
+                    dot << " = " << node->value()->ir_code();
+                dot << "\" shape=ellipse];\n";
+            } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown dependency node type");
         }
 
         for (const DependencyGraph::Edge& edge : graph.edges())
@@ -114,7 +117,7 @@ namespace toycc::flow {
 
     // -------- DependencyNode
     DependencyNode::DependencyNode(const ir::Statement& statement) : node(statement) {}
-    DependencyNode::DependencyNode(std::shared_ptr<ir::Declaration> variable) : node(ValueNode {variable, {}}) {}
+    DependencyNode::DependencyNode(std::shared_ptr<ir::Declaration> variable) : node(ValueNode {variable, std::unexpected(ValueStatus::UNKNOWN)}) {}
     DependencyNode::DependencyNode(std::shared_ptr<ir::Declaration> variable, ir::Constant value) : node(ValueNode {variable, value}) {}
 
     bool DependencyNode::is_statement() const {
@@ -143,11 +146,11 @@ namespace toycc::flow {
         return std::get<ValueNode>(node).variable;
     }
 
-    const std::optional<ir::Constant>& DependencyNode::value() const {
+    const FoldedValue& DependencyNode::value() const {
         return std::get<ValueNode>(node).value;
     }
 
-    std::optional<ir::Constant>& DependencyNode::value() {
+    FoldedValue& DependencyNode::value() {
         return std::get<ValueNode>(node).value;
     }
 

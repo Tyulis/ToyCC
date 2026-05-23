@@ -190,29 +190,17 @@ namespace toycc::flow {
     // Get which variables *used by the block* are live upon exit
     std::unordered_set<std::shared_ptr<ir::Declaration>> BasicBlock::live_on_exit() const {
         std::unordered_set<std::shared_ptr<ir::Declaration>> live;
-        for (std::shared_ptr<DependencyNode> sink : dependencies.sinks())
-            if (sink->is_value())
-                live.insert(sink->declaration());
-
-        for (const DependencyGraph::Edge& edge : dependencies.in_edges(exit_statement))
-            if (edge.attr.type & DependencyType::LIVE_ON_EXIT)
-                live.insert(edge.entry->declaration());
-
+        for (std::shared_ptr<DependencyNode> node : output_value_nodes())
+            live.insert(node->declaration());
         return live;
     }
 
 
     // Get a map of known constant values at the end of a block after constant propagation
-    ConstantMap BasicBlock::output_constants() const {
+    ConstantMap BasicBlock::output_values() const {
         ConstantMap constants;
-        for (std::shared_ptr<DependencyNode> node : dependencies.sinks())
-            if (node->is_value() && node->value().has_value())
-                constants[node->declaration()] = node->value().value();
-
-        for (DependencyGraph::Edge edge : dependencies.edges())
-            if (edge.attr.type & DependencyType::LIVE_ON_EXIT && edge.entry->is_value() && edge.entry->value().has_value())
-                constants[edge.entry->declaration()] = edge.entry->value().value();
-
+        for (std::shared_ptr<DependencyNode> node : output_value_nodes())
+            constants[node->declaration()] = node->value();
         return constants;
     }
 
@@ -223,5 +211,19 @@ namespace toycc::flow {
                 if (node->statement().tag == ir::StatementTag::CALL)
                     return true;
         return false;
+    }
+
+    // Get all value nodes that are live upon exit of the block
+    DependencyGraph::NodeSet BasicBlock::output_value_nodes() const {
+        DependencyGraph::NodeSet nodes;
+        for (std::shared_ptr<DependencyNode> node : dependencies.sinks())
+            if (node->is_value())
+                nodes.insert(node);
+
+        for (DependencyGraph::Edge edge : dependencies.edges())
+            if (edge.attr.type & DependencyType::LIVE_ON_EXIT && edge.entry->is_value())
+                nodes.insert(edge.entry);
+
+        return nodes;
     }
 }

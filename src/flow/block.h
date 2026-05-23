@@ -34,17 +34,18 @@ namespace toycc::flow {
             std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_entry() const;
             std::unordered_set<std::shared_ptr<ir::Declaration>> live_on_exit() const;
 
-            ConstantMap output_constants() const;
+            ConstantMap output_values() const;
             bool has_calls() const;
 
             // NOTE : Optimization passes have all levels (unit, procedure, block) in a single separate file
-            void opt_constant_folding(ConstantMap initial_constants);  // -> flow/optimization/constant_folding.cpp
-            void opt_split_intermediates();                            // -> flow/optimization/split_intermediates.cpp
+            void opt_constant_folding(ConstantMap initial_constants = {});  // -> flow/optimization/constant_folding.cpp
+            void opt_split_intermediates();                                 // -> flow/optimization/split_intermediates.cpp
 
         private:
             std::shared_ptr<size_t> unique_id;
             std::unordered_map<std::shared_ptr<ir::Declaration>, std::shared_ptr<DependencyNode>> last_modification;
 
+            DependencyGraph::NodeSet output_value_nodes() const;
             std::shared_ptr<ir::Declaration> declare_intermediate(std::shared_ptr<ir::Type> type, CodeLocation location);
     };
 

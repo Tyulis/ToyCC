@@ -112,6 +112,10 @@ namespace toycc::ir {
         return std::make_shared<ArrayType> (*this);
     }
 
+    bool ArrayType::is_const() const {
+        return element_type->is_const();
+    }
+
     std::string ArrayType::repr() const {
         return std::format("{}[{}]", element_type->repr(), length.ir_code());
     }

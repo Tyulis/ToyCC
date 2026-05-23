@@ -11,7 +11,7 @@ namespace toycc::flow {
 
         std::unordered_set<std::shared_ptr<ir::Declaration>> global_decls;
         for (std::shared_ptr<ir::Declaration> variable : global_scope->locals_list()) {
-            globals[variable] = {};
+            globals[variable] = std::unexpected(ValueStatus::UNINITIALIZED);
             if (!(variable->storage & ir::INTERNAL_STORAGE) && variable->type->category != ir::TypeCategory::FUNCTION)
                 global_decls.insert(variable);
         }
@@ -35,23 +35,29 @@ namespace toycc::flow {
                 case ir::StatementTag::CALL:
                     throw Diagnostic(DiagnosticLevel::ERROR, std::format("{} can't be a global statement", statement.ir_code()), statement.location);
 
-                case ir::StatementTag::COPY: {
-                    if (!statement.inputs[0].is_constant())
-                        throw Diagnostic(DiagnosticLevel::ERROR, "Global initializers must be constants", statement.location);
-                    if (!statement.output->is_variable())
-                        throw Diagnostic(DiagnosticLevel::ERROR, "Global initializers must be assigned to global variables", statement.location);
-
-                    auto found = globals.find(statement.output->declaration());
-                    if (found == globals.end())
-                        throw Diagnostic(DiagnosticLevel::ERROR, "Global initializers must be assigned to global variables", statement.location);
-
-                    found->second = statement.inputs[0].constant();
-                    break;
-                }
-                [[fallthrough]];
-
                 default:
                     global_block->add_statement(statement, global_decls);
+            }
+        }
+
+        // Use the constant folding algorithm to evaluate constant expressions in the global scope
+        global_block->opt_constant_folding();
+        globals.insert_range(global_block->output_values());
+
+        // Check error conditions
+        for (const auto& [variable, value] : globals) {
+            if (value.has_value())
+                continue;  // The global variable has a compile-time value
+
+            switch (value.error()) {
+                case ValueStatus::UNINITIALIZED:
+                    if (variable->type->is_const())
+                        throw Diagnostic(DiagnosticLevel::ERROR, std::format("Global constant `{}` has no value", variable->name), variable->location);
+                    break;
+
+                case ValueStatus::UNKNOWN:
+                    throw Diagnostic(DiagnosticLevel::ERROR, std::format("Global variable `{}`'s initializer is not a constant expression", variable->name), variable->location);
+
             }
         }
     }

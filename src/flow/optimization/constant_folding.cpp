@@ -1,6 +1,7 @@
 #include "flow/block.h"
 #include "flow/procedure.h"
 #include "flow/unit.h"
+#include "ir/type.h"
 #include "util/sets.hpp"
 
 namespace toycc::flow {
@@ -33,6 +34,10 @@ namespace toycc::flow {
     // Attempt to replace variable operands with propagated constants
     static void propagate_operands(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
         // NOTE : At this point there are no more variable indices, so we don't need to recursively dive into dereference indices
+        // ADDRESSOF takes actual variables as inputs, not values, don't replace them
+        if (statement_node->statement().tag == ir::StatementTag::ADDRESSOF)
+            return;
+
         for (const DependencyGraph::Edge& input_edge : graph.in_edges(statement_node))
             if (input_edge.attr.type & DependencyType::READ && input_edge.entry->value().has_value())
                 replace_value(statement_node, input_edge.entry, graph);
@@ -85,7 +90,7 @@ namespace toycc::flow {
         ConstantMap consistent = global_constants;
 
         for (std::shared_ptr<BasicBlock> block : previous_blocks) {
-            for (const auto& [variable, value] : block->output_constants()) {
+            for (const auto& [variable, value] : block->output_values()) {
                 if (!consistent.contains(variable) && !inconsistent.contains(variable)) {  // New constant
                     consistent[variable] = value;
                 } else if (consistent.contains(variable) && !inconsistent.contains(variable)) {  // Existing constant, check the consistency
@@ -123,6 +128,6 @@ namespace toycc::flow {
     // -------- TranslationUnit
     void TranslationUnit::opt_constant_folding() {
         for (auto& [name, procedure] : procedures)
-            procedure.opt_constant_folding(global_block->output_constants());
+            procedure.opt_constant_folding(global_block->output_values());
     }
 }

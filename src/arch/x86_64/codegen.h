@@ -19,10 +19,10 @@ namespace toycc::arch::x86_64 {
         private:
             // -------- Global constructs -> arch/x86_64/global.cpp
             void generate_translation_unit(CodeOutput& output, const flow::TranslationUnit& unit);
-            void generate_global_declarations(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo);
+            void generate_global_declarations(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo);
             void generate_uninitialized_globals(CodeOutput& output, const std::unordered_set<std::shared_ptr<ir::Declaration>>& globals, debug::DebugInfo& debuginfo);
-            void generate_readwrite_globals(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo);
-            void generate_readonly_globals(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo);
+            void generate_readwrite_globals(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo);
+            void generate_readonly_globals(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo);
             void generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable, debug::DebugInfo& debuginfo);
             void generate_global_value(CodeOutput& output, const ir::Constant& value);
             void generate_procedure(CodeOutput& output, const flow::Procedure& procedure, debug::DebugInfo& debuginfo);
