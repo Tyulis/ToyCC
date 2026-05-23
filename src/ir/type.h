@@ -43,6 +43,7 @@ namespace toycc::ir {
         virtual TypeIdentifier identifier() const;
 
         bool is_arithmetic() const;
+        bool is_floating_point() const;
         bool is_integral() const;
         bool is_comparable() const;
         bool has_truth_value() const;

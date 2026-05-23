@@ -113,8 +113,12 @@ namespace toycc {
                 return std::popcount(std::to_underlying(value));
             }
 
+            constexpr bool empty() const {
+                return std::to_underlying(value) == 0;
+            }
+
             constexpr operator bool() const {
-                return std::to_underlying(value) != 0;
+                return !empty();
             }
     };
 

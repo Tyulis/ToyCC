@@ -13,6 +13,10 @@
 #include "util/strings.h"
 
 namespace toycc::arch::x86_64 {
+    static inline bool has_remaining_statements(const flow::DependencyGraph& graph) {
+        return std::ranges::any_of(graph.nodes(), [](std::shared_ptr<flow::DependencyNode> node) { return node->is_statement(); });
+    }
+
     void CodeGenerator::generate_basic_block(StackFrame& frame, std::shared_ptr<flow::BasicBlock> block, debug::DebugInfo& debuginfo) {
         flow::DependencyGraph graph = block->dependencies;
         flow::DependencyMatrix matrix = to_dependency_matrix(graph);
@@ -29,7 +33,7 @@ namespace toycc::arch::x86_64 {
                 std::cerr << "        " << match << "\n";
         }
 
-        while (!graph.empty()) {
+        while (has_remaining_statements(graph)) {
             if (toycc::config::dev::with_translation_trace) {
                 std::cerr << "    New iteration :\n";
                 std::cerr << "        Dependency graph :\n";

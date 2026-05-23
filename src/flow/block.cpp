@@ -199,8 +199,11 @@ namespace toycc::flow {
     // Get a map of known constant values at the end of a block after constant propagation
     ConstantMap BasicBlock::output_values() const {
         ConstantMap constants;
-        for (std::shared_ptr<DependencyNode> node : output_value_nodes())
-            constants[node->declaration()] = node->value();
+
+        // To get the final value, go through the graph in emission order and overwrite as we go, i.e topological order
+        for (std::shared_ptr<DependencyNode> node : dependencies.topological_sort())
+            if (node->is_value())
+                constants[node->declaration()] = node->value();
         return constants;
     }
 

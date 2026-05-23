@@ -115,6 +115,11 @@ namespace toycc::ir {
         return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::ENUM;
     }
 
+    bool Type::is_floating_point() const {
+        const TypeCategory dequalified_category = dequalify()->category;
+        return dequalified_category == TypeCategory::FLOAT;
+    }
+
     bool Type::is_comparable() const {
         const TypeCategory dequalified_category = dequalify()->category;
         return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::FLOAT ||
