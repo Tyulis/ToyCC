@@ -121,6 +121,16 @@ namespace toycc::debug {
         return abbreviation;
     }
 
+    // -------- QualifiedTypeEntry
+    QualifiedTypeEntry::QualifiedTypeEntry(Tag tag, std::shared_ptr<TypeEntry> element_type, CodeLocation code_location)
+        : TypeEntry(tag, code_location), element_type(element_type) {}
+
+    AbbreviationEntry QualifiedTypeEntry::emit(Encoder& encoder, DataSections& data) const {
+        return new_abbreviation()
+            .add(encoder, Attribute::DW_AT_type, Form::DW_FORM_ref8, data.offset(element_type))
+            .location(encoder, data.filenos[code_location.filename], code_location.line, code_location.character);
+    }
+
 
     // -------- SubprogramEntry
     SubprogramEntry::SubprogramEntry(const std::string& name, bool exported, const std::string& start_expr, const std::string& length_expr, const Expression& frame_base, std::shared_ptr<TypeEntry> return_type, CodeLocation code_location)

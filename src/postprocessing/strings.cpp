@@ -1,3 +1,4 @@
+#include "arch/datamodel.h"
 #include "postprocessing/postprocessor.h"
 
 namespace toycc::ir {
@@ -34,7 +35,12 @@ namespace toycc::ir {
             return;
 
         std::string value = operand.constant().string();
-        std::shared_ptr<Declaration> global = std::make_shared<Declaration>(anonymous_identifier(), operand.constant().type, operand.location,
+
+        // Writing to a string literal is undefined behaviour, so just assume it's a constant array
+        Constant length = {IntegerConstant(value.size() + 1), operand.location, arch::DATAMODEL->size_type};  // Include the terminating null byte
+        std::shared_ptr<Type> literal_type = ArrayType::make(operand.location, arch::DATAMODEL->literal_character_type, length);
+
+        std::shared_ptr<Declaration> global = std::make_shared<Declaration>(anonymous_identifier(), literal_type, operand.location,
                                                                             StorageClass::STATIC | StorageClass::TEMPORARY | StorageClass::GLOBAL);
 
         literals[global] = value;

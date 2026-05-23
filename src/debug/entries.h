@@ -93,6 +93,13 @@ namespace toycc::debug {
         virtual AbbreviationEntry emit(Encoder& encoder, DataSections& data) const override;
     };
 
+    struct QualifiedTypeEntry : public TypeEntry {
+        std::shared_ptr<TypeEntry> element_type;
+
+        QualifiedTypeEntry(Tag tag, std::shared_ptr<TypeEntry> element_type, CodeLocation code_location);
+        virtual AbbreviationEntry emit(Encoder& encoder, DataSections& data) const override;
+    };
+
     struct SubprogramEntry : public DebugInfoEntry {
         std::string name;
         bool exported;

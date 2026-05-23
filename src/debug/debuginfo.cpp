@@ -227,4 +227,20 @@ namespace toycc::debug {
 
         return entry;
     }
+
+    std::shared_ptr<QualifiedTypeEntry> DebugInfo::add_qualified_type_entry(std::shared_ptr<ir::QualifiedType> type_expression) {
+        std::shared_ptr<TypeEntry> entry = type(type_expression->underlying_type);
+        for (ir::TypeQualifier qualifier : type_expression->qualifiers) {
+            switch (qualifier) {
+                case ir::TypeQualifier::CONST:    entry = std::make_shared<QualifiedTypeEntry>(Tag::DW_TAG_const_type,    entry, type_expression->location);  break;
+                case ir::TypeQualifier::VOLATILE: entry = std::make_shared<QualifiedTypeEntry>(Tag::DW_TAG_volatile_type, entry, type_expression->location);  break;
+                case ir::TypeQualifier::RESTRICT: entry = std::make_shared<QualifiedTypeEntry>(Tag::DW_TAG_restrict_type, entry, type_expression->location);  break;
+                case ir::TypeQualifier::ATOMIC:   entry = std::make_shared<QualifiedTypeEntry>(Tag::DW_TAG_atomic_type,   entry, type_expression->location);  break;
+            }
+        }
+
+        types[type_expression] = entry;
+        return std::static_pointer_cast<QualifiedTypeEntry>(entry);
+    }
+
 }

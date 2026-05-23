@@ -60,18 +60,18 @@ namespace toycc::arch::x86_64 {
     }
 
 
-    void CodeGenerator::generate_global_declarations(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::generate_global_declarations(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo) {
         std::unordered_set<std::shared_ptr<ir::Declaration>> uninitialized_globals;
-        flow::GlobalMap rw_globals;
-        flow::GlobalMap ro_globals;
+        flow::ConstantMap rw_globals;
+        flow::ConstantMap ro_globals;
 
         for (const auto& [declaration, initializer] : globals) {
             if (declaration->storage & ir::StorageClass::EXTERN)
                 continue;
-            if (declaration->type->storage_category() == ir::TypeCategory::FUNCTION)
+            else if (declaration->type->storage_category() == ir::TypeCategory::FUNCTION)
                 continue;
 
-            if (initializer.has_value()) {
+            else if (initializer.has_value()) {
                 if (declaration->type->is_const())
                     ro_globals[declaration] = initializer;
                 else
@@ -97,7 +97,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_readwrite_globals(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::generate_readwrite_globals(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo) {
         output.directive(".data");
         for (const auto& [declaration, value] : globals) {
             generate_global_declaration(output, declaration, debuginfo);
@@ -105,7 +105,7 @@ namespace toycc::arch::x86_64 {
         }
     }
 
-    void CodeGenerator::generate_readonly_globals(CodeOutput& output, const flow::GlobalMap& globals, debug::DebugInfo& debuginfo) {
+    void CodeGenerator::generate_readonly_globals(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo) {
         output.directive(".rodata");
         for (const auto& [declaration, value] : globals) {
             generate_global_declaration(output, declaration, debuginfo);
