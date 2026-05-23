@@ -106,7 +106,7 @@ namespace toycc::arch::x86_64 {
     }
 
     void CodeGenerator::generate_readonly_globals(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo) {
-        output.directive(".rodata");
+        output.directive(".section .rodata");
         for (const auto& [declaration, value] : globals) {
             generate_global_declaration(output, declaration, debuginfo);
             generate_global_value(output, value.value());

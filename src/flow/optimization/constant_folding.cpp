@@ -1,7 +1,6 @@
 #include "flow/block.h"
 #include "flow/procedure.h"
 #include "flow/unit.h"
-#include "ir/type.h"
 #include "util/sets.hpp"
 
 namespace toycc::flow {
@@ -45,11 +44,24 @@ namespace toycc::flow {
 
 
     // -------- Statement evaluation
+    void set_output_value(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, const ir::Constant& value) {
+        for (const DependencyGraph::Edge& edge : graph.out_edges(statement_node))
+            if (edge.attr.type & DependencyType::WRITE)
+                edge.exit->value() = value;
+    }
+
     template <ir::StatementTag tag>
     bool evaluate_statement(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph);
 
-    template<> bool evaluate_statement<ir::StatementTag::COPY> (std::shared_ptr<DependencyNode>, DependencyGraph&) {
-        return true;
+    template<> bool evaluate_statement<ir::StatementTag::COPY> (std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+        const ir::Statement& statement = statement_node->statement();
+        if (!statement.inputs[0].is_constant())
+            return true;
+        else if (!statement.output->is_variable())
+            return true;
+
+        set_output_value(statement_node, graph, statement.inputs[0].constant());
+        return false;
     }
 
     // Attempt to evaluate a constant expression statement, return whether the statement must be kept

@@ -42,7 +42,8 @@ namespace toycc::flow {
 
         // Use the constant folding algorithm to evaluate constant expressions in the global scope
         global_block->opt_constant_folding();
-        globals.insert_range(global_block->output_values());
+        for (const auto& [variable, value] : global_block->output_values())
+            globals[variable] = value;
 
         // Check error conditions
         for (const auto& [variable, value] : globals) {
@@ -57,7 +58,6 @@ namespace toycc::flow {
 
                 case ValueStatus::UNKNOWN:
                     throw Diagnostic(DiagnosticLevel::ERROR, std::format("Global variable `{}`'s initializer is not a constant expression", variable->name), variable->location);
-
             }
         }
     }
