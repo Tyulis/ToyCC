@@ -208,6 +208,15 @@
         // -------- BITWISE_XOR
         {"ir": {"tag": "BITWISE_XOR"}, "target": {"instruction": "XOR"}},
 
+        // -------- LSHIFT
+        {"ir": {"tag": "LSHIFT"}, "target": {"instruction": "SHL"}},  // SAL is the exact same operation and instructions
+
+        // -------- ARITHMETIC_RSHIFT
+        {"ir": {"tag": "ARITHMETIC_RSHIFT"}, "target": {"instruction": "SAR"}},
+
+        // -------- LOGICAL_RSHIFT
+        {"ir": {"tag": "LOGICAL_RSHIFT"}, "target": {"instruction": "SHR"}},
+
         // -------- EQ
         {"ir":     [{"tag": "EQ", "right": "0"}],
          "target": [{"instruction": "TEST", "input": ["$0.left", "$0.left"]},
