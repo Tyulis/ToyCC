@@ -1,7 +1,6 @@
 #pragma once
 
 #include "diagnostic.h"
-#include "flow/block.h"
 #include "ir/type.h"
 #include "ir/declaration.h"
 #include "arch/x86_64/execmodel.h"
@@ -28,23 +27,19 @@ namespace toycc::arch::x86_64 {
     }
 
     inline OperandMatch is_constant(const ir::Operand& operand) {
-        return operand.is_constant() ? OperandMatch {OperandMatch::OK, {Location::constant}} : OperandMatch::KO;
+        return operand.tag() == ir::Operand::CONSTANT ? OperandMatch {OperandMatch::OK, {Location::constant}} : OperandMatch::KO;
     }
 
     inline OperandMatch is_variable(const ir::Operand& operand) {
-        return operand.is_variable() ? OperandMatch::OK : OperandMatch::KO;
-    }
-
-    inline OperandMatch is_label(const ir::Operand& operand) {
-        return operand.is_label() ? OperandMatch {OperandMatch::OK, {Location::constant}} : OperandMatch::KO;
+        return operand.tag() == ir::Operand::VARIABLE ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch is_dereference(const ir::Operand& operand) {
-        return operand.is_dereference() ? OperandMatch {OperandMatch::OK, {Location::memory}} : OperandMatch::KO;
+        return operand.tag() == ir::Operand::DEREFERENCE ? OperandMatch {OperandMatch::OK, {Location::memory}} : OperandMatch::KO;
     }
 
     inline OperandMatch check_type(const ir::Operand& operand, ir::TypeCategory expected_category) {
-        return (operand.type()->storage_category() == expected_category) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.type()->category == expected_category || operand.type()->storage_category() == expected_category) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_in_location(const StackFrame& frame, const ir::Operand& operand, Location expected_location) {
@@ -62,7 +57,7 @@ namespace toycc::arch::x86_64 {
         const std::unordered_set<Location> locations = frame.locate(operand);
 
         // Global variables will need to be flushed back to memory shortly after, so consider non-memory locations for them as requiring transfers
-        if (operand.is_variable()) {
+        if (operand.tag() == ir::Operand::VARIABLE) {
             std::shared_ptr<ir::Declaration> variable = operand.declaration();
             if (variable->storage & ir::StorageClass::GLOBAL && expected_location != Location::memory)
                 return {OperandMatch::REQUIRES_TRANSFER, {expected_location}};
@@ -71,7 +66,7 @@ namespace toycc::arch::x86_64 {
         // The output is already in the expected location -> trivial OK
         // If the expected location is free, then the result may go into it directly as an output operand so it's also OK,
         //     BUT this only applies to actual variables, dereferences are always in a fixed place in memory so the output location can't be chosen freely like that
-        if (locations.contains(expected_location) || (operand.is_variable() && frame.is_free(expected_location)))
+        if (locations.contains(expected_location) || (operand.tag() == ir::Operand::VARIABLE && frame.is_free(expected_location)))
             return {OperandMatch::OK, {expected_location}};
         else
             return {OperandMatch::REQUIRES_TRANSFER, {expected_location}};
@@ -82,19 +77,19 @@ namespace toycc::arch::x86_64 {
     }
 
     inline OperandMatch check_value_eq(const ir::Operand& operand, ir::IntegerConstant value) {
-        return (operand.is_constant() && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() == value) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.tag() == ir::Operand::CONSTANT && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() == value) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_value_ge(const ir::Operand& operand, ir::IntegerConstant value) {
-        return (operand.is_constant() && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() >= value) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.tag() == ir::Operand::CONSTANT && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() >= value) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_value_le(const ir::Operand& operand, ir::IntegerConstant value) {
-        return (operand.is_constant() && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() <= value) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.tag() == ir::Operand::CONSTANT && operand.constant().tag() == ir::Constant::INTEGER && operand.constant().integer() <= value) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_storage(const ir::Operand& operand, ir::StorageClass storage) {
-        return (operand.is_variable() && (operand.declaration()->storage & storage)) ? OperandMatch::OK : OperandMatch::KO;
+        return (operand.tag() == ir::Operand::CONSTANT && (operand.declaration()->storage & storage)) ? OperandMatch::OK : OperandMatch::KO;
     }
 
     inline OperandMatch check_signed(const ir::Operand& operand, bool expect_signed) {

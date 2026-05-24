@@ -154,6 +154,9 @@ namespace toycc::arch::x86_64 {
             case ir::Constant::STRING:
                 output.directive(std::format(".string \"{}\"", value.string()));
                 break;
+
+            case ir::Constant::POINTER:
+                output.directive(std::format(".quad {}+{}", value.pointer().label, value.pointer().offset));
         }
     }
 }

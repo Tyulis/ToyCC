@@ -148,7 +148,7 @@ namespace toycc::arch::x86_64 {
 
     std::string emit_operand(StackFrame& frame, const ir::Operand& operand, Location location) {
         std::stringstream code;
-        if (operand.is_dereference()) {
+        if (operand.tag() == ir::Operand::DEREFERENCE) {
             ir::IntegerConstant offset = operand.indices[0].constant().integer();
             if (offset != 0)
                 code << offset;
@@ -166,27 +166,32 @@ namespace toycc::arch::x86_64 {
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Can't emit dereference operand with pointer `{}` in memory", operand.pointer().ir_code()), operand.location);
         }
 
-        if (operand.has_constant_base()) {
-            const ir::Constant& base = operand.constant();
-            switch (base.tag()) {
-                case ir::Constant::INTEGER:  code << "$" << base.integer();  break;
-                default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer constants are not implemented", base.location);
+        switch (operand.base_tag()) {
+            case ir::Operand::CONSTANT_BASE: {
+                const ir::Constant& base = operand.constant();
+                switch (base.tag()) {
+                    case ir::Constant::INTEGER:  code << "$" << base.integer();  break;
+                    case ir::Constant::POINTER:  code << base.pointer().label << "+" << base.pointer().offset;  break;
+                    default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer constants are not implemented", base.location);
+                }
+                break;
             }
-        } else if (operand.has_label_base()) {
-            code << operand.label();
-        } else if (operand.has_variable_base()) {
-            std::shared_ptr<ir::Declaration> variable = operand.declaration();
-            code << location_code(frame, variable, location);
-        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
 
-        if (operand.is_dereference())
+            case ir::Operand::VARIABLE_BASE: {
+                std::shared_ptr<ir::Declaration> variable = operand.declaration();
+                code << location_code(frame, variable, location);
+                break;
+            }
+        }
+
+        if (operand.tag() == ir::Operand::DEREFERENCE)
             code << ")";
 
         return code.str();
     }
 
     void move_operand(StackFrame& frame, const ir::Operand& operand, Location to) {
-        if (operand.is_variable())
+        if (operand.tag() == ir::Operand::VARIABLE)
             frame.move(operand.declaration(), to);
     }
 }

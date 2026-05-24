@@ -2,10 +2,11 @@
 #include "flow/block.h"
 #include "flow/procedure.h"
 #include "flow/unit.h"
+#include "ir/declaration.h"
 
 namespace toycc::flow {
     static void replace_declaration(ir::Operand& operand, std::shared_ptr<ir::Declaration> initial, std::shared_ptr<ir::Declaration> replacement) {
-        if (operand.has_variable_base() && operand.declaration() == initial)
+        if (operand.base_tag() == ir::Operand::VARIABLE_BASE && operand.declaration() == initial)
             operand.value = replacement;
     }
 

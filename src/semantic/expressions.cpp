@@ -554,7 +554,7 @@ namespace toycc::semantic {
     ExpressionResult SemanticAnalyzer::emit_shift_operation(StatementTag op, const ExpressionResult& left, const ExpressionResult& right, CodeLocation location) {
         // The right operand must be positive
         Operand right_operand = right.operand();
-        if (right_operand.is_constant()) {
+        if (right_operand.tag() == Operand::CONSTANT) {
             const Constant& right_value = right_operand.constant();
             if (right_value.tag() != Constant::INTEGER)
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid constant tag for a shift right operand", location);

@@ -2,7 +2,6 @@
 #include <sstream>
 #include <variant>
 
-#include "arch/datamodel.h"
 #include "diagnostic.h"
 #include "ir/declaration.h"
 
@@ -76,12 +75,26 @@ namespace toycc::ir {
     }
 
 
+    // -------- PointerConstant
+    bool PointerConstant::operator== (const PointerConstant& rhs) const {
+        return rhs.label == rhs.label && offset == rhs.offset;
+    }
+
+    std::ostream& operator<< (std::ostream& stream, const PointerConstant& pointer) {
+        stream << pointer.label;
+        if (pointer.offset != 0)
+            stream << "+" << pointer.offset;
+        return stream;
+    }
+
     // -------- Constant
     Constant::Tag Constant::tag() const {
         if (std::holds_alternative<IntegerConstant>(value))
             return Constant::INTEGER;
         else if (std::holds_alternative<FloatingPointConstant>(value))
             return Constant::FLOAT;
+        else if (std::holds_alternative<PointerConstant>(value))
+            return Constant::POINTER;
         else if (std::holds_alternative<std::string>(value))
             return Constant::STRING;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown constant tag", location);
@@ -95,6 +108,10 @@ namespace toycc::ir {
         return std::get<FloatingPointConstant>(value);
     }
 
+    PointerConstant Constant::pointer() const {
+        return std::get<PointerConstant>(value);
+    }
+
     std::string Constant::string() const {
         return std::get<std::string>(value);
     }
@@ -106,7 +123,6 @@ namespace toycc::ir {
         switch (new_unqualified->category) {
             case TypeCategory::VOID:
             case TypeCategory::BUILTIN:
-            case TypeCategory::LABEL:
             case TypeCategory::STRUCT:
             case TypeCategory::UNION:
             case TypeCategory::FUNCTION:
@@ -116,7 +132,7 @@ namespace toycc::ir {
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid type for a constant : `{}`", new_type->text()), location);
 
             case TypeCategory::POINTER:
-                if (value_tag == Constant::STRING)
+                if (value_tag == Constant::STRING || value_tag == Constant::POINTER)
                     return {.value = value, .location = location, .type = new_type};
             [[fallthrough]];
 
@@ -153,6 +169,7 @@ namespace toycc::ir {
         switch (tag()) {
             case Constant::INTEGER:  code << integer();              break;
             case Constant::FLOAT:    code << floating_point();       break;
+            case Constant::POINTER:  code << pointer();              break;
             case Constant::STRING:   code << string();               break;
         }
         return code.str();
@@ -163,42 +180,34 @@ namespace toycc::ir {
     Operand::Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices) : value(constant), location(location), indices(indices) {}
     Operand::Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices) : value(declaration), location(declaration->location), indices(indices) {}
     Operand::Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices) : value(declaration), location(location), indices(indices) {}
-    Operand::Operand(std::string label, CodeLocation location, std::vector<Operand> indices) : value(label), location(location), indices(indices) {}
-    Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices)
+    Operand::Operand(std::variant<std::shared_ptr<Declaration>, Constant> value, CodeLocation location, std::vector<Operand> indices)
             : value(value), location(location), indices(indices) {}
 
-    bool Operand::is_label() const {
-        return has_label_base() && !is_dereference();
+    Operand::BaseTag Operand::base_tag() const {
+        if (std::holds_alternative<Constant>(value))
+            return Operand::CONSTANT_BASE;
+        else if (std::holds_alternative<std::shared_ptr<Declaration>>(value))
+            return Operand::VARIABLE_BASE;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand tag", location);
     }
 
-    bool Operand::is_constant() const {
-        return has_constant_base() && !is_dereference();
-    }
+    Operand::Tag Operand::tag() const {
+        if (!indices.empty())
+            return Operand::DEREFERENCE;
 
-    bool Operand::is_variable() const {
-        return has_variable_base() && !is_dereference();
-    }
-
-    bool Operand::is_dereference() const {
-        return !indices.empty();
-    }
-
-    bool Operand::has_label_base() const {
-        return std::holds_alternative<std::string>(value);
-    }
-
-    bool Operand::has_constant_base() const {
-        return std::holds_alternative<Constant>(value);
-    }
-
-    bool Operand::has_variable_base() const {
-        return std::holds_alternative<std::shared_ptr<Declaration>>(value);
+        switch (base_tag()) {
+            case Operand::CONSTANT_BASE:  return Operand::CONSTANT;
+            case Operand::VARIABLE_BASE:  return Operand::VARIABLE;
+        }
+        __builtin_unreachable();
     }
 
     std::shared_ptr<Type> Operand::base_type() const {
-        if      (has_constant_base())  return std::get<Constant>(value).type;
-        else if (has_variable_base())  return std::get<std::shared_ptr<Declaration>>(value)->type;
-        else                           return arch::DATAMODEL->label_type;
+        switch (base_tag()) {
+            case Operand::CONSTANT_BASE:  return std::get<Constant>(value).type;
+            case Operand::VARIABLE_BASE:  return std::get<std::shared_ptr<Declaration>>(value)->type;
+        }
+        __builtin_unreachable();
     }
 
     std::shared_ptr<Type> Operand::type() const {
@@ -208,23 +217,18 @@ namespace toycc::ir {
         return type;
     }
 
-    std::string Operand::label() const {
-        if (has_label_base())  return std::get<std::string>(value);
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the label alternative of a non-label operand", location);
-    }
-
     Constant Operand::constant() const {
-        if (has_constant_base())  return std::get<Constant>(value);
+        if (base_tag() == Operand::CONSTANT_BASE)  return std::get<Constant>(value);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant operand", location);
     }
 
     Constant& Operand::constant() {
-        if (has_constant_base())  return std::get<Constant>(value);
+        if (base_tag() == Operand::CONSTANT_BASE)  return std::get<Constant>(value);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the constant alternative of a non-constant operand", location);
     }
 
     std::shared_ptr<Declaration> Operand::declaration() const {
-        if (has_variable_base())  return std::get<std::shared_ptr<Declaration>>(value);
+        if (base_tag() == Operand::VARIABLE_BASE)  return std::get<std::shared_ptr<Declaration>>(value);
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Attempted to access the declaration alternative of a constant operand", location);
     }
 
@@ -234,37 +238,38 @@ namespace toycc::ir {
     }
 
     std::optional<size_t> Operand::as_index() const {
-        if (is_constant()) {
-            if (constant().tag() == Constant::INTEGER)
-                return static_cast<size_t>(constant().integer());
-            else
-                throw Diagnostic(DiagnosticLevel::ERROR, "Constant indices must be integers", location);
-        } else {
-            return {};
+        switch (tag()) {
+            case Operand::CONSTANT:
+                if (constant().tag() == Constant::INTEGER)
+                    return static_cast<size_t>(constant().integer());
+                else
+                    throw Diagnostic(DiagnosticLevel::ERROR, "Constant indices must be integers", location);
+
+            case Operand::VARIABLE:
+            case Operand::DEREFERENCE:
+                return {};
         }
+        __builtin_unreachable();
     }
 
     bool Operand::operator== (const Operand& rhs) const {
         if (indices != rhs.indices)
             return false;
 
-        if (has_constant_base() && rhs.has_constant_base())
-            return constant() == rhs.constant();
-        else if (has_variable_base() && rhs.has_variable_base())
-            return declaration() == rhs.declaration();
-        else if (has_label_base() && rhs.has_label_base())
-            return label() == rhs.label();
-        else return false;
+        switch (base_tag()) {
+            case Operand::CONSTANT_BASE:  return constant() == rhs.constant();
+            case Operand::VARIABLE_BASE:  return declaration() == rhs.declaration();
+        }
+        __builtin_unreachable();
     }
 
     std::string Operand::ir_code() const {
         std::stringstream code;
-        if      (has_constant_base())  code << constant().ir_code();
-        else if (has_variable_base())  code << declaration()->name;
-        else                           code << label();
 
-        for (const Operand& index : indices)
-            code << "[" << index.ir_code() << "]";
+        switch (base_tag()) {
+            case Operand::CONSTANT_BASE:  code << constant().ir_code();  break;
+            case Operand::VARIABLE_BASE:  code << declaration()->name;   break;
+        }
 
         return code.str();
     }

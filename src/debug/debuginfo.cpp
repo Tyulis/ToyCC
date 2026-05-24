@@ -157,7 +157,6 @@ namespace toycc::debug {
             case ir::TypeCategory::FLOAT:
             case ir::TypeCategory::FUNCTION:
             case ir::TypeCategory::BUILTIN:
-            case ir::TypeCategory::LABEL:
             case ir::TypeCategory::ENUM:
             case ir::TypeCategory::BITFIELD:
             case ir::TypeCategory::ALIGNED:
@@ -185,7 +184,7 @@ namespace toycc::debug {
 
     std::shared_ptr<ArrayTypeEntry> DebugInfo::add_array_type_entry(std::shared_ptr<ir::ArrayType> type_expression) {
         std::optional<size_t> size = {};
-        if (type_expression->length.is_constant() && type_expression->length.constant().tag() == ir::Constant::INTEGER)
+        if (type_expression->length.tag() == ir::Operand::CONSTANT && type_expression->length.constant().tag() == ir::Constant::INTEGER)
             size = static_cast<size_t>(type_expression->length.constant().integer());
 
         // Not sure if that's even possible with array types, but anyways defense against recursive type : add the entry shell to the map first, then resolve the element type

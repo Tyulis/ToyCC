@@ -56,19 +56,19 @@ namespace toycc::arch::x86_64 {
         const ir::Operand& operand = statement.inputs[0];
         const ir::Operand& output  = statement.output.value();
 
-        if (!operand.has_variable_base())
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't take the address of something other than a variable", operand.location);
-        if (output.is_constant() || output.is_label())
+        if (output.tag() == ir::Operand::CONSTANT)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The result of an ADDRESSOF operator can't be a constant", operand.location);
 
         std::optional<Location> destination = *match.statements[0].output.value().locations.begin();
         if (!destination.has_value())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "ADDRESSOF statements without output location are not implemented", output.location);
 
-        if (operand.is_variable())
-            emit_addressof_variable(frame, operand, output, destination.value());
-        else if (operand.is_dereference())
-            emit_addressof_dereference(frame, operand, output, destination.value());
+        switch (operand.tag()) {
+            case ir::Operand::CONSTANT:     throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't take the address of a constant", operand.location);
+            case ir::Operand::VARIABLE:     return emit_addressof_variable(frame, operand, output, destination.value());
+            case ir::Operand::DEREFERENCE:  return emit_addressof_dereference(frame, operand, output, destination.value());
+        }
+        __builtin_unreachable();
     }
 
     void emit_call(StackFrame& frame, const TranslationMatch& match) {

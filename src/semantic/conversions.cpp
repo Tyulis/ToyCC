@@ -152,7 +152,7 @@ namespace toycc::semantic {
             Operand destination = emit_conversion(destination_unqualified, source_unqualified, source, location, destination_generator);
 
             // No copy was emitted, but one is required to realign the source object
-            if (!source.is_constant() && destination == source && destination_type->alignment(location) > source_type->alignment(location)) {
+            if (source.tag() != Operand::CONSTANT && destination == source && destination_type->alignment(location) > source_type->alignment(location)) {
                 std::shared_ptr<Declaration> conversion_result = destination_generator();
                 emit(Statement::make_unary_operation(location, StatementTag::COPY, source, conversion_result));
                 destination = conversion_result;
@@ -226,7 +226,7 @@ namespace toycc::semantic {
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::ZERO_EXTEND);
                     else
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::NARROW);
-                } else /* if (!destination_type->is_signed() && source_integer->is_signed()) */ {  // signed to unsigned
+                } else /* if (!destination_type->issigned() tagin != Operand::CONSTANTteger->is_signed()) */ {  // signed to unsigned
                     // 6.3.1.3.1 : If the source value can be represented by the destination type if the destination type has at least one more bit, so that conversion is okay
                     // 6.3.1.3.2 : If the destination type is unsigned but the source value can't be represented in it, wrap around
                     // Ex. 8(-120) + 256 -> 8(136) <=> 0b10001000 -> nothing to do
@@ -307,14 +307,18 @@ namespace toycc::semantic {
 
 
     Operand SemanticAnalyzer::emit_copy_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location, TemporaryGenerator destination_generator, StatementTag op) {
-        if (source.is_constant()) {
-            // Don't emit copies for constant expressions, just give another type expression to the constant
-            return source.constant().as(destination_type);
-        } else {
-            std::shared_ptr<Declaration> destination = destination_generator();
-            emit(Statement::make_unary_operation(location, op, source, destination));
-            return destination;
+        switch (source.tag()) {
+            case Operand::CONSTANT:
+                // Don't emit copies for constant expressions, just give another type expression to the constant
+                return source.constant().as(destination_type);
+
+            case Operand::VARIABLE:
+            case Operand::DEREFERENCE:
+                std::shared_ptr<Declaration> destination = destination_generator();
+                emit(Statement::make_unary_operation(location, op, source, destination));
+                return destination;
         }
+        __builtin_unreachable();
     }
 
     std::array<Operand, 2> SemanticAnalyzer::emit_arithmetic_conversion(Operand left, Operand right, CodeLocation location) {

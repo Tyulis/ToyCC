@@ -28,10 +28,10 @@ namespace toycc::flow {
     static void replace_value(std::shared_ptr<DependencyNode> statement_node, std::shared_ptr<DependencyNode> value_node, DependencyGraph& graph) {
         ir::Statement& statement = statement_node->statement();
         for (ir::Operand& input : statement.inputs)
-            if (input.has_variable_base() && input.declaration() == value_node->declaration())
+            if (input.base_tag() == ir::Operand::VARIABLE_BASE && input.declaration() == value_node->declaration())
                 input = ir::Operand {value_node->value().value(), input.location};
 
-        if (statement.output.has_value() && statement.output->is_dereference() && statement.output->has_variable_base() && statement.output->declaration() == value_node->declaration())
+        if (statement.output.has_value() && statement.output->tag() == ir::Operand::DEREFERENCE && statement.output->base_tag() == ir::Operand::VARIABLE_BASE && statement.output->declaration() == value_node->declaration())
             statement.output = ir::Operand {value_node->value().value(), statement.output->location};
 
         // Now that all instances of this value node have been replaced, the statement doesn't depend on the actual variable anymore
@@ -106,12 +106,12 @@ namespace toycc::flow {
 
     // Check whether all inputs are constants
     bool is_constant_statement(std::shared_ptr<DependencyNode> statement_node) {
-        return std::ranges::all_of(statement_node->statement().inputs, [](const ir::Operand& input) { return input.is_constant() || input.is_label(); });
+        return std::ranges::all_of(statement_node->statement().inputs, [](const ir::Operand& input) { return input.tag() == ir::Operand::CONSTANT; });
     }
 
     // Check whether all inputs are constants, and the output is a variable
     bool is_constants_to_variable(std::shared_ptr<DependencyNode> statement_node) {
-        return is_constant_statement(statement_node) && statement_node->statement().output->is_variable();
+        return is_constant_statement(statement_node) && statement_node->statement().output->tag() == ir::Operand::VARIABLE;
     }
 
     // Set variables to the `value` directly, or replace the more complex statement with a COPY if the output is a dereference. Return whether to keep the statement or not
@@ -119,7 +119,7 @@ namespace toycc::flow {
         const ir::Statement& original_statement = statement_node->statement();
 
         bool emit_copy = true;
-        if (original_statement.output->is_variable()) {
+        if (original_statement.output->tag() == ir::Operand::VARIABLE) {
             set_output_value(statement_node, graph, value);
             std::shared_ptr<DependencyNode> value_node = output_node(statement_node, graph);
 

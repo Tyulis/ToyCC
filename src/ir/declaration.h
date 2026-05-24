@@ -69,10 +69,18 @@ namespace toycc::ir {
     using IntegerConstant = boost::multiprecision::int128_t;
     using FloatingPointConstant = boost::multiprecision::cpp_bin_float_quad;
 
-    struct Constant {
-        enum Tag {INTEGER, FLOAT, STRING};
+    struct PointerConstant {
+        std::string label;
+        ssize_t offset;
 
-        std::variant<IntegerConstant, FloatingPointConstant, std::string> value;
+        bool operator== (const PointerConstant& rhs) const;
+    };
+    std::ostream& operator<< (std::ostream& stream, const PointerConstant& pointer);
+
+    struct Constant {
+        enum Tag {INTEGER, FLOAT, STRING, POINTER};
+
+        std::variant<IntegerConstant, FloatingPointConstant, PointerConstant, std::string> value;
         CodeLocation location;
         std::shared_ptr<Type> type;
 
@@ -80,6 +88,7 @@ namespace toycc::ir {
 
         IntegerConstant integer() const;
         FloatingPointConstant floating_point() const;
+        PointerConstant pointer() const;
         std::string string() const;
 
         Constant as(std::shared_ptr<Type> new_type) const;
@@ -91,8 +100,11 @@ namespace toycc::ir {
     // Statement operand : any value or dereference. Basically any lvalue or rvalue
     // Lvalues and rvalues are a semantic analysis concept, once a statement is semantically correct drop that information to uniformize everything
     struct Operand {
-        //           variable                      constant  label
-        std::variant<std::shared_ptr<Declaration>, Constant, std::string> value;
+        enum BaseTag {VARIABLE_BASE, CONSTANT_BASE};
+        enum Tag {VARIABLE, CONSTANT, DEREFERENCE};
+
+        //           variable                      constant
+        std::variant<std::shared_ptr<Declaration>, Constant> value;
         CodeLocation location;
         std::vector<Operand> indices;
 
@@ -100,21 +112,14 @@ namespace toycc::ir {
         Operand(const Constant& constant, CodeLocation location, std::vector<Operand> indices = {});
         Operand(std::shared_ptr<Declaration> declaration, std::vector<Operand> indices = {});
         Operand(std::shared_ptr<Declaration> declaration, CodeLocation location, std::vector<Operand> indices = {});
-        Operand(std::string label, CodeLocation location, std::vector<Operand> indices = {});
-        Operand(std::variant<std::shared_ptr<Declaration>, Constant, std::string> value, CodeLocation location, std::vector<Operand> indices = {});
+        Operand(std::variant<std::shared_ptr<Declaration>, Constant> value, CodeLocation location, std::vector<Operand> indices = {});
 
-        bool is_label() const;
-        bool is_constant() const;
-        bool is_variable() const;
-        bool is_dereference() const;
-        bool has_label_base() const;
-        bool has_constant_base() const;
-        bool has_variable_base() const;
+        BaseTag base_tag() const;
+        Tag tag() const;
 
         std::shared_ptr<Type> base_type() const;
         std::shared_ptr<Type> type() const;
 
-        std::string label() const;
         Constant constant() const;
         Constant& constant();
         std::shared_ptr<Declaration> declaration() const;

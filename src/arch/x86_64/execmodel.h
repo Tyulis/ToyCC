@@ -4,8 +4,9 @@
 #include <memory>
 #include <optional>
 #include <unordered_set>
+#include <unordered_map>
 
-#include "flow/block.h"
+#include "flow/dependencies.h"
 #include "gen/execmodel/x86_64/location.h"
 #include "gen/execmodel/x86_64/transfer_tag.h"
 #include "gen/execmodel/x86_64/translation_tag.h"

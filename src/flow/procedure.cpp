@@ -5,10 +5,10 @@
 namespace toycc::flow {
     std::ostream& operator<< (std::ostream& stream, FlowType type) {
         switch (type) {
-            case FlowType::FALLTHROUGH:  stream << "FALLTHROUGH";  break;
-            case FlowType::JUMP:         stream << "JUMP";         break;
+            case FlowType::FALLTHROUGH:  return stream << "FALLTHROUGH";
+            case FlowType::JUMP:         return stream << "JUMP";
         }
-        return stream;
+        __builtin_unreachable();
     }
 
     // -------- Procedure
@@ -89,7 +89,7 @@ namespace toycc::flow {
             if (statement.tag == ir::StatementTag::MARKER) {
                 const std::optional<ir::Label> label = scope->find_label(statement);
                 if (!label.has_value())
-                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Found marker for unknown label {}", statement.output->label()), statement.location);
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Found marker for unknown label {}", statement.output->constant().pointer().label), statement.location);
                 current_block = labeled_blocks[label->name];  // The block already exists and has its type and label already set
 
                 // If the previous block may fall through (didn't end in an inconditional jump / return), connect it to the new block
@@ -116,9 +116,9 @@ namespace toycc::flow {
 
             if (statement.tag == ir::StatementTag::JUMP || statement.tag == ir::StatementTag::JUMP_IF_TRUE || statement.tag == ir::StatementTag::JUMP_IF_FALSE) {
                 // Jump -> exit this block, connect it to the target block
-                std::optional<ir::Label> target = scope->find_label(statement.inputs[0].label());
+                std::optional<ir::Label> target = scope->find_label(statement.inputs[0].constant().pointer().label);
                 if (!target.has_value())
-                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Found jump to unknown label {}", statement.inputs[0].label()), statement.location);
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Found jump to unknown label {}", statement.inputs[0].constant().pointer().label), statement.location);
                 blocks.add_edge(current_block, labeled_blocks[target->name], FlowType::JUMP);
 
                 // Set the previous block to connect the next block : conditional jump -> allow connections, unconditional jump -> don't

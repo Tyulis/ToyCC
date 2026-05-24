@@ -84,7 +84,7 @@ namespace toycc::ir {
 
 
     size_t ArrayType::size(CodeLocation location) const {
-        if (length.is_constant()) {
+        if (length.tag() == Operand::CONSTANT) {
             const Constant& constant_length = length.constant();
             if (constant_length.tag() == Constant::INTEGER)
                 return static_cast<size_t> (constant_length.integer()) * element_type->size(location);
@@ -511,7 +511,6 @@ namespace toycc::ir {
         switch (underlying_type->category) {
             case TypeCategory::VOID:      throw Diagnostic(DiagnosticLevel::ERROR, "Can't align a void type", location);
             case TypeCategory::BUILTIN:   throw Diagnostic(DiagnosticLevel::ERROR, "Built-in types' memory layout are unspecified and can't be manually aligned", location);
-            case TypeCategory::LABEL:     throw Diagnostic(DiagnosticLevel::ERROR, "Can't realign a label", location);
             case TypeCategory::FUNCTION:  throw Diagnostic(DiagnosticLevel::ERROR, "Can't manually align a function type", location);
             case TypeCategory::BITFIELD:  throw Diagnostic(DiagnosticLevel::ERROR, "Can't manually align a bitfield type", location);
             case TypeCategory::ARRAY:  // Is that even possible ?
@@ -582,8 +581,6 @@ namespace toycc::ir {
         switch (underlying_type->category) {
             case TypeCategory::BUILTIN:  // Not sure about that case, block for now
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Qualifying built-in types is not implemented", location);
-            case TypeCategory::LABEL:
-                throw Diagnostic(DiagnosticLevel::ERROR, "Can't qualify a label", location);
             case TypeCategory::ARRAY:  // Is that even possible ?
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Qualifying array types is not implemented", location);
             case TypeCategory::FUNCTION:

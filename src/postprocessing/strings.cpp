@@ -31,7 +31,7 @@ namespace toycc::ir {
 
 
     void PostProcessor::extract_string_literals(std::unordered_map<std::shared_ptr<Declaration>, std::string>& literals, Operand& operand) {
-        if (!operand.has_constant_base() || operand.constant().tag() != Constant::STRING)
+        if (operand.base_tag() != Operand::CONSTANT_BASE || operand.constant().tag() != Constant::STRING)
             return;
 
         std::string value = operand.constant().string();

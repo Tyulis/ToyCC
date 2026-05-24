@@ -203,8 +203,6 @@ def generate_constraint(constraint: Constraint, is_output: bool, arg_usage: dict
                     return "is_constant(operand)"
                 case "variable":
                     return "is_variable(operand)"
-                case "label":
-                    return "is_label(operand)"
                 case "dereference":
                     return "is_dereference(operand)"
                 case "_":

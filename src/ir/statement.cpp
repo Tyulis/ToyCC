@@ -1,6 +1,7 @@
 #include <sstream>
 
 #include "ir/statement.h"
+#include "arch/datamodel.h"
 #include "util/strings.h"
 
 namespace toycc::ir {
@@ -78,7 +79,8 @@ namespace toycc::ir {
     }
 
     Statement Statement::make_marker(CodeLocation location, std::string label) {
-        return {.tag = StatementTag::MARKER, .location = location, .inputs = {}, .output = {{label, location}}, .block = {}};
+        const Constant output = {PointerConstant {label, 0}, location, arch::DATAMODEL->label_type};
+        return {.tag = StatementTag::MARKER, .location = location, .inputs = {}, .output = output, .block = {}};
     }
 
     Statement Statement::make_block(CodeLocation location, std::shared_ptr<Scope> block) {
@@ -108,12 +110,14 @@ namespace toycc::ir {
     }
 
     Statement Statement::make_jump(CodeLocation location, std::string label) {
-        return {.tag = StatementTag::JUMP, .location = location, .inputs = {{label, location}}, .output = {}, .block = {}};
+        const Constant input = {PointerConstant {label, 0}, location, arch::DATAMODEL->label_type};
+        return {.tag = StatementTag::JUMP, .location = location, .inputs = {input}, .output = {}, .block = {}};
     }
 
     Statement Statement::make_conditional_jump(CodeLocation location, Operand predicate, std::string label, bool jump_if_is) {
+        const Constant input = {PointerConstant {label, 0}, location, arch::DATAMODEL->label_type};
         StatementTag tag = (jump_if_is == true ? StatementTag::JUMP_IF_TRUE : StatementTag::JUMP_IF_FALSE);
-        return {.tag = tag, .location = location, .inputs = {{label, location}, predicate}, .output = {}, .block = {}};
+        return {.tag = tag, .location = location, .inputs = {input, predicate}, .output = {}, .block = {}};
     }
 
     Statement Statement::make_return(CodeLocation location) {

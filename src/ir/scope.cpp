@@ -19,7 +19,7 @@ namespace toycc::ir {
 
         for (const Statement& statement : statements) {
             if (statement.tag == StatementTag::MARKER)
-                code << labels.at(statement.output->label()).name << ":\n";
+                code << labels.at(statement.output->constant().pointer().label).name << ":\n";
             else
                 code << statement.ir_code() << ";\n";
         }
@@ -53,10 +53,10 @@ namespace toycc::ir {
     }
 
     std::optional<Label> Scope::find_label(const Statement& marker) {
-        if (marker.tag != StatementTag::MARKER || !marker.output.has_value() || !marker.output->is_label())
+        if (marker.tag != StatementTag::MARKER || !marker.output.has_value() || marker.output->tag() != Operand::CONSTANT || marker.output->constant().tag() != Constant::POINTER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid marker", marker.location);
 
-        const std::string& name = marker.output.value().label();
+        const std::string& name = marker.output->constant().pointer().label;
         return find_label(name);
     }
 

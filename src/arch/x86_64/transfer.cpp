@@ -22,7 +22,7 @@ namespace toycc::arch::x86_64 {
     };
 
     static inline IdentifierType direct_identifier_type(const ir::Operand& operand) {
-        if (operand.is_dereference())
+        if (operand.tag() == ir::Operand::DEREFERENCE)
             return IdentifierType::DEREFERENCE;
         else
             return IdentifierType::DIRECT;
@@ -491,14 +491,14 @@ namespace toycc::arch::x86_64 {
             for (size_t input_index = 0; input_index < statement_match.input.size(); input_index++) {
                 const size_t input_operand_index = statement_match.input[input_index].input_index.value_or(input_index);
                 const ir::Operand& operand = statement.inputs[input_operand_index];
-                AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
+                AllocatedValue value = {.is_flush = false, .variable = (operand.tag() == ir::Operand::VARIABLE ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                       .id = {.is_input = true, .type = direct_identifier_type(operand), .index = input_index}}}}};
                 weights.add(value);
 
-                if (operand.is_dereference()) {
+                if (operand.tag() == ir::Operand::DEREFERENCE) {
                     ir::Operand pointer = operand.pointer();
-                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
+                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.tag() == ir::Operand::VARIABLE ? pointer.declaration() : nullptr),
                                                     .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                                   .id = {.is_input = true, .type = indirect_identifier_type(pointer.base_type()->category), .index = input_index}}}}};
                     weights.add(pointer_value);
@@ -508,14 +508,14 @@ namespace toycc::arch::x86_64 {
             // If the output doesn't overwrite an input, it should also get allocated
             if (statement_match.output.has_value() && !statement_match.is_inout) {
                 const ir::Operand& operand = statement.output.value();
-                AllocatedValue value = {.is_flush = false, .variable = (operand.is_variable() ? operand.declaration() : nullptr),
+                AllocatedValue value = {.is_flush = false, .variable = (operand.tag() == ir::Operand::VARIABLE ? operand.declaration() : nullptr),
                                         .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                       .id = {.is_input = false, .type = direct_identifier_type(operand), .index = {}}}}}};
                 weights.add(value);
 
-                if (operand.is_dereference()) {
+                if (operand.tag() == ir::Operand::DEREFERENCE) {
                     ir::Operand pointer = operand.pointer();
-                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.is_variable() ? pointer.declaration() : nullptr),
+                    AllocatedValue pointer_value = {.is_flush = false, .variable = (pointer.tag() == ir::Operand::VARIABLE ? pointer.declaration() : nullptr),
                                                     .operands = {{.id = TranslationOperandIdentifier::Statement {.index = statement_index,
                                                                                                                  .id = {.is_input = false, .type = indirect_identifier_type(pointer.base_type()->category), .index = {}}}}}};
                     weights.add(pointer_value);
@@ -997,8 +997,14 @@ namespace toycc::arch::x86_64 {
         Location source = *match->source_locations.begin();
         ir::Operand source_operand = operand;
 
-        if (operand.is_constant() || operand.is_dereference())
-            operand = frame.declare_intermediate(operand.type(), operand.location);
+        switch (operand.tag()) {
+            case ir::Operand::CONSTANT:
+            case ir::Operand::DEREFERENCE:
+                operand = frame.declare_intermediate(operand.type(), operand.location);
+                break;
+
+            case ir::Operand::VARIABLE: break;
+        }
 
         if (toycc::config::dev::with_comment_trace) {
             std::stringstream comment;
@@ -1009,12 +1015,8 @@ namespace toycc::arch::x86_64 {
         toycc::execmodel::x86_64::emit_transfer(frame, source_operand, operand, match.value(), source, destination);
 
         // Then the internal move (required to be after emitting the instruction)
-        if (operand.is_label()) {
-            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Transferring labels is not supported", operand.location);
-        } else if (operand.is_variable() || operand.is_constant() || operand.is_dereference()) {
-            // Constants and dereference operands were previously converted to an intermediate declaration
-            frame.copy(operand.declaration(), destination);
-        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
+        // Constants and dereference operands were previously converted to an intermediate declaration
+        frame.copy(operand.declaration(), destination);
 
         if (toycc::config::dev::with_translation_trace) {
             std::cerr << "        Transfer " << source_operand.ir_code() << "(" << source << ") -> " << operand.ir_code() << "(" << destination << ")" << "\n";

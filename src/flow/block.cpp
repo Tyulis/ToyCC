@@ -26,32 +26,41 @@ namespace toycc::flow {
 
         // FIXME : If there's a dereference, don't make any assumption on where that value comes from and make this depend on everything else
         if (statement.output.has_value()) {
-            if (statement.output->is_dereference()) {
-                for (std::shared_ptr<ir::Declaration> decl : defined_decls) {
-                    inputs [decl].type |= DependencyType::DEREFERENCE;
-                    outputs[decl].type |= DependencyType::DEREFERENCE;
+            switch (statement.output->tag()) {
+                case ir::Operand::DEREFERENCE: {
+                    for (std::shared_ptr<ir::Declaration> decl : defined_decls) {
+                        inputs [decl].type |= DependencyType::DEREFERENCE;
+                        outputs[decl].type |= DependencyType::DEREFERENCE;
+                    }
+
+                    if (statement.output->base_tag() == ir::Operand::VARIABLE_BASE) {
+                        Dependency& dependency = inputs[statement.output->declaration()];
+                        dependency.type |= DependencyType::READ;
+                        dependency.operand_group = OperandGroup::OUTPUT;
+                        dependency.operand_index = 0;
+                    }
+                    break;
                 }
 
-                if (statement.output->has_variable_base()) {
-                    Dependency& dependency = inputs[statement.output->declaration()];
-                    dependency.type |= DependencyType::READ;
+                case ir::Operand::VARIABLE: {
+                    Dependency& dependency = outputs[statement.output->declaration()];
+                    dependency.type |= DependencyType::WRITE;
                     dependency.operand_group = OperandGroup::OUTPUT;
                     dependency.operand_index = 0;
+                    break;
                 }
-            } else if (statement.output->is_variable()) {
-                Dependency& dependency = outputs[statement.output->declaration()];
-                dependency.type |= DependencyType::WRITE;
-                dependency.operand_group = OperandGroup::OUTPUT;
-                dependency.operand_index = 0;
+
+                case ir::Operand::CONSTANT:
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "A constant can't be a statement output", statement.output->location);
             }
         }
 
         for (const auto& [index, input] : std::ranges::enumerate_view(statement.inputs)) {
-            if (input.is_dereference())
+            if (input.tag() == ir::Operand::DEREFERENCE)
                 for (std::shared_ptr<ir::Declaration> decl : defined_decls)
                     inputs[decl].type |= DependencyType::DEREFERENCE;
 
-            if (input.has_variable_base()) {
+            if (input.base_tag() == ir::Operand::VARIABLE_BASE) {
                 Dependency& dependency = inputs[input.declaration()];
                 dependency.type |= DependencyType::READ;
                 dependency.operand_group = OperandGroup::INPUT;

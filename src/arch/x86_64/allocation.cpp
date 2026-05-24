@@ -90,19 +90,18 @@ namespace toycc::arch::x86_64 {
     }
 
     std::unordered_set<Location> StackFrame::locate(const ir::Operand& operand) const {
-        if (operand.is_dereference())
-            return {Location::memory};
-        else if (operand.is_constant())
-            return {Location::constant};
-        else if (operand.is_label())
-            return {Location::constant};
-        else if (operand.is_variable()) {
-            if (operand.type()->storage_category() == ir::TypeCategory::FUNCTION)
+        switch (operand.tag()) {
+            case ir::Operand::DEREFERENCE:
+                return {Location::memory};
+            case ir::Operand::CONSTANT:
                 return {Location::constant};
-            else
-                return Parent::locate(operand.declaration());
+            case ir::Operand::VARIABLE:
+                if (operand.type()->storage_category() == ir::TypeCategory::FUNCTION)
+                    return {Location::constant};
+                else
+                    return Parent::locate(operand.declaration());
         }
-        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown operand type", operand.location);
+        __builtin_unreachable();
     }
 
     // If one is available, return a free location among the `locations`

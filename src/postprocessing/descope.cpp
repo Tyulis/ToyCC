@@ -27,11 +27,18 @@ namespace toycc::ir {
         for (ssize_t position = 0; position < static_cast<ssize_t>(scope->statements.size()); position++) {
             // Rename all label references
             Statement& statement_ref = scope->statements[position];
-            for (Operand& operand : statement_ref.inputs)
-                if (operand.has_label_base() && label_renames.contains(operand.label()))
-                    operand.value = label_renames[operand.label()];
-            if (statement_ref.output.has_value() && statement_ref.output->has_label_base() && label_renames.contains(statement_ref.output->label()))
-                statement_ref.output->value = label_renames[statement_ref.output->label()];
+            for (Operand& operand : statement_ref.inputs) {
+                if (operand.base_tag() == Operand::CONSTANT_BASE && operand.constant().tag() == Constant::POINTER && label_renames.contains(operand.constant().pointer().label)) {
+                    const PointerConstant pointer = operand.constant().pointer();
+                    operand = ir::Constant {PointerConstant {label_renames[pointer.label], pointer.offset}, operand.constant().location, operand.constant().type};
+                }
+            }
+
+            if (statement_ref.output.has_value() && statement_ref.output->base_tag() == Operand::CONSTANT_BASE) {
+                const Constant& constant = statement_ref.output->constant();
+                if (constant.tag() == Constant::POINTER && label_renames.contains(constant.pointer().label))
+                    statement_ref.output = ir::Constant {PointerConstant{label_renames[constant.pointer().label], constant.pointer().offset}, constant.location, constant.type};
+            }
 
             Statement statement = scope->statements[position];
 

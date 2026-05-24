@@ -44,7 +44,7 @@ namespace toycc::ir {
             pointer_type = referenced_type;
         }
 
-        if (flat_offset.is_constant()) {
+        if (flat_offset.tag() == Operand::CONSTANT) {
             return Operand {operand.value, operand.location, {flat_offset}};
         } else {
             // Variable offset -> explicitely add it to the pointer before dereferencing
@@ -56,7 +56,7 @@ namespace toycc::ir {
 
     // Fully dereference an operand, i.e make an operand with the dereferenced value, but without any dereference remaining
     Operand PostProcessor::fully_dereference_operand(Operand operand, std::shared_ptr<Scope> scope) {
-        if (!operand.is_dereference())
+        if (operand.tag() != Operand::DEREFERENCE)
             return operand;
 
         Operand dereferenced = dereference_operand(operand, scope);
@@ -73,34 +73,38 @@ namespace toycc::ir {
         if (*index_type == *arch::DATAMODEL->offset_type)
             return index;
 
-        if (index.is_constant()) {
-            if (index.constant().tag() != Constant::INTEGER)
-                throw Diagnostic(DiagnosticLevel::ERROR, "An index must resolve to an integer type", index.location);
-            return Constant {index.constant().integer(), index.location, arch::DATAMODEL->offset_type};  // Just overwrite the type
-        }
-
-        else if (index.is_variable()) {
-            std::shared_ptr<Declaration> converted = declare_temporary(scope, arch::DATAMODEL->offset_type, index.location);
-
-            switch (index_type->category) {
-                case TypeCategory::BOOL:  // Equivalent to a small unsigned type, zero-extend
-                    scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::ZERO_EXTEND, index, converted));
-                    return converted;
-
-                case TypeCategory::INTEGER: {
-                    if (index_type->is_signed())
-                        scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::SIGN_EXTEND, index, converted));
-                    else
-                        scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::ZERO_EXTEND, index, converted));
-                    return converted;
-                }
-
-                default:
+        switch (index.tag()) {
+            case Operand::CONSTANT: {
+                if (index.constant().tag() != Constant::INTEGER)
                     throw Diagnostic(DiagnosticLevel::ERROR, "An index must resolve to an integer type", index.location);
+                return Constant {index.constant().integer(), index.location, arch::DATAMODEL->offset_type};  // Just overwrite the type
             }
-        }
 
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The index should have been already dereferenced", index.location);
+            case Operand::VARIABLE: {
+                std::shared_ptr<Declaration> converted = declare_temporary(scope, arch::DATAMODEL->offset_type, index.location);
+
+                switch (index_type->category) {
+                    case TypeCategory::BOOL:  // Equivalent to a small unsigned type, zero-extend
+                        scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::ZERO_EXTEND, index, converted));
+                        return converted;
+
+                    case TypeCategory::INTEGER: {
+                        if (index_type->is_signed())
+                            scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::SIGN_EXTEND, index, converted));
+                        else
+                            scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::ZERO_EXTEND, index, converted));
+                        return converted;
+                    }
+
+                    default:
+                        throw Diagnostic(DiagnosticLevel::ERROR, "An index must resolve to an integer type", index.location);
+                }
+            }
+
+            case Operand::DEREFERENCE:
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "The index should have been already dereferenced", index.location);
+        }
+        __builtin_unreachable();
     }
 
     // Compute an operand for the pointer_type[index] offset
@@ -125,7 +129,7 @@ namespace toycc::ir {
         std::shared_ptr<Type> referenced_type = pointer_type->dereference(index.as_index(), index.location);
         const size_t size = referenced_type->size(index.location);
 
-        if (index.is_constant()) {
+        if (index.tag() == Operand::CONSTANT) {
             if (index.constant().tag() != Constant::INTEGER)
                 throw Diagnostic(DiagnosticLevel::ERROR, "Indices must be integers", index.location);
 
@@ -142,7 +146,7 @@ namespace toycc::ir {
     }
 
     Operand PostProcessor::make_struct_offset(std::shared_ptr<Type> pointer_type, Operand index, std::shared_ptr<Scope>) {
-        if (!index.is_constant() || index.constant().tag() != Constant::INTEGER)
+        if (index.tag() != Operand::CONSTANT || index.constant().tag() != Constant::INTEGER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Struct member indices must be constant integers", index.location);
 
         std::shared_ptr<StructType> struct_type = std::static_pointer_cast<StructType>(pointer_type);
@@ -156,7 +160,7 @@ namespace toycc::ir {
 
     // Compute an operand for flat_offset + index * size
     Operand PostProcessor::merge_offsets(Operand flat_offset, Operand offset, std::shared_ptr<Scope> scope) {
-        if (flat_offset.is_constant() && offset.is_constant()) {
+        if (flat_offset.tag() == Operand::CONSTANT && offset.tag() == Operand::CONSTANT) {
             // Fold constants immediately
             IntegerConstant result = flat_offset.constant().integer() + offset.constant().integer();
             return Constant {result, offset.location, arch::DATAMODEL->offset_type};
