@@ -102,8 +102,7 @@ namespace toycc::arch::x86_64 {
         if (base_type->storage_category() != ir::TypeCategory::INTEGER)
             return OperandMatch::KO;
 
-        std::shared_ptr<ir::IntegerType> integer_type = std::static_pointer_cast<ir::IntegerType> (base_type);
-        return (integer_type->is_signed == expect_signed ? OperandMatch::OK : OperandMatch::KO);
+        return (base_type->is_signed() == expect_signed ? OperandMatch::OK : OperandMatch::KO);
     }
 
     OperandMatch check_overwrite(const StackFrame& frame, const flow::DependencyGraph& graph, const ir::Operand& input_operand, const ir::Operand& output_operand, const GroupMatch& group_match);

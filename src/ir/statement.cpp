@@ -1,53 +1,51 @@
 #include <sstream>
 
-#include "diagnostic.h"
 #include "ir/statement.h"
 #include "util/strings.h"
 
 namespace toycc::ir {
     // -------- Statement
-    static std::string tag_repr(StatementTag tag) {
+    std::ostream& operator<< (std::ostream& stream, StatementTag tag) {
         switch (tag) {
-            case StatementTag::MARKER:             return "MARKER";
-            case StatementTag::BLOCK:              return "BLOCK";
-            case StatementTag::FUNCTION:           return "FUNCTION";
-            case StatementTag::CALL:               return "CALL";
-            case StatementTag::JUMP:               return "JUMP";
-            case StatementTag::JUMP_IF_TRUE:       return "JUMP_IF_TRUE";
-            case StatementTag::JUMP_IF_FALSE:      return "JUMP_IF_FALSE";
-            case StatementTag::RETURN:             return "RETURN";
-            case StatementTag::RETURN_VAL:         return "RETURN_VAL";
-            case StatementTag::COPY:               return "COPY";
-            case StatementTag::ADDRESSOF:          return "ADDRESSOF";
-            case StatementTag::PLUS:               return "PLUS";
-            case StatementTag::MINUS:              return "MINUS";
-            case StatementTag::FLOAT_TO_FLOAT:     return "FLOAT_TO_FLOAT";
-            case StatementTag::INT_TO_FLOAT:       return "INT_TO_FLOAT";
-            case StatementTag::FLOAT_TO_INT:       return "FLOAT_TO_INT";
-            case StatementTag::SIGN_EXTEND:        return "SIGN_EXTEND";
-            case StatementTag::ZERO_EXTEND:        return "ZERO_EXTEND";
-            case StatementTag::NARROW:             return "NARROW";
-            case StatementTag::MUL:                return "MUL";
-            case StatementTag::DIV:                return "DIV";
-            case StatementTag::MOD:                return "MOD";
-            case StatementTag::ADD:                return "ADD";
-            case StatementTag::SUB:                return "SUB";
-            case StatementTag::LT:                 return "LT";
-            case StatementTag::LE:                 return "LE";
-            case StatementTag::GE:                 return "GE";
-            case StatementTag::GT:                 return "GT";
-            case StatementTag::EQ:                 return "EQ";
-            case StatementTag::NE:                 return "NE";
-            case StatementTag::BITWISE_AND:        return "BITWISE_AND";
-            case StatementTag::BITWISE_XOR:        return "BITWISE_XOR";
-            case StatementTag::BITWISE_OR:         return "BITWISE_OR";
-            case StatementTag::LSHIFT:             return "LSHIFT";
-            case StatementTag::LOGICAL_RSHIFT:     return "LOGICAL_RSHIFT";
-            case StatementTag::ARITHMETIC_RSHIFT:  return "ARITHMETIC_RSHIFT";
-            case StatementTag::LOGICAL_AND:        return "LOGICAL_AND";
-            case StatementTag::LOGICAL_OR:         return "LOGICAL_OR";
+            case StatementTag::MARKER:             return stream << "MARKER";
+            case StatementTag::BLOCK:              return stream << "BLOCK";
+            case StatementTag::FUNCTION:           return stream << "FUNCTION";
+            case StatementTag::CALL:               return stream << "CALL";
+            case StatementTag::JUMP:               return stream << "JUMP";
+            case StatementTag::JUMP_IF_TRUE:       return stream << "JUMP_IF_TRUE";
+            case StatementTag::JUMP_IF_FALSE:      return stream << "JUMP_IF_FALSE";
+            case StatementTag::RETURN:             return stream << "RETURN";
+            case StatementTag::RETURN_VAL:         return stream << "RETURN_VAL";
+            case StatementTag::COPY:               return stream << "COPY";
+            case StatementTag::NOT:                return stream << "NOT";
+            case StatementTag::COMPLEMENT:         return stream << "COMPLEMENT";
+            case StatementTag::ADDRESSOF:          return stream << "ADDRESSOF";
+            case StatementTag::NEGATE:             return stream << "NEGATE";
+            case StatementTag::FLOAT_TO_FLOAT:     return stream << "FLOAT_TO_FLOAT";
+            case StatementTag::INT_TO_FLOAT:       return stream << "INT_TO_FLOAT";
+            case StatementTag::FLOAT_TO_INT:       return stream << "FLOAT_TO_INT";
+            case StatementTag::SIGN_EXTEND:        return stream << "SIGN_EXTEND";
+            case StatementTag::ZERO_EXTEND:        return stream << "ZERO_EXTEND";
+            case StatementTag::NARROW:             return stream << "NARROW";
+            case StatementTag::MUL:                return stream << "MUL";
+            case StatementTag::DIV:                return stream << "DIV";
+            case StatementTag::MOD:                return stream << "MOD";
+            case StatementTag::ADD:                return stream << "ADD";
+            case StatementTag::SUB:                return stream << "SUB";
+            case StatementTag::LT:                 return stream << "LT";
+            case StatementTag::LE:                 return stream << "LE";
+            case StatementTag::GE:                 return stream << "GE";
+            case StatementTag::GT:                 return stream << "GT";
+            case StatementTag::EQ:                 return stream << "EQ";
+            case StatementTag::NE:                 return stream << "NE";
+            case StatementTag::BITWISE_AND:        return stream << "BITWISE_AND";
+            case StatementTag::BITWISE_XOR:        return stream << "BITWISE_XOR";
+            case StatementTag::BITWISE_OR:         return stream << "BITWISE_OR";
+            case StatementTag::LSHIFT:             return stream << "LSHIFT";
+            case StatementTag::LOGICAL_RSHIFT:     return stream << "LOGICAL_RSHIFT";
+            case StatementTag::ARITHMETIC_RSHIFT:  return stream << "ARITHMETIC_RSHIFT";
         }
-        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown statement tag");
+        __builtin_unreachable();
     }
 
     std::vector<Operand> Statement::operands() const {
@@ -59,7 +57,7 @@ namespace toycc::ir {
 
     std::string Statement::ir_code() const {
         std::stringstream code;
-        code << tag_repr(tag);
+        code << tag;
         if (!inputs.empty()) {
             code << " (";
             for (size_t index = 0; index < inputs.size(); index++) {

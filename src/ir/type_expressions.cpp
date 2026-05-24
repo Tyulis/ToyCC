@@ -296,6 +296,10 @@ namespace toycc::ir {
         return !values.empty();
     }
 
+    bool EnumType::is_signed() const {
+        return underlying_type->is_signed();
+    }
+
     size_t EnumType::size(CodeLocation location) const {
         return underlying_type->size(location);
     }
@@ -425,6 +429,10 @@ namespace toycc::ir {
 
     bool TypeModifier::is_const() const {
         return underlying_type->is_const();
+    }
+
+    bool TypeModifier::is_signed() const {
+        return underlying_type->is_signed();
     }
 
     size_t TypeModifier::size(CodeLocation location) const {

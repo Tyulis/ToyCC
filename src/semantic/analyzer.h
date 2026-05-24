@@ -138,10 +138,10 @@ namespace toycc::semantic {
             ExpressionResult decode_indirect_member_access(const ExpressionResult& structure, const std::string& member_name, CodeLocation location);
             ExpressionResult decode_postfix_increment(const ExpressionResult& target, CParser::PostfixOperatorContext* postfix);
 
-            StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context);
+            StatementTag decode_assignment_operator(CParser::AssignmentOperatorContext* context, bool is_signed);
             StatementTag decode_equality_operator(CParser::EqualityOperatorContext* context);
             StatementTag decode_relational_operator(CParser::RelationalOperatorContext* context);
-            StatementTag decode_shift_operator(CParser::ShiftOperatorContext* context);
+            StatementTag decode_shift_operator(CParser::ShiftOperatorContext* context, bool is_signed);
             StatementTag decode_additive_operator(CParser::AdditiveOperatorContext* context);
             StatementTag decode_multiplicative_operator(CParser::MultiplicativeOperatorContext* context);
 

@@ -88,7 +88,7 @@ namespace toycc::ir {
                     return converted;
 
                 case TypeCategory::INTEGER: {
-                    if (std::static_pointer_cast<IntegerType>(index_type)->is_signed)
+                    if (index_type->is_signed())
                         scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::SIGN_EXTEND, index, converted));
                     else
                         scope->add_statement(Statement::make_unary_operation(index.location, StatementTag::ZERO_EXTEND, index, converted));

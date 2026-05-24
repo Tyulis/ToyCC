@@ -119,6 +119,7 @@ namespace toycc::ir {
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const EnumType& rhs) const;
 
+            virtual bool is_signed() const override;
             virtual std::shared_ptr<Type> dequalify() const override;
             virtual TypeCategory storage_category() const override;
             virtual TypeIdentifier identifier() const override;
@@ -157,6 +158,7 @@ namespace toycc::ir {
 
             // By default, defer to the underlying type
             virtual bool is_const() const override;
+            virtual bool is_signed() const override;
             virtual size_t size(CodeLocation location) const override;
             virtual size_t alignment(CodeLocation location) const override;
             virtual TypeCategory storage_category() const override;

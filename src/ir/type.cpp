@@ -120,6 +120,10 @@ namespace toycc::ir {
         return dequalified_category == TypeCategory::FLOAT;
     }
 
+    bool Type::is_signed() const {
+        return false;
+    }
+
     bool Type::is_comparable() const {
         const TypeCategory dequalified_category = dequalify()->category;
         return dequalified_category == TypeCategory::BOOL || dequalified_category == TypeCategory::INTEGER || dequalified_category == TypeCategory::FLOAT ||
@@ -181,6 +185,10 @@ namespace toycc::ir {
     BooleanType::BooleanType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits)
         : PrimitiveType(TypeCategory::BOOL, name, location, size_bits, alignment_bits) {}
 
+    bool BooleanType::is_signed() const {
+        return false;
+    }
+
     std::shared_ptr<Type> BooleanType::dequalify() const {
         return std::make_shared<BooleanType> (*this);
     }
@@ -188,10 +196,10 @@ namespace toycc::ir {
 
     // -------- IntegerType
     IntegerType::IntegerType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits, bool is_signed)
-        : PrimitiveType(TypeCategory::INTEGER, name, location, size_bits, alignment_bits), is_signed(is_signed) {}
+        : PrimitiveType(TypeCategory::INTEGER, name, location, size_bits, alignment_bits), _signed(is_signed) {}
 
     std::string IntegerType::ir_code(std::unordered_set<const Type*>) const {
-        return std::format("{} {}", (is_signed? "SIGNED" : "UNSIGNED"), PrimitiveType::ir_code());
+        return std::format("{} {}", (_signed? "SIGNED" : "UNSIGNED"), PrimitiveType::ir_code());
     }
 
     bool IntegerType::operator== (const Type& rhs) const {
@@ -199,7 +207,11 @@ namespace toycc::ir {
     }
 
     bool IntegerType::operator== (const IntegerType& rhs) const {
-        return PrimitiveType::operator== (rhs) && is_signed == rhs.is_signed;
+        return PrimitiveType::operator== (rhs) && _signed == rhs._signed;
+    }
+
+    bool IntegerType::is_signed() const {
+        return _signed;
     }
 
     std::shared_ptr<Type> IntegerType::dequalify() const {
@@ -210,6 +222,10 @@ namespace toycc::ir {
     // -------- FloatingPointType
     FloatingPointType::FloatingPointType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits)
         : PrimitiveType(TypeCategory::FLOAT, name, location, size_bits, alignment_bits) {}
+
+    bool FloatingPointType::is_signed() const {
+        return true;
+    }
 
     std::shared_ptr<Type> FloatingPointType::dequalify() const {
         return std::make_shared<FloatingPointType> (*this);

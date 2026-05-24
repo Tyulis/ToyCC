@@ -33,6 +33,7 @@ namespace toycc::ir {
 
         virtual bool complete() const;  // Defaults to true
         virtual bool is_const() const;  // Defaults to false
+        virtual bool is_signed() const;  // Defaults to false
         virtual size_t size(CodeLocation location) const;       // In bytes
         virtual size_t alignment(CodeLocation location) const;  // In bytes
         virtual bool operator== (const Type& rhs) const;  // Defaults to same category
@@ -72,17 +73,19 @@ namespace toycc::ir {
     struct BooleanType : public PrimitiveType {
         BooleanType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits);
 
+        virtual bool is_signed() const override;
         virtual std::shared_ptr<Type> dequalify() const override;
     };
 
     struct IntegerType : public PrimitiveType {
-        bool is_signed;
+        bool _signed;
 
         IntegerType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits, bool is_signed);
 
         virtual bool operator== (const Type& rhs) const override;
         bool operator== (const IntegerType& rhs) const;
 
+        virtual bool is_signed() const override;
         virtual std::shared_ptr<Type> dequalify() const override;
 
         virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const override;
@@ -91,6 +94,7 @@ namespace toycc::ir {
     struct FloatingPointType : public PrimitiveType {
         FloatingPointType(std::string name, CodeLocation location, size_t size_bits, size_t alignment_bits);
 
+        virtual bool is_signed() const override;
         virtual std::shared_ptr<Type> dequalify() const override;
     };
 }

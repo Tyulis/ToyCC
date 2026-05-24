@@ -86,10 +86,10 @@ namespace toycc::semantic {
                 std::shared_ptr<IntegerType> destination_int = std::static_pointer_cast<IntegerType>(destination);
                 std::shared_ptr<IntegerType> source_int      = std::static_pointer_cast<IntegerType>(source);
 
-                if      (destination_int->size_bits > source_int->size_bits)    return ConversionValidity::IMPLICIT;
-                else if (destination_int->size_bits < source_int->size_bits)    return ConversionValidity::EXPLICIT;
-                else if (destination_int->is_signed && !source_int->is_signed)  return ConversionValidity::IMPLICIT;
-                else                                                            return ConversionValidity::EXPLICIT;
+                if      (destination_int->size_bits > source_int->size_bits)        return ConversionValidity::IMPLICIT;
+                else if (destination_int->size_bits < source_int->size_bits)        return ConversionValidity::EXPLICIT;
+                else if (destination_int->is_signed() && !source_int->is_signed())  return ConversionValidity::IMPLICIT;
+                else                                                                return ConversionValidity::EXPLICIT;
             }
             else return ConversionValidity::INVALID;
         }
@@ -210,14 +210,14 @@ namespace toycc::semantic {
                 // About narrowing conversions : just truncate left bits. It's compliant for conversion to unsigned integers and
                 //     representable narrowing signed conversions, and unrepresentable signed conversions are implementation-defined anyways
 
-                if (destination_type->is_signed == source_integer->is_signed) {  // signed to signed / unsigned to unsigned
+                if (destination_type->is_signed() == source_integer->is_signed()) {  // signed to signed / unsigned to unsigned
                     if (destination_type->size_bits > source_integer->size_bits)
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::SIGN_EXTEND);
                     else if (destination_type->size_bits == source_integer->size_bits)
                         return source;
                     else  // if (destination_type->size_bits < source_integer->size_bits) : Just truncate left bits, it's compliant for unsigned integers and narrow
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::NARROW);  //
-                } else if (destination_type->is_signed && !source_integer->is_signed) {  // unsigned to signed
+                } else if (destination_type->is_signed() && !source_integer->is_signed()) {  // unsigned to signed
                     // 6.3.1.3.1 : If the source value can be represented by the destination type if the destination type has at least one more bit, so that conversion is okay
                     // 6.3.1.3.3 : If the destination type is signed but the source value can't be represented in it, the result is implementation-defined
                     //             Here, go through the same operation, whatever happens happens
@@ -226,7 +226,7 @@ namespace toycc::semantic {
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::ZERO_EXTEND);
                     else
                         return emit_copy_conversion(destination_type, source, location, destination_generator, StatementTag::NARROW);
-                } else /* if (!destination_type->is_signed && source_integer->is_signed) */ {  // signed to unsigned
+                } else /* if (!destination_type->is_signed() && source_integer->is_signed()) */ {  // signed to unsigned
                     // 6.3.1.3.1 : If the source value can be represented by the destination type if the destination type has at least one more bit, so that conversion is okay
                     // 6.3.1.3.2 : If the destination type is unsigned but the source value can't be represented in it, wrap around
                     // Ex. 8(-120) + 256 -> 8(136) <=> 0b10001000 -> nothing to do

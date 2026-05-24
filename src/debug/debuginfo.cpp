@@ -167,7 +167,7 @@ namespace toycc::debug {
     }
 
     std::shared_ptr<IntegerTypeEntry> DebugInfo::add_integer_type_entry(std::shared_ptr<ir::IntegerType> type_expression) {
-        auto entry = std::make_shared<IntegerTypeEntry> (type_expression->name, type_expression->is_signed, type_expression->size_bits, type_expression->location);
+        auto entry = std::make_shared<IntegerTypeEntry> (type_expression->name, type_expression->is_signed(), type_expression->size_bits, type_expression->location);
         types[type_expression] = entry;
         return entry;
     }

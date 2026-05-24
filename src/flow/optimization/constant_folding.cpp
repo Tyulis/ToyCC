@@ -1,3 +1,4 @@
+#include <limits>
 #include <concepts>
 #include <functional>
 
@@ -8,6 +9,7 @@
 #include "flow/unit.h"
 #include "ir/declaration.h"
 #include "util/sets.hpp"
+#include "util/strings.h"
 
 namespace toycc::flow {
     // -------- Initial value management
@@ -59,6 +61,36 @@ namespace toycc::flow {
 
 
     // -------- Statement evaluation
+    struct left_shift {
+        ir::IntegerConstant operator() (ir::IntegerConstant operand, ir::IntegerConstant shift) const {
+            return operand << static_cast<size_t>(shift);
+        };
+    };
+
+    struct arithmetic_right_shift {
+        ir::IntegerConstant operator() (ir::IntegerConstant operand, ir::IntegerConstant shift) const {
+            // Arithmetic right shift is equivalent to division by 2^shift, rounded towards negative infinity
+            // Regular division is rounded towards zero, the divisor is always positive
+            ir::IntegerConstant divisor = (ir::IntegerConstant(1) << static_cast<size_t>(shift));
+            ir::IntegerConstant quotient = operand / divisor;
+            ir::IntegerConstant modulus  = operand % divisor;
+            if (operand < 0 && modulus != 0)
+                quotient -= 1;
+            return quotient;
+        }
+    };
+
+    struct logical_right_shift {
+        ir::IntegerConstant operator() (ir::IntegerConstant operand, ir::IntegerConstant shift) const {
+            if (operand >= 0)
+                return operand >> static_cast<size_t>(shift);
+
+            // Logical right shift of a negative number is a weird case, realistically it shouldn't happen, but just in case :
+            ir::IntegerConstant twos_complement_value = std::numeric_limits<ir::IntegerConstant>::max() + operand + 1;
+            return twos_complement_value >> static_cast<size_t>(shift);
+        }
+    };
+
     std::shared_ptr<DependencyNode> output_node(std::shared_ptr<DependencyNode> statement_node, const DependencyGraph& graph) {
         for (const DependencyGraph::Edge& edge : graph.out_edges(statement_node))
             if (edge.attr.type & DependencyType::WRITE)
@@ -106,6 +138,17 @@ namespace toycc::flow {
         return emit_copy;
     }
 
+    // Evaluate an integral unary operation on a constant, using objects like `std::negate`
+    template <typename T> requires std::invocable<T, ir::IntegerConstant>
+    ir::Constant evaluate_integral(const ir::Constant& input, std::shared_ptr<ir::Type> output_type, const CodeLocation location, T op = {}) {
+        const ir::IntegerConstant result = op(input.integer());
+        if (output_type->is_integral())
+            return ir::Constant {result, location, output_type};
+        else if (output_type->is_floating_point())
+            return ir::Constant {ir::FloatingPointConstant(result), location, output_type};
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid result type `{}` for this operation", output_type->repr()), location);
+    }
+
     // Evaluate an integral binary operation between constants, using objects like `std::plus`
     template <typename T> requires std::invocable<T, ir::IntegerConstant, ir::IntegerConstant>
     ir::Constant evaluate_integral(const ir::Constant& left, const ir::Constant& right, std::shared_ptr<ir::Type> output_type, const CodeLocation location, T op = {}) {
@@ -115,6 +158,51 @@ namespace toycc::flow {
         else if (output_type->is_floating_point())
             return ir::Constant {ir::FloatingPointConstant(result), location, output_type};
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid result type `{}` for this operation", output_type->repr()), location);
+    }
+
+    // Evaluate a unary integer operation statement with constant input
+    template <typename T> requires std::invocable<T, ir::IntegerConstant>
+    bool evaluate_integral_statement(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, T op = {}) {
+        if (!is_constant_statement(statement_node))
+            return true;
+
+        const ir::Statement& statement = statement_node->statement();
+        const ir::Constant result = evaluate_integral(statement.inputs[0].constant(), statement.output->type(), statement.output->location, op);
+        return set_copy(statement_node, graph, result);
+    }
+
+    // Evaluate a binary integer operation statement with all constant inputs
+    template <typename T> requires std::invocable<T, ir::IntegerConstant, ir::IntegerConstant>
+    bool evaluate_integral_statement(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, T op = {}) {
+        if (!is_constant_statement(statement_node))
+            return true;
+
+        const ir::Statement& statement = statement_node->statement();
+        const ir::Constant result = evaluate_integral(statement.inputs[0].constant(), statement.inputs[1].constant(), statement.output->type(),
+                                                        statement.output->location, op);
+        return set_copy(statement_node, graph, result);
+    }
+
+    // Evaluate an arithmetic unary operation on a constant, using objects like `std::negate`
+    template <typename T> requires std::invocable<T, ir::IntegerConstant> && std::invocable<T, ir::FloatingPointConstant>
+    ir::Constant evaluate_arithmetic(const ir::Constant& input, std::shared_ptr<ir::Type> output_type, const CodeLocation location, T op = {}) {
+        if (input.tag() == ir::Constant::STRING) {
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "This operator is not applicable to strings", location);
+        } else if (input.tag() == ir::Constant::INTEGER) {
+            return evaluate_integral(input, output_type, location, op);
+        } else {
+            ir::FloatingPointConstant result;
+            if (input.tag() == ir::Constant::INTEGER)
+                result = ir::FloatingPointConstant(op(input.integer()));
+            else
+                result = op(input.floating_point());
+
+            if (output_type->is_integral())
+                return ir::Constant {ir::IntegerConstant(result), location, output_type};
+            else if (output_type->is_floating_point())
+                return ir::Constant {result, location, output_type};
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid result type `{}` for this operation", output_type->repr()), location);
+        }
     }
 
     // Evaluate an arithmetic binary operation between constants, using objects like `std::plus`
@@ -140,9 +228,21 @@ namespace toycc::flow {
 
             if (output_type->is_integral())
                 return ir::Constant {ir::IntegerConstant(result), location, output_type};
-            else
+            else if (output_type->is_floating_point())
                 return ir::Constant {result, location, output_type};
+            else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid result type `{}` for this operation", output_type->repr()), location);
         }
+    }
+
+    // Evaluate a unary arithmetic operation statement with constant input
+    template <typename T> requires std::invocable<T, ir::IntegerConstant> && std::invocable<T, ir::FloatingPointConstant>
+    bool evaluate_arithmetic_statement(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, T op = {}) {
+        if (!is_constant_statement(statement_node))
+            return true;
+
+        const ir::Statement& statement = statement_node->statement();
+        const ir::Constant result = evaluate_arithmetic(statement.inputs[0].constant(), statement.output->type(), statement.output->location, op);
+        return set_copy(statement_node, graph, result);
     }
 
     // Evaluate a binary arithmetic operation statement with all constant inputs
@@ -166,16 +266,50 @@ namespace toycc::flow {
 
     // Attempt to evaluate a constant expression statement, return whether the statement must be kept
     static bool evaluate_statement(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
-        switch (statement_node->statement().tag) {
-            case ir::StatementTag::COPY:         return evaluate_copy(statement_node, graph);
-            case ir::StatementTag::SIGN_EXTEND:  return evaluate_copy(statement_node, graph);  // Sign- and zero- extensions are just ways to preserve the same value
-            case ir::StatementTag::ZERO_EXTEND:  return evaluate_copy(statement_node, graph);  // through length extensions, they can all be evaluated as copies
-            case ir::StatementTag::ADD:          return evaluate_arithmetic_statement(statement_node, graph, std::plus {});
-            case ir::StatementTag::SUB:          return evaluate_arithmetic_statement(statement_node, graph, std::minus {});
-            case ir::StatementTag::MUL:          return evaluate_arithmetic_statement(statement_node, graph, std::multiplies {});
-            case ir::StatementTag::DIV:          return evaluate_arithmetic_statement(statement_node, graph, std::divides {});
-            default:                             return true;  // Just keep the original statement
+        const ir::Statement& statement = statement_node->statement();
+
+        switch (statement.tag) {
+            case ir::StatementTag::MARKER:
+            case ir::StatementTag::BLOCK:
+            case ir::StatementTag::FUNCTION:
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("`{}` statements should disappear before constant folding", dump(statement.tag)), statement.location);
+
+            case ir::StatementTag::CALL:               return true;
+            case ir::StatementTag::JUMP:               return true;
+            case ir::StatementTag::JUMP_IF_TRUE:       return true;
+            case ir::StatementTag::JUMP_IF_FALSE:      return true;
+            case ir::StatementTag::RETURN:             return true;
+            case ir::StatementTag::RETURN_VAL:         return true;
+            case ir::StatementTag::COPY:               return evaluate_copy(statement_node, graph);
+            case ir::StatementTag::NEGATE:             return evaluate_arithmetic_statement(statement_node, graph, std::negate {});
+            case ir::StatementTag::NOT:                return evaluate_integral_statement(statement_node, graph, std::logical_not {});
+            case ir::StatementTag::COMPLEMENT:         return evaluate_integral_statement(statement_node, graph, std::bit_not {});
+            case ir::StatementTag::ADDRESSOF:          return true;  // TODO
+            case ir::StatementTag::FLOAT_TO_FLOAT:     return evaluate_copy(statement_node, graph);  // Preserve the value but change size, that's irrelevant here
+            case ir::StatementTag::INT_TO_FLOAT:       return evaluate_arithmetic_statement(statement_node, graph, std::identity {});
+            case ir::StatementTag::FLOAT_TO_INT:       return evaluate_arithmetic_statement(statement_node, graph, std::identity {});
+            case ir::StatementTag::SIGN_EXTEND:        return evaluate_copy(statement_node, graph);  // Sign- and zero- extensions are just ways to preserve the same value through length
+            case ir::StatementTag::ZERO_EXTEND:        return evaluate_copy(statement_node, graph);  // extensions, outside of actual code generation they can all be evaluated as copies
+            case ir::StatementTag::NARROW:             return true;  // TODO
+            case ir::StatementTag::MUL:                return evaluate_arithmetic_statement(statement_node, graph, std::multiplies {});
+            case ir::StatementTag::DIV:                return evaluate_arithmetic_statement(statement_node, graph, std::divides {});
+            case ir::StatementTag::MOD:                return evaluate_integral_statement(statement_node, graph, std::modulus {});
+            case ir::StatementTag::ADD:                return evaluate_arithmetic_statement(statement_node, graph, std::plus {});
+            case ir::StatementTag::SUB:                return evaluate_arithmetic_statement(statement_node, graph, std::minus {});
+            case ir::StatementTag::LT:                 return evaluate_arithmetic_statement(statement_node, graph, std::less {});
+            case ir::StatementTag::LE:                 return evaluate_arithmetic_statement(statement_node, graph, std::less_equal {});
+            case ir::StatementTag::GE:                 return evaluate_arithmetic_statement(statement_node, graph, std::greater_equal {});
+            case ir::StatementTag::GT:                 return evaluate_arithmetic_statement(statement_node, graph, std::greater {});
+            case ir::StatementTag::EQ:                 return evaluate_arithmetic_statement(statement_node, graph, std::equal_to {});
+            case ir::StatementTag::NE:                 return evaluate_arithmetic_statement(statement_node, graph, std::not_equal_to {});
+            case ir::StatementTag::BITWISE_AND:        return evaluate_integral_statement(statement_node, graph, std::bit_and {});
+            case ir::StatementTag::BITWISE_XOR:        return evaluate_integral_statement(statement_node, graph, std::bit_xor {});
+            case ir::StatementTag::BITWISE_OR:         return evaluate_integral_statement(statement_node, graph, std::bit_or {});
+            case ir::StatementTag::LSHIFT:             return evaluate_integral_statement(statement_node, graph, left_shift {});
+            case ir::StatementTag::ARITHMETIC_RSHIFT:  return evaluate_integral_statement(statement_node, graph, arithmetic_right_shift {});
+            case ir::StatementTag::LOGICAL_RSHIFT:     return evaluate_integral_statement(statement_node, graph, logical_right_shift {});
         }
+        __builtin_unreachable();
     }
 
 

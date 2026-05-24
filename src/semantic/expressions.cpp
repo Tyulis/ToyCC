@@ -46,8 +46,8 @@ namespace toycc::semantic {
         else if (context->DigitSequence())
             throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Digit sequences are not supported as assignment expressions", location);
 
-        StatementTag op = decode_assignment_operator(context->assignmentOperator());
         ExpressionResult destination = decode_prefix_expression(context->prefixExpression());
+        StatementTag op = decode_assignment_operator(context->assignmentOperator(), destination.type()->is_signed());
         if (!destination.is_lvalue())
             throw Diagnostic(DiagnosticLevel::ERROR, "Assignment destination must be an lvalue");
         ExpressionResult source = decode_assignment_expression(context->assignmentExpression());
@@ -200,7 +200,7 @@ namespace toycc::semantic {
         for (size_t operation_index = 0; operation_index < operators.size(); operation_index++) {
             const CodeLocation location = locate(operators[operation_index]);
             ExpressionResult right = decode_additive_expression(operands[operation_index + 1]);
-            left = emit_binary_operation(decode_shift_operator(operators[operation_index]), left, right, location);
+            left = emit_binary_operation(decode_shift_operator(operators[operation_index], left.type()->is_signed()), left, right, location);
         }
         return left;
     }
@@ -328,7 +328,7 @@ namespace toycc::semantic {
         ExpressionResult operand = decode_cast_expression(context->castExpression());
 
         std::shared_ptr<Declaration> result = declare_temporary(operand.type(), location);
-        emit(Statement::make_unary_operation(location, StatementTag::MINUS, operand.operand(), result));
+        emit(Statement::make_unary_operation(location, StatementTag::NEGATE, operand.operand(), result));
         return ExpressionResult {RValue {result}, location};
     }
 
@@ -492,7 +492,7 @@ namespace toycc::semantic {
     }
 
 
-    StatementTag SemanticAnalyzer::decode_assignment_operator(CParser::AssignmentOperatorContext* context) {
+    StatementTag SemanticAnalyzer::decode_assignment_operator(CParser::AssignmentOperatorContext* context, bool is_signed) {
         if      (context->Assign())            return StatementTag::COPY;
         else if (context->StarAssign())        return StatementTag::MUL;
         else if (context->DivAssign())         return StatementTag::DIV;
@@ -500,10 +500,15 @@ namespace toycc::semantic {
         else if (context->PlusAssign())        return StatementTag::ADD;
         else if (context->MinusAssign())       return StatementTag::SUB;
         else if (context->LeftShiftAssign())   return StatementTag::LSHIFT;
-        else if (context->RightShiftAssign())  return StatementTag::ARITHMETIC_RSHIFT;
         else if (context->AndAssign())         return StatementTag::BITWISE_AND;
         else if (context->XorAssign())         return StatementTag::BITWISE_XOR;
         else if (context->OrAssign())          return StatementTag::BITWISE_OR;
+        else if (context->RightShiftAssign()) {
+            if (is_signed)
+                return StatementTag::ARITHMETIC_RSHIFT;
+            else
+                return StatementTag::LOGICAL_RSHIFT;
+        }
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown assignment operator {}", context->getText()), locate(context));
     }
 
@@ -521,10 +526,15 @@ namespace toycc::semantic {
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown relational operator {}", context->getText()), locate(context));
     }
 
-    StatementTag SemanticAnalyzer::decode_shift_operator(CParser::ShiftOperatorContext* context) {
-        if      (context->LeftShift())   return StatementTag::LSHIFT;
-        else if (context->RightShift())  return StatementTag::ARITHMETIC_RSHIFT;
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown shift operator {}", context->getText()), locate(context));
+    StatementTag SemanticAnalyzer::decode_shift_operator(CParser::ShiftOperatorContext* context, bool is_signed) {
+        if (context->LeftShift()) {
+            return StatementTag::LSHIFT;
+        } else if (context->RightShift()) {
+            if (is_signed)
+                return StatementTag::ARITHMETIC_RSHIFT;
+            else
+                return StatementTag::LOGICAL_RSHIFT;
+        } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown shift operator {}", context->getText()), locate(context));
     }
 
     StatementTag SemanticAnalyzer::decode_additive_operator(CParser::AdditiveOperatorContext* context) {
@@ -691,10 +701,6 @@ namespace toycc::semantic {
             case StatementTag::NE:
                 return left_unqualified->is_comparable() && right_unqualified->is_comparable();
 
-            case StatementTag::LOGICAL_AND:
-            case StatementTag::LOGICAL_OR:
-                return left_unqualified->has_truth_value() && right_unqualified->has_truth_value();
-
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown binary operator");
         }
     }
@@ -721,8 +727,6 @@ namespace toycc::semantic {
             case StatementTag::GT:
             case StatementTag::EQ:
             case StatementTag::NE:
-            case StatementTag::LOGICAL_AND:
-            case StatementTag::LOGICAL_OR:
                 return arch::DATAMODEL->boolean_type;
 
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown binary operator");
