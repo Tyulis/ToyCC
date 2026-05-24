@@ -264,6 +264,24 @@ namespace toycc::flow {
             return true;
     }
 
+    bool evaluate_narrowing_conversion(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+        if (!is_constant_statement(statement_node))
+            return true;
+
+        const ir::Statement& statement = statement_node->statement();
+        const ir::Constant& input = statement.inputs[0].constant();
+
+        if (input.tag() != ir::Constant::INTEGER)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "NARROW is only valid on integer values", input.location);
+        if (statement.output->type()->category != ir::TypeCategory::INTEGER)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "NARROW only converts to integer types", statement.output->location);
+
+        std::shared_ptr<ir::IntegerType> output_type = std::static_pointer_cast<ir::IntegerType>(statement.output->type());
+        const ir::IntegerConstant mask = (ir::IntegerConstant(1) << output_type->size_bits) - 1;
+        const ir::Constant result = {input.integer() & mask, statement.output->location, statement.output->type()};
+        return set_copy(statement_node, graph, result);
+    }
+
     // Attempt to evaluate a constant expression statement, return whether the statement must be kept
     static bool evaluate_statement(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
         const ir::Statement& statement = statement_node->statement();
@@ -290,7 +308,7 @@ namespace toycc::flow {
             case ir::StatementTag::FLOAT_TO_INT:       return evaluate_arithmetic_statement(statement_node, graph, std::identity {});
             case ir::StatementTag::SIGN_EXTEND:        return evaluate_copy(statement_node, graph);  // Sign- and zero- extensions are just ways to preserve the same value through length
             case ir::StatementTag::ZERO_EXTEND:        return evaluate_copy(statement_node, graph);  // extensions, outside of actual code generation they can all be evaluated as copies
-            case ir::StatementTag::NARROW:             return true;  // TODO
+            case ir::StatementTag::NARROW:             return evaluate_narrowing_conversion(statement_node, graph);
             case ir::StatementTag::MUL:                return evaluate_arithmetic_statement(statement_node, graph, std::multiplies {});
             case ir::StatementTag::DIV:                return evaluate_arithmetic_statement(statement_node, graph, std::divides {});
             case ir::StatementTag::MOD:                return evaluate_integral_statement(statement_node, graph, std::modulus {});
