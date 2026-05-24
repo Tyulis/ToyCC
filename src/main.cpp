@@ -44,6 +44,9 @@ constexpr static std::string DEFAULT_OBJECT_FILE_NAME = "a.out";
 
 void read_config(const boost::program_options::variables_map& options) {
     // Optimization options
+    if (options.count("fno-flow-optimization"))
+        toycc::config::optimization::flow_optimization = false;
+
     if (options.count("O0"))
         toycc::config::optimization::set_level(0);
     else if (options.count("O1"))
@@ -113,6 +116,7 @@ int main(int argc, char** argv) {
     boost::program_options::options_description optimization_options("Optimization options");
     optimization_options.add_options()("O0",                      "Don't apply any optimization pass")
                                       ("O1",                      "Apply basic optimizations")
+                                      ("fno-flow-optimization",   "Disable flow graph-level optimization")
                                       ("fsplit-intermediates",    "Split intermediate values in basic blocks")
                                       ("fno-split-intermediates", "Don't split intermediate values in basic blocks")
                                       ("fconstant-folding",       "Apply constant folding to function code")
@@ -234,7 +238,8 @@ int main(int argc, char** argv) {
 
         // -------- Flow analysis
         toycc::flow::TranslationUnit unit(processed_ir, std::filesystem::current_path().string(), input_file_name);
-        unit.optimize();
+        if (toycc::config::optimization::flow_optimization)
+            unit.optimize();
         if (target_step == SequenceStep::FLOW) {
             output_stream.get() << unit.dot_graph() << std::endl;
             return 0;

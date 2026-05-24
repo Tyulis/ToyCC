@@ -29,10 +29,10 @@ namespace toycc::flow {
         ir::Statement& statement = statement_node->statement();
         for (ir::Operand& input : statement.inputs)
             if (input.base_tag() == ir::Operand::VARIABLE_BASE && input.declaration() == value_node->declaration())
-                input = ir::Operand {value_node->value().value(), input.location};
+                input = ir::Operand {value_node->value().value(), input.location, input.indices};
 
         if (statement.output.has_value() && statement.output->tag() == ir::Operand::DEREFERENCE && statement.output->base_tag() == ir::Operand::VARIABLE_BASE && statement.output->declaration() == value_node->declaration())
-            statement.output = ir::Operand {value_node->value().value(), statement.output->location};
+            statement.output = ir::Operand {value_node->value().value(), statement.output->location, statement.output->indices};
 
         // Now that all instances of this value node have been replaced, the statement doesn't depend on the actual variable anymore
         std::optional<DependencyGraph::Edge> edge = graph.find_edge(value_node, statement_node);
@@ -252,6 +252,51 @@ namespace toycc::flow {
         return set_copy(statement_node, graph, result);
     }
 
+    static bool evaluate_add(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+        if (!is_constant_statement(statement_node))
+            return true;
+
+        const ir::Statement& statement = statement_node->statement();
+        const ir::Constant& left = statement.inputs[0].constant();
+        const ir::Constant& right = statement.inputs[1].constant();
+
+        if (left.tag() == ir::Constant::POINTER && right.tag() == ir::Constant::INTEGER) {
+            const ir::Constant result = {ir::PointerConstant {left.pointer().label, static_cast<ssize_t>(left.pointer().offset + right.integer())},
+                                         statement.output->location, statement.output->type()};
+            return set_copy(statement_node, graph, result);
+        } else if (left.tag() == ir::Constant::INTEGER && right.tag() == ir::Constant::POINTER) {
+            const ir::Constant result = {ir::PointerConstant {right.pointer().label, static_cast<ssize_t>(left.integer() + right.pointer().offset)},
+                                         statement.output->location, statement.output->type()};
+            return set_copy(statement_node, graph, result);
+        } else {
+            return evaluate_arithmetic_statement(statement_node, graph, std::plus {});
+        }
+    }
+
+    static bool evaluate_sub(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+        if (!is_constant_statement(statement_node))
+            return true;
+
+        const ir::Statement& statement = statement_node->statement();
+        const ir::Constant& left = statement.inputs[0].constant();
+        const ir::Constant& right = statement.inputs[1].constant();
+
+        if (left.tag() == ir::Constant::POINTER && right.tag() == ir::Constant::INTEGER) {
+            const ir::Constant result = {ir::PointerConstant {left.pointer().label, static_cast<ssize_t>(left.pointer().offset - right.integer())},
+                                         statement.output->location, statement.output->type()};
+            return set_copy(statement_node, graph, result);
+        } else if (left.tag() == ir::Constant::POINTER && right.tag() == ir::Constant::POINTER) {
+            if (left.pointer().label == right.pointer().label) {
+                const ir::Constant result = {ir::IntegerConstant(left.pointer().offset - right.pointer().offset), statement.output->location, statement.output->type()};
+                return set_copy(statement_node, graph, result);
+            } else {
+                return true;
+            }
+        } else {
+            return evaluate_arithmetic_statement(statement_node, graph, std::minus {});
+        }
+    }
+
     static bool evaluate_copy(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
         if (is_constant_statement(statement_node))
             return set_copy(statement_node, graph, statement_node->statement().inputs[0].constant());
@@ -331,8 +376,8 @@ namespace toycc::flow {
             case ir::StatementTag::MUL:                return evaluate_arithmetic_statement(statement_node, graph, std::multiplies {});
             case ir::StatementTag::DIV:                return evaluate_arithmetic_statement(statement_node, graph, std::divides {});
             case ir::StatementTag::MOD:                return evaluate_integral_statement(statement_node, graph, std::modulus {});
-            case ir::StatementTag::ADD:                return evaluate_arithmetic_statement(statement_node, graph, std::plus {});
-            case ir::StatementTag::SUB:                return evaluate_arithmetic_statement(statement_node, graph, std::minus {});
+            case ir::StatementTag::ADD:                return evaluate_add(statement_node, graph);
+            case ir::StatementTag::SUB:                return evaluate_sub(statement_node, graph);
             case ir::StatementTag::LT:                 return evaluate_arithmetic_statement(statement_node, graph, std::less {});
             case ir::StatementTag::LE:                 return evaluate_arithmetic_statement(statement_node, graph, std::less_equal {});
             case ir::StatementTag::GE:                 return evaluate_arithmetic_statement(statement_node, graph, std::greater_equal {});

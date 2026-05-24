@@ -14,6 +14,7 @@ namespace toycc::ir {
             case TypeCategory::BOOL:      return TypeTag::DIRECT;
             case TypeCategory::INTEGER:   return TypeTag::DIRECT;
             case TypeCategory::FLOAT:     return TypeTag::DIRECT;
+            case TypeCategory::LABEL:     return TypeTag::DIRECT;
             case TypeCategory::POINTER:   return TypeTag::DIRECT;
             case TypeCategory::ARRAY:     return TypeTag::DIRECT;
             case TypeCategory::STRUCT:    return TypeTag::STRUCT;
@@ -45,6 +46,7 @@ namespace toycc::ir {
             case TypeCategory::BOOL:      return "BOOL";
             case TypeCategory::INTEGER:   return "INTEGER";
             case TypeCategory::FLOAT:     return "FLOAT";
+            case TypeCategory::LABEL:     return "LABEL";
             case TypeCategory::POINTER:   return "POINTER";
             case TypeCategory::ARRAY:     return "ARRAY";
             case TypeCategory::STRUCT:    return "STRUCT";

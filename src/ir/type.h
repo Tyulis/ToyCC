@@ -13,7 +13,7 @@ namespace toycc::ir {
     };
 
     enum class TypeCategory {
-        /* Valid storage_category() */ BOOL, INTEGER, FLOAT, ARRAY, STRUCT, UNION, FUNCTION,
+        /* Valid storage_category() */ BOOL, INTEGER, FLOAT, LABEL, ARRAY, STRUCT, UNION, FUNCTION,
         /* Others                   */ VOID, BUILTIN, POINTER, ENUM, BITFIELD, QUALIFIED, ALIGNED,
     };
 

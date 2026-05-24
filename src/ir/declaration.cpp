@@ -81,7 +81,7 @@ namespace toycc::ir {
     }
 
     std::ostream& operator<< (std::ostream& stream, const PointerConstant& pointer) {
-        stream << pointer.label;
+        stream << "&" << pointer.label;
         if (pointer.offset != 0)
             stream << "+" << pointer.offset;
         return stream;
@@ -130,6 +130,11 @@ namespace toycc::ir {
             case TypeCategory::QUALIFIED:
             case TypeCategory::ALIGNED:
                 throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Invalid type for a constant : `{}`", new_type->text()), location);
+
+            case TypeCategory::LABEL:
+                if (value_tag == Constant::POINTER)
+                    return {.value = value, .location = location, .type = new_type};
+                else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert non-pointer constants to jump targets", location);
 
             case TypeCategory::POINTER:
                 if (value_tag == Constant::STRING || value_tag == Constant::POINTER)
@@ -270,6 +275,9 @@ namespace toycc::ir {
             case Operand::CONSTANT_BASE:  code << constant().ir_code();  break;
             case Operand::VARIABLE_BASE:  code << declaration()->name;   break;
         }
+
+        for (const Operand& index : indices)
+            code << "[" << index.ir_code() << "]";
 
         return code.str();
     }

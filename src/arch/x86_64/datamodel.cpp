@@ -25,6 +25,7 @@ namespace toycc::arch::x86_64 {
         double_type      = std::make_shared<FloatingPointType> ("double",      BUILTIN_LOCATION,  64,  64);
         long_double_type = std::make_shared<FloatingPointType> ("long double", BUILTIN_LOCATION, 128, 128);
 
+        label_type             = std::make_shared<PrimitiveType> (TypeCategory::LABEL, ".Tlabel", BUILTIN_LOCATION, 64, 64);
         literal_character_type = QualifiedType::make(BUILTIN_LOCATION, signed_char_type, TypeQualifier::CONST);
         literal_integer_type   = QualifiedType::make(BUILTIN_LOCATION, signed_int_type,  TypeQualifier::CONST);
         literal_floating_type  = QualifiedType::make(BUILTIN_LOCATION, double_type,      TypeQualifier::CONST);
@@ -34,7 +35,6 @@ namespace toycc::arch::x86_64 {
         offset_type          = signed_long_type;
         enum_underlying_type = literal_integer_type;
         void_pointer_type    = PointerType::make(BUILTIN_LOCATION, void_type);
-        label_type           = void_pointer_type;
 
         pointer_size      = 8;
         pointer_alignment = 8;

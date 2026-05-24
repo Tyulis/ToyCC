@@ -21,6 +21,8 @@ namespace toycc::config {
     }
 
     namespace optimization {
+        bool flow_optimization = true;
+
         bool split_intermediates = false;
         bool constant_folding = false;
 
@@ -41,6 +43,7 @@ namespace toycc::config {
         std::string dump() {
             std::stringstream output;
             output << std::boolalpha;
+            output << "- flow_optimization : " << flow_optimization << "\n";
             output << "- split_intermediates : " << split_intermediates << "\n";
             output << "- constant_folding : " << constant_folding << "\n";
             return output.str();

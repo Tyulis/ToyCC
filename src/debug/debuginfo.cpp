@@ -155,6 +155,7 @@ namespace toycc::debug {
             case ir::TypeCategory::VOID:     throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't generate debug info for `void`", type_expression->location);
 
             case ir::TypeCategory::FLOAT:
+            case ir::TypeCategory::LABEL:
             case ir::TypeCategory::FUNCTION:
             case ir::TypeCategory::BUILTIN:
             case ir::TypeCategory::ENUM:

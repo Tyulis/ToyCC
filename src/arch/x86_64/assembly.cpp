@@ -170,8 +170,19 @@ namespace toycc::arch::x86_64 {
             case ir::Operand::CONSTANT_BASE: {
                 const ir::Constant& base = operand.constant();
                 switch (base.tag()) {
-                    case ir::Constant::INTEGER:  code << "$" << base.integer();  break;
-                    case ir::Constant::POINTER:  code << base.pointer().label << "+" << base.pointer().offset;  break;
+                    case ir::Constant::INTEGER:
+                        code << "$" << base.integer();  break;
+
+                    case ir::Constant::POINTER:
+                        if (base.type->category == ir::TypeCategory::LABEL)
+                            code << base.pointer().label;  // Jump target : needs to be a literal symbol
+                        else
+                            code << "$" << base.pointer().label;  // Actual pointer : needs to be a constant
+
+                        if (base.pointer().offset != 0)
+                            code<< "+" << base.pointer().offset;
+                        break;
+
                     default: throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Non-integer constants are not implemented", base.location);
                 }
                 break;

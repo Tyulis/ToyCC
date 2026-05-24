@@ -11,6 +11,8 @@ namespace toycc::config {
     }
 
     namespace optimization {
+        extern bool flow_optimization;            // Enable flow graph-level optimization
+
         extern bool split_intermediates;          // Split temporaries local to a building block as separate intermediate variables
         extern bool constant_folding;             // Apply constant folding
 
