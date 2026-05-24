@@ -62,6 +62,14 @@ namespace toycc::debug {
         virtual AbbreviationEntry emit(Encoder& encoder, DataSections& data) const override;
     };
 
+    struct BooleanTypeEntry : public TypeEntry {
+        std::string name;
+        size_t size_bits;
+
+        BooleanTypeEntry(const std::string& name, size_t size_bits, CodeLocation code_location);
+        virtual AbbreviationEntry emit(Encoder& encoder, DataSections& data) const override;
+    };
+
     struct IntegerTypeEntry : public TypeEntry {
         std::string name;
         bool is_signed;

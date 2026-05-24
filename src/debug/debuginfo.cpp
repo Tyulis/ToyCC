@@ -144,6 +144,7 @@ namespace toycc::debug {
     // NOTE : Entries are added into the map directly because it's necessary to guard against infinite recursion around recursive type expressions
     std::shared_ptr<TypeEntry> DebugInfo::add_type_entry(std::shared_ptr<ir::Type> type_expression) {
         switch (type_expression->category) {
+            case ir::TypeCategory::BOOL:      return add_boolean_type_entry  (std::static_pointer_cast<ir::BooleanType>   (type_expression));
             case ir::TypeCategory::INTEGER:   return add_integer_type_entry  (std::static_pointer_cast<ir::IntegerType>   (type_expression));
             case ir::TypeCategory::POINTER:   return add_pointer_type_entry  (std::static_pointer_cast<ir::PointerType>   (type_expression));
             case ir::TypeCategory::ARRAY:     return add_array_type_entry    (std::static_pointer_cast<ir::ArrayType>     (type_expression));
@@ -153,7 +154,6 @@ namespace toycc::debug {
 
             case ir::TypeCategory::VOID:     throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't generate debug info for `void`", type_expression->location);
 
-            case ir::TypeCategory::BOOL:
             case ir::TypeCategory::FLOAT:
             case ir::TypeCategory::FUNCTION:
             case ir::TypeCategory::BUILTIN:
@@ -163,6 +163,12 @@ namespace toycc::debug {
                 throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, std::format("Debug info emission is not implemented for type `{}`", type_expression->ir_code()));
         }
         __builtin_unreachable();
+    }
+
+    std::shared_ptr<BooleanTypeEntry> DebugInfo::add_boolean_type_entry(std::shared_ptr<ir::BooleanType> type_expression) {
+        auto entry = std::make_shared<BooleanTypeEntry> (type_expression->name, type_expression->size_bits, type_expression->location);
+        types[type_expression] = entry;
+        return entry;
     }
 
     std::shared_ptr<IntegerTypeEntry> DebugInfo::add_integer_type_entry(std::shared_ptr<ir::IntegerType> type_expression) {

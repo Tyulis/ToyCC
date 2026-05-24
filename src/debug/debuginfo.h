@@ -60,6 +60,7 @@ namespace toycc::debug {
             std::unordered_map<std::shared_ptr<ir::Declaration>, std::shared_ptr<VariableEntry>> variables;
 
             std::shared_ptr<TypeEntry>          add_type_entry          (std::shared_ptr<ir::Type>          type_expression);
+            std::shared_ptr<BooleanTypeEntry>   add_boolean_type_entry  (std::shared_ptr<ir::BooleanType>   type_expression);
             std::shared_ptr<IntegerTypeEntry>   add_integer_type_entry  (std::shared_ptr<ir::IntegerType>   type_expression);
             std::shared_ptr<PointerTypeEntry>   add_pointer_type_entry  (std::shared_ptr<ir::PointerType>   type_expression);
             std::shared_ptr<ArrayTypeEntry>     add_array_type_entry    (std::shared_ptr<ir::ArrayType>     type_expression);

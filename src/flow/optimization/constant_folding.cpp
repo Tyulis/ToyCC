@@ -91,31 +91,26 @@ namespace toycc::flow {
         }
     };
 
-    std::shared_ptr<DependencyNode> output_node(std::shared_ptr<DependencyNode> statement_node, const DependencyGraph& graph) {
+    static std::shared_ptr<DependencyNode> output_node(std::shared_ptr<DependencyNode> statement_node, const DependencyGraph& graph) {
         for (const DependencyGraph::Edge& edge : graph.out_edges(statement_node))
             if (edge.attr.type & DependencyType::WRITE)
                 return edge.exit;
         return nullptr;
     }
 
-    void set_output_value(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, const ir::Constant& value) {
+    static void set_output_value(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, const ir::Constant& value) {
         std::shared_ptr<DependencyNode> value_node = output_node(statement_node, graph);
         if (value_node.get() != nullptr)
             value_node->value() = value;
     }
 
     // Check whether all inputs are constants
-    bool is_constant_statement(std::shared_ptr<DependencyNode> statement_node) {
+    static bool is_constant_statement(std::shared_ptr<DependencyNode> statement_node) {
         return std::ranges::all_of(statement_node->statement().inputs, [](const ir::Operand& input) { return input.tag() == ir::Operand::CONSTANT; });
     }
 
-    // Check whether all inputs are constants, and the output is a variable
-    bool is_constants_to_variable(std::shared_ptr<DependencyNode> statement_node) {
-        return is_constant_statement(statement_node) && statement_node->statement().output->tag() == ir::Operand::VARIABLE;
-    }
-
     // Set variables to the `value` directly, or replace the more complex statement with a COPY if the output is a dereference. Return whether to keep the statement or not
-    bool set_copy(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, const ir::Constant& value) {
+    static bool set_copy(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph, const ir::Constant& value) {
         const ir::Statement& original_statement = statement_node->statement();
 
         bool emit_copy = true;
@@ -257,14 +252,14 @@ namespace toycc::flow {
         return set_copy(statement_node, graph, result);
     }
 
-    bool evaluate_copy(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+    static bool evaluate_copy(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
         if (is_constant_statement(statement_node))
             return set_copy(statement_node, graph, statement_node->statement().inputs[0].constant());
         else
             return true;
     }
 
-    bool evaluate_narrowing_conversion(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+    static bool evaluate_narrowing_conversion(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
         if (!is_constant_statement(statement_node))
             return true;
 
@@ -280,6 +275,30 @@ namespace toycc::flow {
         const ir::IntegerConstant mask = (ir::IntegerConstant(1) << output_type->size_bits) - 1;
         const ir::Constant result = {input.integer() & mask, statement.output->location, statement.output->type()};
         return set_copy(statement_node, graph, result);
+    }
+
+    static bool evaluate_addressof_variable(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+        const ir::Statement& statement = statement_node->statement();
+        const ir::Operand& input = statement.inputs[0];
+
+        if (input.declaration()->storage & ir::StorageClass::GLOBAL) {
+            const ir::Constant result = {ir::PointerConstant {input.declaration()->name, 0}, input.location, statement.output->type()};
+            return set_copy(statement_node, graph, result);
+        } else {
+            return true;
+        }
+    }
+
+    static bool evaluate_addressof(std::shared_ptr<DependencyNode> statement_node, DependencyGraph& graph) {
+        switch (statement_node->statement().inputs[0].tag()) {
+            case ir::Operand::CONSTANT: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't take the address of a constant", statement_node->location());
+            case ir::Operand::VARIABLE:
+                return evaluate_addressof_variable(statement_node, graph);
+
+            case ir::Operand::DEREFERENCE:
+                return true;
+        }
+        __builtin_unreachable();
     }
 
     // Attempt to evaluate a constant expression statement, return whether the statement must be kept
@@ -302,7 +321,7 @@ namespace toycc::flow {
             case ir::StatementTag::NEGATE:             return evaluate_arithmetic_statement(statement_node, graph, std::negate {});
             case ir::StatementTag::NOT:                return evaluate_integral_statement(statement_node, graph, std::logical_not {});
             case ir::StatementTag::COMPLEMENT:         return evaluate_integral_statement(statement_node, graph, std::bit_not {});
-            case ir::StatementTag::ADDRESSOF:          return true;  // TODO
+            case ir::StatementTag::ADDRESSOF:          return evaluate_addressof(statement_node, graph);
             case ir::StatementTag::FLOAT_TO_FLOAT:     return evaluate_copy(statement_node, graph);  // Preserve the value but change size, that's irrelevant here
             case ir::StatementTag::INT_TO_FLOAT:       return evaluate_arithmetic_statement(statement_node, graph, std::identity {});
             case ir::StatementTag::FLOAT_TO_INT:       return evaluate_arithmetic_statement(statement_node, graph, std::identity {});

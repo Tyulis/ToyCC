@@ -46,6 +46,18 @@ namespace toycc::debug {
     }
 
 
+    // -------- BooleanTypeEntry
+    BooleanTypeEntry::BooleanTypeEntry(const std::string& name, size_t size_bits, CodeLocation code_location)
+    : TypeEntry(Tag::DW_TAG_base_type, code_location), name(name), size_bits(size_bits) {}
+
+    AbbreviationEntry BooleanTypeEntry::emit(Encoder& encoder, DataSections& data) const {
+        return new_abbreviation()
+            .add(encoder, Attribute::DW_AT_name,     Form::DW_FORM_strp,  data.strings[name])
+            .add(encoder, Attribute::DW_AT_bit_size, Form::DW_FORM_data1, size_bits)
+            .location(encoder, data.filenos[code_location.filename], code_location.line, code_location.character);
+    }
+
+
     // -------- IntegerTypeEntry
     IntegerTypeEntry::IntegerTypeEntry(const std::string& name, bool is_signed, size_t size_bits, CodeLocation code_location)
         : TypeEntry(Tag::DW_TAG_base_type, code_location), name(name), is_signed(is_signed), size_bits(size_bits) {}
