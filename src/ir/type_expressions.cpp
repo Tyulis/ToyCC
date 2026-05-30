@@ -132,6 +132,25 @@ namespace toycc::ir {
     CompoundType::CompoundType(TypeCategory category, std::string name, CodeLocation location, bool is_complete, std::vector<Member> members)
         : Type(category, location), is_complete(is_complete), name(name), members(members) {}
 
+    // C23 6.7.2.1 : members of anonymous structs or unions can be accessed as members of the enclosing struct or union
+    // e.g struct s { union {int a; char b;} }; can be accessed as `instance.a`
+    // Return the indices to put in an Operand that references the member with the requested `name`
+    std::vector<size_t> CompoundType::member_index(const std::string& name) const {
+        for (const auto& [index, member] : std::ranges::enumerate_view(members)) {
+            if (member.name == name) {
+                return {static_cast<size_t>(index)};
+            } else if (member.is_anonymous() && member.type->is_compound()) {
+                std::shared_ptr<CompoundType> member_type = std::static_pointer_cast<CompoundType> (member.type);
+                std::vector<size_t> found = member_type->member_index(name);
+                if (!found.empty()) {
+                    found.insert(found.begin(), static_cast<size_t>(index));
+                    return found;
+                }
+            }
+        }
+        return {};  // Not found
+    }
+
     bool CompoundType::complete() const {
         return is_complete;
     }

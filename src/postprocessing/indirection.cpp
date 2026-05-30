@@ -1,5 +1,10 @@
+#include <ranges>
+
+#include "diagnostic.h"
 #include "postprocessing/postprocessor.h"
 
+// Rule : dereferences must be offsets from a pointer, not indirections
+// So after this, all dereferences are POINTER[...][...]
 namespace toycc::ir {
     void PostProcessor::split_indirections(std::shared_ptr<Scope> scope) {
         std::vector<Statement> original_statements = scope->statements;
@@ -28,25 +33,28 @@ namespace toycc::ir {
         if (operand.indices.size() <= 1)
             return operand;
 
-        // Then split indirections in the actual operand
-        Operand pointer = operand;
-        std::shared_ptr<Type> pointer_type = pointer.base_type();
-        size_t top_level = 0;
-        for (size_t level = 0; level < operand.indices.size() - 1; level++) {
-            const Operand& index = operand.indices[level];
+        // Then split indirections : if any inner type is a pointer, split it
+        return split_indirection_chains(operand, scope);
+    }
+
+    Operand PostProcessor::split_indirection_chains(Operand dereference, std::shared_ptr<Scope> scope) {
+        // At this point, the top-level pointer is always a POINTER type
+        if (dereference.base_type()->category != TypeCategory::POINTER)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid condition : the top-level pointer should be a POINTER type", dereference.location);
+
+        std::shared_ptr<Type> pointer_type = dereference.base_type();
+        for (const auto& [level, index] : std::ranges::enumerate_view(dereference.indices)) {
             std::shared_ptr<Type> referenced_type = pointer_type->dereference(index.as_index(), index.location);
-
             if (referenced_type->category == TypeCategory::POINTER) {
-                std::shared_ptr<Declaration> pointee = declare_temporary(scope, referenced_type, index.location);
-                const Operand reference = Operand {pointer.value, pointer.location, {operand.indices.begin() + top_level, operand.indices.begin() + level + 1}};
-                scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::COPY, reference, pointee));
-                pointer = Operand {pointee, operand.location, {operand.indices.begin() + level + 1, operand.indices.end()}};
-                top_level = level + 1;
+                std::shared_ptr<Declaration> intermediate_pointer = declare_temporary(scope, referenced_type, index.location);
+                const Operand intermediate_dereference = {dereference.value, dereference.location, {dereference.indices.begin(), dereference.indices.begin() + level + 1}};
+                scope->add_statement(Statement::make_unary_operation(dereference.location, StatementTag::COPY, intermediate_dereference, intermediate_pointer));
+                Operand lower_pointer = {intermediate_pointer, dereference.location, {dereference.indices.begin() + level + 1, dereference.indices.end()}};
+                return split_indirection_chains(lower_pointer, scope);
             }
-
             pointer_type = referenced_type;
         }
 
-        return pointer;
+        return dereference;
     }
 }

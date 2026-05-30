@@ -50,6 +50,7 @@ namespace toycc::ir {
         Member() = default;
         Member(std::string name, std::shared_ptr<Type> type, CodeLocation location);
 
+        bool is_anonymous() const;
         std::string ir_code(std::unordered_set<const Type*> parents = {}) const;
     };
 

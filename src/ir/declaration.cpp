@@ -42,6 +42,10 @@ namespace toycc::ir {
     // -------- Member
     Member::Member(std::string name, std::shared_ptr<Type> type, CodeLocation location) : name(name), type(type), location(location) {}
 
+    bool Member::is_anonymous() const {
+        return name.at(0) == '.';
+    }
+
     std::string Member::ir_code(std::unordered_set<const Type*> parents) const {
         return std::format("{} {}", type->ir_code(parents), name);
     }

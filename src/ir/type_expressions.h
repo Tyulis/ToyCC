@@ -61,6 +61,8 @@ namespace toycc::ir {
             std::string name;
             std::vector<Member> members;
 
+            std::vector<size_t> member_index(const std::string& name) const;
+
             virtual bool complete() const override;
             virtual bool operator== (const Type& rhs) const override;
             bool operator== (const CompoundType& rhs) const;

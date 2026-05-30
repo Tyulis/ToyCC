@@ -1,5 +1,4 @@
 #include <memory>
-#include <algorithm>
 
 #include "diagnostic.h"
 #include "gen/parser/CParser.h"
@@ -445,17 +444,13 @@ namespace toycc::semantic {
 
         std::shared_ptr<CompoundType> type = std::static_pointer_cast<CompoundType>(object.type());
 
-        auto found_member = std::ranges::find_if(type->members, [&](const Member& member) {
-            return member.name == member_name;
-        });
-
-        if (found_member == type->members.end())
+        std::vector<size_t> member_indices = type->member_index(member_name);
+        if (member_indices.empty())
             throw Diagnostic(DiagnosticLevel::ERROR, std::format("Member `{}` is not defined in type `{}`", member_name, type->name), location);
 
-        const size_t member_index = std::distance(type->members.begin(), found_member);
-        Constant index(IntegerConstant(member_index), location, arch::DATAMODEL->literal_integer_type);
         std::vector<RValue> indices = object.indices();
-        indices.push_back(index);
+        for (size_t index : member_indices)
+            indices.emplace_back(Constant {IntegerConstant(index), location, arch::DATAMODEL->offset_type});
 
         LValue result = {object.base(), location, indices};
         return ExpressionResult {result, location};

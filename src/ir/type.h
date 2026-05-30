@@ -48,6 +48,8 @@ namespace toycc::ir {
         bool is_integral() const;
         bool is_comparable() const;
         bool has_truth_value() const;
+        bool is_compound() const;
+        bool is_block() const;
 
         virtual std::string repr() const;  // Get the type representation as in C code (ex. const int* [4])
         virtual std::string ir_code(std::unordered_set<const Type*> parents = {}) const;

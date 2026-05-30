@@ -136,6 +136,16 @@ namespace toycc::ir {
                dequalified_category == TypeCategory::POINTER || dequalified_category == TypeCategory::ENUM;
     }
 
+    bool Type::is_compound() const {
+        const TypeCategory dequalified_category = dequalify()->category;
+        return dequalified_category == TypeCategory::STRUCT || dequalified_category == TypeCategory::UNION;
+    }
+
+    bool Type::is_block() const {
+        const TypeCategory dequalified_category = dequalify()->category;
+        return dequalified_category == TypeCategory::STRUCT || dequalified_category == TypeCategory::UNION || dequalified_category == TypeCategory::ARRAY;
+    }
+
     std::string Type::repr() const {
         throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Can't represent type `{}`", text()), location);
     }

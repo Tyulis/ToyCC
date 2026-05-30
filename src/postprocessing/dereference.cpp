@@ -43,12 +43,32 @@ namespace toycc::ir {
             flat_offset = merge_offsets(flat_offset, offset, scope);
             pointer_type = referenced_type;
         }
+        std::shared_ptr<Type> referenced_type = pointer_type;
 
+        std::shared_ptr<Type> new_pointer_type = PointerType::make(operand.location, referenced_type);
         if (flat_offset.tag() == Operand::CONSTANT) {
-            return Operand {operand.value, operand.location, {flat_offset}};
+            if (operand.indices.size() <= 1)
+                return Operand {operand.value, operand.location, {flat_offset}};
+
+            // We need to set the right pointer type in case there were multiple indirection levels
+            // Ex. POINTER -> STRUCT -> INTEGER should resolve to POINTER -> INTEGER directly since there's only one dereference level now
+            switch (operand.base_tag()) {
+                case Operand::CONSTANT_BASE:
+                    return Operand {operand.constant().as(new_pointer_type), operand.location, {flat_offset}};
+
+                case Operand::VARIABLE_BASE:
+                    if (*operand.base_type() == *new_pointer_type) {
+                        return Operand {operand.declaration(), operand.location, {flat_offset}};
+                    } else {
+                        std::shared_ptr<Declaration> pointer_copy = declare_temporary(scope, new_pointer_type, operand.location);
+                        scope->add_statement(Statement::make_unary_operation(operand.location, StatementTag::COPY, operand.pointer(), pointer_copy));
+                        return Operand {pointer_copy, operand.location, {flat_offset}};
+                    }
+            }
+            __builtin_unreachable();
         } else {
             // Variable offset -> explicitely add it to the pointer before dereferencing
-            std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, PointerType::make(operand.location, pointer_type), operand.location);
+            std::shared_ptr<Declaration> offset_pointer = declare_temporary(scope, new_pointer_type, operand.location);
             scope->add_statement(Statement::make_binary_operation(operand.location, StatementTag::ADD, operand.pointer(), flat_offset, offset_pointer));
             return Operand {offset_pointer, operand.location, {Constant {IntegerConstant(0), operand.location, arch::DATAMODEL->offset_type}}};
         }

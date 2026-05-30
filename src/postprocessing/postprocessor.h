@@ -21,6 +21,7 @@ namespace toycc::ir {
             // After this, multi-index dereferences are from a single pointer
             void split_indirections(std::shared_ptr<Scope> scope);
             Operand split_operand_indirections(Operand operand, std::shared_ptr<Scope> scope);
+            Operand split_indirection_chains(Operand dereference, std::shared_ptr<Scope> scope);
 
             // -------- Access block types (struct, array, ...) using pointers to members -> ir/postprocessor/blocks.cpp
             void split_blocks(std::shared_ptr<Scope> scope);
