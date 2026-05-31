@@ -77,20 +77,40 @@ namespace toycc::ir {
         bool operator== (const PointerConstant& rhs) const;
     };
 
+    struct Constant;
+    struct UnionConstant {
+        size_t index;                     // Index of the member to initialize
+        std::shared_ptr<Constant> value;  // Its value
+
+        UnionConstant(size_t index, const Constant& value);
+        bool operator== (const UnionConstant& rhs) const;
+    };
+
+    struct RepeatMarker {
+        // Optimization : in aggregate constants, ending with this repeats the last member value
+        // This avoids allocating millions of the same object in array initializers
+        inline bool operator== (const RepeatMarker&) const {
+            return true;
+        }
+    };
+
     std::ostream& operator<< (std::ostream& stream, const PointerConstant& pointer);
 
     struct Constant {
-        enum Tag {INTEGER, FLOAT, POINTER, STRING, AGGREGATE};
+        enum Tag {INTEGER, FLOAT, POINTER, UNION, STRING, AGGREGATE, REPEAT};
 
-        std::variant<IntegerConstant, FloatingPointConstant, PointerConstant, std::string, std::vector<Constant>> value;
+        std::variant<IntegerConstant, FloatingPointConstant, PointerConstant, UnionConstant, std::string, std::vector<Constant>, RepeatMarker> value;
         CodeLocation location;
         std::shared_ptr<Type> type;
+
+        static Constant make_repeat(CodeLocation location = BUILTIN_LOCATION);
 
         Tag tag() const;
 
         IntegerConstant integer() const;
         FloatingPointConstant floating_point() const;
         PointerConstant pointer() const;
+        UnionConstant unionval() const;
         std::string string() const;
         const std::vector<Constant>& aggregate() const;
 

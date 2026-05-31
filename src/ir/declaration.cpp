@@ -2,7 +2,9 @@
 #include <sstream>
 #include <variant>
 
+#include "code_location.h"
 #include "diagnostic.h"
+#include "arch/datamodel.h"
 #include "ir/declaration.h"
 #include "util/strings.h"
 
@@ -92,7 +94,17 @@ namespace toycc::ir {
         return stream;
     }
 
+    // -------- UnionConstant
+    UnionConstant::UnionConstant(size_t index, const Constant& value) : index(index), value(std::make_shared<Constant>(value)) {}
+    bool UnionConstant::operator== (const UnionConstant& rhs) const {
+        return index == rhs.index && *value == *rhs.value;
+    }
+
     // -------- Constant
+    Constant Constant::make_repeat(CodeLocation location) {
+        return {RepeatMarker{}, location, arch::DATAMODEL->void_type};
+    }
+
     Constant::Tag Constant::tag() const {
         if (std::holds_alternative<IntegerConstant>(value))
             return Constant::INTEGER;
@@ -100,10 +112,14 @@ namespace toycc::ir {
             return Constant::FLOAT;
         else if (std::holds_alternative<PointerConstant>(value))
             return Constant::POINTER;
+        else if (std::holds_alternative<UnionConstant>(value))
+            return Constant::UNION;
         else if (std::holds_alternative<std::string>(value))
             return Constant::STRING;
         else if (std::holds_alternative<std::vector<Constant>>(value))
             return Constant::AGGREGATE;
+        else if (std::holds_alternative<RepeatMarker>(value))
+            return Constant::REPEAT;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown constant tag", location);
     }
 
@@ -117,6 +133,11 @@ namespace toycc::ir {
 
     PointerConstant Constant::pointer() const {
         return std::get<PointerConstant>(value);
+    }
+
+
+    UnionConstant Constant::unionval() const {
+        return std::get<UnionConstant>(value);
     }
 
     std::string Constant::string() const {
@@ -183,16 +204,23 @@ namespace toycc::ir {
     std::string Constant::ir_code() const {
         std::stringstream code;
         switch (tag()) {
-            case Constant::INTEGER:   code << integer();              break;
-            case Constant::FLOAT:     code << floating_point();       break;
-            case Constant::POINTER:   code << pointer();              break;
-            case Constant::STRING:    code << string();               break;
-            case Constant::AGGREGATE:
+            case Constant::INTEGER:   code << integer();        break;
+            case Constant::FLOAT:     code << floating_point(); break;
+            case Constant::POINTER:   code << pointer();        break;
+            case Constant::UNION: {
+                const UnionConstant& value = unionval();
+                code << "[" << value.index << "] = " << value.value->ir_code();
+                break;
+            }
+            case Constant::STRING:    code << string();         break;
+            case Constant::AGGREGATE: {
                 std::vector<std::string> members;
                 for (const Constant& member : aggregate())
                     members.push_back(member.ir_code());
                 code << join(members, ", ");
                 break;
+            }
+            case Constant::REPEAT:    code << "REPEAT";         break;
         }
         return code.str();
     }

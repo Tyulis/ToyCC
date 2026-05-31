@@ -22,22 +22,29 @@ namespace toycc::semantic {
 
     // 6.7.10.11 : Default initialization, for empty initializers (int variable = {}) and static / thread-local storage variables
     void SemanticAnalyzer::default_initialize(std::shared_ptr<Declaration> variable, const CodeLocation& location) {
-        switch (variable->type->dequalify()->category) {
+        emit_copy(variable, default_initializer(variable->type, location), location, true);
+    }
+
+    Constant SemanticAnalyzer::default_initializer(std::shared_ptr<Type> type, const CodeLocation& location) {
+        std::shared_ptr<Type> dequalified_type = type->dequalify();
+        switch (dequalified_type->category) {
             case TypeCategory::POINTER:  // Initialize with a null pointer
-                emit_copy(variable, make_constant_zero(variable->type, location), location, true);
-                break;
+                return make_constant_zero(type, location).constant();
 
             case TypeCategory::FLOAT:
             case TypeCategory::INTEGER:
             case TypeCategory::BOOL:
             case TypeCategory::ENUM:  // Initialize with zero
-                emit_copy(variable, make_constant_zero(variable->type, location), location, true);
-                break;
+                return make_constant_zero(type, location).constant();
 
             case TypeCategory::ARRAY:
+                return array_default_initializer(std::static_pointer_cast<ArrayType>(dequalified_type), location);
+
             case TypeCategory::STRUCT:
-            case TypeCategory::UNION:  // Recursively default-initialize
-                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Aggregate default-initialization is not implemented", location);
+                return struct_default_initializer(std::static_pointer_cast<StructType>(dequalified_type), location);
+
+            case TypeCategory::UNION:
+                return union_default_initializer(std::static_pointer_cast<UnionType>(dequalified_type), location);
 
             case TypeCategory::LABEL:
             case TypeCategory::FUNCTION:
@@ -46,7 +53,34 @@ namespace toycc::semantic {
             case TypeCategory::BITFIELD:
             case TypeCategory::QUALIFIED:
             case TypeCategory::ALIGNED:
-                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Variable of type `{}` can't be default-initialized", variable->type->repr()), location);
+                throw Diagnostic(DiagnosticLevel::ERROR, std::format("Variable of type `{}` can't be default-initialized", type->repr()), location);
         }
+        __builtin_unreachable();
+    }
+
+    Constant SemanticAnalyzer::array_default_initializer(std::shared_ptr<ArrayType> type, const CodeLocation& location) {
+        switch (type->length.tag()) {
+            case Operand::CONSTANT: {
+                const std::vector<Constant> members = {default_initializer(type->element_type, location), Constant::make_repeat(location)};
+                return Constant {members, location, type};
+            }
+
+            case Operand::VARIABLE:
+            case Operand::DEREFERENCE:
+                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Default-initializing variable-length arrays is not implemented", location);
+        }
+        __builtin_unreachable();
+    }
+
+    Constant SemanticAnalyzer::struct_default_initializer(std::shared_ptr<StructType> type, const CodeLocation& location) {
+        std::vector<Constant> members;
+        for (const Member& member : type->members)
+            members.push_back(default_initializer(member.type, location));
+        return Constant {members, location, type};
+    }
+
+    Constant SemanticAnalyzer::union_default_initializer(std::shared_ptr<UnionType> type, const CodeLocation& location) {
+        // 6.7.10.11 : To default-initialize a union, default-initialize its first member
+        return Constant {UnionConstant {0, default_initializer(type->members[0].type, location)}, location, type};
     }
 }

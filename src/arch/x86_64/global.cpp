@@ -151,18 +151,84 @@ namespace toycc::arch::x86_64 {
                 }
                 break;
 
-            case ir::Constant::STRING:
-                output.directive(std::format(".string \"{}\"", value.string()));
-                break;
-
             case ir::Constant::POINTER:
                 output.directive(std::format(".quad {}+{}", value.pointer().label, value.pointer().offset));
                 break;
 
-            case ir::Constant::AGGREGATE:
-                for (const ir::Constant& member : value.aggregate())
-                    generate_global_value(output, member);
+            case ir::Constant::UNION: {
+                const ir::UnionConstant& member = value.unionval();
+                generate_global_value(output, *member.value);
+                std::shared_ptr<ir::UnionType> union_type = std::static_pointer_cast<ir::UnionType>(value.type->dequalify());
+                const size_t padding = value.type->size(value.location) - union_type->members[member.index].type->size(value.location);
+                output.directive(std::format(".zero {}", padding));
                 break;
+            }
+
+            case ir::Constant::STRING:
+                output.directive(std::format(".string \"{}\"", value.string()));
+                break;
+
+            case ir::Constant::AGGREGATE:
+                generate_aggregate_global_value(output, value);
+                break;
+
+            case ir::Constant::REPEAT:
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Repeat markers are invalid outside of aggregate constants", value.location);
+        }
+    }
+
+    void CodeGenerator::generate_aggregate_global_value(CodeOutput& output, const ir::Constant& value) {
+        std::shared_ptr<ir::Type> dequalified_type = value.type->dequalify();
+        const std::vector<ir::Constant>& members = value.aggregate();
+        for (const auto& [index, member] : std::ranges::enumerate_view(members)) {
+            if (member.tag() == ir::Constant::REPEAT) {
+                if (index == 0)
+                    throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "A repeat marker can't be the first in an aggregate constant", value.location);
+
+                size_t nof_remaining_members = 0;
+                switch (dequalified_type->category) {
+                    case ir::TypeCategory::ARRAY: {
+                        const ir::Operand& length = std::static_pointer_cast<ir::ArrayType>(dequalified_type)->length;
+                        switch (length.tag()) {
+                            case ir::Operand::CONSTANT:
+                                nof_remaining_members = static_cast<size_t>(length.constant().integer()) - index;
+                                break;
+
+                            case ir::Operand::VARIABLE:
+                            case ir::Operand::DEREFERENCE:
+                                throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Global variable-length initializers are not implemented", value.location);
+                        }
+                        break;
+                    }
+
+                    case ir::TypeCategory::STRUCT:
+                        nof_remaining_members = std::static_pointer_cast<ir::StructType>(dequalified_type)->members.size() - index;
+                        break;
+
+                    default:
+                        throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Type `{}` can't have aggregate initializers", value.type->repr()), value.location);
+                }
+
+                for (size_t remaining_member = 0; remaining_member < nof_remaining_members; remaining_member++)
+                    generate_global_value(output, members[index - 1]);
+            } else {
+                generate_global_value(output, member);
+            }
+        }
+
+        // The end padding must be reserved and filled with zeros
+        switch (dequalified_type->category) {
+            case ir::TypeCategory::STRUCT: {
+                std::shared_ptr<ir::StructType> struct_type = std::static_pointer_cast<ir::StructType>(dequalified_type);
+                const size_t nof_members = struct_type->members.size();
+                const size_t full_size = struct_type->size(value.location);
+                const size_t padding = full_size - (struct_type->member_offset(nof_members - 1) + struct_type->members[nof_members - 1].type->size(value.location));
+                output.directive(std::format(".zero {}", padding));
+                break;
+            }
+
+            case ir::TypeCategory::ARRAY:  break;  // Arrays are aligned to their individual member type alignment, so no additional padding is required
+            default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Type `{}` can't have aggregate initializers", value.type->repr()), value.location);
         }
     }
 }

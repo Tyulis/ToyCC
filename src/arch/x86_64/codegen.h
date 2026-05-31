@@ -25,6 +25,7 @@ namespace toycc::arch::x86_64 {
             void generate_readonly_globals(CodeOutput& output, const flow::ConstantMap& globals, debug::DebugInfo& debuginfo);
             void generate_global_declaration(CodeOutput& output, std::shared_ptr<ir::Declaration> variable, debug::DebugInfo& debuginfo);
             void generate_global_value(CodeOutput& output, const ir::Constant& value);
+            void generate_aggregate_global_value(CodeOutput& output, const ir::Constant& value);
             void generate_procedure(CodeOutput& output, const flow::Procedure& procedure, debug::DebugInfo& debuginfo);
 
             // -------- Basic block generation -> arch/x86_64/block.cpp
