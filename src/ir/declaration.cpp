@@ -4,6 +4,7 @@
 
 #include "diagnostic.h"
 #include "ir/declaration.h"
+#include "util/strings.h"
 
 namespace toycc::ir {
     static std::string function_specifiers_repr(Flags<FunctionSpecifier> specifiers) {
@@ -101,6 +102,8 @@ namespace toycc::ir {
             return Constant::POINTER;
         else if (std::holds_alternative<std::string>(value))
             return Constant::STRING;
+        else if (std::holds_alternative<std::vector<Constant>>(value))
+            return Constant::AGGREGATE;
         else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Unknown constant tag", location);
     }
 
@@ -118,6 +121,10 @@ namespace toycc::ir {
 
     std::string Constant::string() const {
         return std::get<std::string>(value);
+    }
+
+    const std::vector<Constant>& Constant::aggregate() const {
+        return std::get<std::vector<Constant>>(value);
     }
 
 
@@ -176,10 +183,16 @@ namespace toycc::ir {
     std::string Constant::ir_code() const {
         std::stringstream code;
         switch (tag()) {
-            case Constant::INTEGER:  code << integer();              break;
-            case Constant::FLOAT:    code << floating_point();       break;
-            case Constant::POINTER:  code << pointer();              break;
-            case Constant::STRING:   code << string();               break;
+            case Constant::INTEGER:   code << integer();              break;
+            case Constant::FLOAT:     code << floating_point();       break;
+            case Constant::POINTER:   code << pointer();              break;
+            case Constant::STRING:    code << string();               break;
+            case Constant::AGGREGATE:
+                std::vector<std::string> members;
+                for (const Constant& member : aggregate())
+                    members.push_back(member.ir_code());
+                code << join(members, ", ");
+                break;
         }
         return code.str();
     }

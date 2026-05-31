@@ -102,8 +102,12 @@ namespace toycc::semantic {
             std::optional<Member> decode_parameter_declaration(CParser::ParameterDeclarationContext* context);
             std::shared_ptr<Type> decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> base_type);
 
+            // -------- Initializers -> semantic/initialization.cpp
+            void decode_initializer(CParser::InitializerContext* context, std::shared_ptr<Declaration> variable);
+            void decode_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<Declaration> variable);
+            void default_initialize(std::shared_ptr<Declaration> variable, const CodeLocation& location);
+
             // -------- Expressions -> semantic/expressions.cpp
-            ExpressionResult decode_initializer(CParser::InitializerContext* context);
             ExpressionResult decode_expression(CParser::ExpressionContext* context);
             ExpressionResult decode_for_expression(CParser::ForExpressionContext* context);
             ExpressionResult decode_expression_list(std::vector<CParser::AssignmentExpressionContext*> context);

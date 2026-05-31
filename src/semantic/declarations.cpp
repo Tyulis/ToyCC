@@ -1,5 +1,6 @@
 #include "code_location.h"
 #include "diagnostic.h"
+#include "ir/declaration.h"
 #include "ir/type.h"
 #include "ir/type_expressions.h"
 #include "arch/datamodel.h"
@@ -50,10 +51,9 @@ namespace toycc::semantic {
                 if (declarator->initializer()) {
                     if (declaration->storage & StorageClass::TYPEDEF)
                         throw Diagnostic(DiagnosticLevel::ERROR, "Initializers are not allowed in typedef declarations", locate(declarator->initializer()));
-
-                    const CodeLocation initializer_location = locate(declarator->initializer());
-                    ExpressionResult initializer = decode_initializer(declarator->initializer());
-                    emit_copy(declaration, initializer.operand(), initializer_location, true);
+                    decode_initializer(declarator->initializer(), declaration);
+                } else if (declaration->storage & (StorageClass::STATIC | StorageClass::THREAD_LOCAL)) {
+                    default_initialize(declaration, declaration->location);  // 6.7.10.11 : Uninitialized static and thread-local are default-initialized, automatic storage variables are left uninitialized
                 }
             }
         }

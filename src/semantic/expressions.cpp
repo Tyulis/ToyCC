@@ -10,15 +10,6 @@
 #include "semantic/values.h"
 
 namespace toycc::semantic {
-    // ------------ Expressions
-    ExpressionResult SemanticAnalyzer::decode_initializer(CParser::InitializerContext* context) {
-        if (context->LeftBrace() || context->RightBrace())
-            throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Initializer lists are not implemented", locate(context));
-        else if (context->assignmentExpression())
-            return decode_assignment_expression(context->assignmentExpression());
-        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown initializer `{}`", context->getText()), locate(context));
-    }
-
     ExpressionResult SemanticAnalyzer::decode_expression(CParser::ExpressionContext* context) {
         return decode_expression_list(context->assignmentExpression());
     }

@@ -108,6 +108,7 @@ add_executable(${PROJECT_NAME}
 	src/semantic/expressionresult.cpp
 	src/semantic/expressions.cpp
 	src/semantic/external.cpp
+	src/semantic/initialization.cpp
 	src/semantic/literals.cpp
 	src/semantic/state.cpp
 	src/semantic/statements.cpp

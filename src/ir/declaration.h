@@ -76,12 +76,13 @@ namespace toycc::ir {
 
         bool operator== (const PointerConstant& rhs) const;
     };
+
     std::ostream& operator<< (std::ostream& stream, const PointerConstant& pointer);
 
     struct Constant {
-        enum Tag {INTEGER, FLOAT, STRING, POINTER};
+        enum Tag {INTEGER, FLOAT, POINTER, STRING, AGGREGATE};
 
-        std::variant<IntegerConstant, FloatingPointConstant, PointerConstant, std::string> value;
+        std::variant<IntegerConstant, FloatingPointConstant, PointerConstant, std::string, std::vector<Constant>> value;
         CodeLocation location;
         std::shared_ptr<Type> type;
 
@@ -91,6 +92,7 @@ namespace toycc::ir {
         FloatingPointConstant floating_point() const;
         PointerConstant pointer() const;
         std::string string() const;
+        const std::vector<Constant>& aggregate() const;
 
         Constant as(std::shared_ptr<Type> new_type) const;
         bool operator== (const Constant& rhs) const;

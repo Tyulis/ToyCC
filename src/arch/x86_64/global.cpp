@@ -157,6 +157,12 @@ namespace toycc::arch::x86_64 {
 
             case ir::Constant::POINTER:
                 output.directive(std::format(".quad {}+{}", value.pointer().label, value.pointer().offset));
+                break;
+
+            case ir::Constant::AGGREGATE:
+                for (const ir::Constant& member : value.aggregate())
+                    generate_global_value(output, member);
+                break;
         }
     }
 }
