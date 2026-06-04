@@ -97,9 +97,9 @@ namespace toycc::ir {
     std::ostream& operator<< (std::ostream& stream, const PointerConstant& pointer);
 
     struct Constant {
-        enum Tag {INTEGER, FLOAT, POINTER, UNION, STRING, AGGREGATE, REPEAT};
+        enum Tag {INTEGER, FLOAT, POINTER, UNION, STRING, REFERENCE, AGGREGATE, REPEAT};
 
-        std::variant<IntegerConstant, FloatingPointConstant, PointerConstant, UnionConstant, std::string, std::vector<Constant>, RepeatMarker> value;
+        std::variant<IntegerConstant, FloatingPointConstant, PointerConstant, UnionConstant, std::string, std::shared_ptr<Declaration>, std::vector<Constant>, RepeatMarker> value;
         CodeLocation location;
         std::shared_ptr<Type> type;
 
@@ -112,6 +112,8 @@ namespace toycc::ir {
         PointerConstant pointer() const;
         UnionConstant unionval() const;
         std::string string() const;
+        std::shared_ptr<Declaration> reference() const;
+        std::vector<Constant>& aggregate();
         const std::vector<Constant>& aggregate() const;
 
         Constant as(std::shared_ptr<Type> new_type) const;

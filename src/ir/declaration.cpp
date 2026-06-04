@@ -116,6 +116,8 @@ namespace toycc::ir {
             return Constant::UNION;
         else if (std::holds_alternative<std::string>(value))
             return Constant::STRING;
+        else if (std::holds_alternative<std::shared_ptr<Declaration>>(value))
+            return Constant::REFERENCE;
         else if (std::holds_alternative<std::vector<Constant>>(value))
             return Constant::AGGREGATE;
         else if (std::holds_alternative<RepeatMarker>(value))
@@ -135,13 +137,21 @@ namespace toycc::ir {
         return std::get<PointerConstant>(value);
     }
 
-
     UnionConstant Constant::unionval() const {
         return std::get<UnionConstant>(value);
     }
 
     std::string Constant::string() const {
         return std::get<std::string>(value);
+    }
+
+    // Reference to a variable that should be a constant expression at codegen time, for use in global aggregate initializers
+    std::shared_ptr<Declaration> Constant::reference() const {
+        return std::get<std::shared_ptr<Declaration>>(value);
+    }
+
+    std::vector<Constant>& Constant::aggregate() {
+        return std::get<std::vector<Constant>>(value);
     }
 
     const std::vector<Constant>& Constant::aggregate() const {
@@ -212,7 +222,8 @@ namespace toycc::ir {
                 code << "[" << value.index << "] = " << value.value->ir_code();
                 break;
             }
-            case Constant::STRING:    code << string();         break;
+            case Constant::STRING:    code << string();                break;
+            case Constant::REFERENCE: code << reference()->ir_code();  break;
             case Constant::AGGREGATE: {
                 std::vector<std::string> members;
                 for (const Constant& member : aggregate())

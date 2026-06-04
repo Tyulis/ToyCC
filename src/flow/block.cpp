@@ -1,9 +1,33 @@
 #include "diagnostic.h"
+#include "ir/declaration.h"
 #include "flow/block.h"
 
 namespace toycc::flow {
     // -------- BasicBlock
     BasicBlock::BasicBlock(BasicBlockType type, std::shared_ptr<size_t> unique_id, std::optional<ir::Label> label) : type(type), label(label), unique_id(unique_id) {}
+
+    void add_constant_reference_dependencies(const ir::Constant& constant, std::unordered_map<std::shared_ptr<ir::Declaration>, Dependency>& inputs, OperandGroup operand_group, size_t operand_index) {
+        if (constant.tag() != ir::Constant::AGGREGATE)
+            return;
+
+        for (const ir::Constant& member : constant.aggregate()) {
+            switch (member.tag()) {
+                case ir::Constant::AGGREGATE:
+                    add_constant_reference_dependencies(member, inputs, operand_group, operand_index);
+                    break;
+
+                case ir::Constant::REFERENCE: {
+                    Dependency& dependency = inputs[member.reference()];
+                    dependency.type |= DependencyType::READ;
+                    dependency.operand_group = operand_group;
+                    dependency.operand_index = operand_index;
+                    break;
+                }
+
+                default: break;
+            }
+        }
+    }
 
     void BasicBlock::add_statement(const ir::Statement& statement, const std::unordered_set<std::shared_ptr<ir::Declaration>>& defined_decls) {
         if (statement.block.get() != nullptr)
@@ -26,6 +50,10 @@ namespace toycc::flow {
 
         // FIXME : If there's a dereference, don't make any assumption on where that value comes from and make this depend on everything else
         if (statement.output.has_value()) {
+            // For constant references in aggregate initializers, also add dependencies
+            if (statement.output->base_tag() == ir::Operand::CONSTANT_BASE)
+                add_constant_reference_dependencies(statement.output->constant(), inputs, OperandGroup::OUTPUT, 0);
+
             switch (statement.output->tag()) {
                 case ir::Operand::DEREFERENCE: {
                     for (std::shared_ptr<ir::Declaration> decl : defined_decls) {
@@ -60,11 +88,18 @@ namespace toycc::flow {
                 for (std::shared_ptr<ir::Declaration> decl : defined_decls)
                     inputs[decl].type |= DependencyType::DEREFERENCE;
 
-            if (input.base_tag() == ir::Operand::VARIABLE_BASE) {
-                Dependency& dependency = inputs[input.declaration()];
-                dependency.type |= DependencyType::READ;
-                dependency.operand_group = OperandGroup::INPUT;
-                dependency.operand_index = index;
+            switch (input.base_tag()) {
+                case ir::Operand::VARIABLE_BASE: {
+                    Dependency& dependency = inputs[input.declaration()];
+                    dependency.type |= DependencyType::READ;
+                    dependency.operand_group = OperandGroup::INPUT;
+                    dependency.operand_index = index;
+                    break;
+                }
+
+                case ir::Operand::CONSTANT_BASE:
+                    add_constant_reference_dependencies(input.constant(), inputs, OperandGroup::INPUT, index);
+                    break;
             }
         }
 

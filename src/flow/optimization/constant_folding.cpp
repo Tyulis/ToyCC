@@ -24,12 +24,42 @@ namespace toycc::flow {
 
 
     // -------- Input value replacement
+    // Replace constant references in an aggregate initializer
+    static void replace_constant_references(ir::Constant& constant, std::shared_ptr<ir::Declaration> variable, const ir::Constant& replacement) {
+        if (constant.tag() != ir::Constant::AGGREGATE)
+            return;
+
+        for (ir::Constant& member : constant.aggregate()) {
+            switch (member.tag()) {
+                case ir::Constant::AGGREGATE:
+                    replace_constant_references(member, variable, replacement);
+                    break;
+
+                case ir::Constant::REFERENCE:
+                    if (member.reference() == variable)
+                        member = replacement;
+                    break;
+
+                default: break;
+            }
+        }
+    }
+
     // Replace all read occurences of the `value_node` variable with its known value
     static void replace_value(std::shared_ptr<DependencyNode> statement_node, std::shared_ptr<DependencyNode> value_node, DependencyGraph& graph) {
         ir::Statement& statement = statement_node->statement();
-        for (ir::Operand& input : statement.inputs)
-            if (input.base_tag() == ir::Operand::VARIABLE_BASE && input.declaration() == value_node->declaration())
-                input = ir::Operand {value_node->value().value(), input.location, input.indices};
+        for (ir::Operand& input : statement.inputs) {
+            switch (input.base_tag()) {
+                case ir::Operand::VARIABLE_BASE:
+                    if (input.declaration() == value_node->declaration())
+                        input = ir::Operand {value_node->value().value(), input.location, input.indices};
+                    break;
+
+                case ir::Operand::CONSTANT_BASE:
+                    replace_constant_references(input.constant(), value_node->declaration(), value_node->value().value());
+                    break;
+            }
+        }
 
         if (statement.output.has_value() && statement.output->tag() == ir::Operand::DEREFERENCE && statement.output->base_tag() == ir::Operand::VARIABLE_BASE && statement.output->declaration() == value_node->declaration())
             statement.output = ir::Operand {value_node->value().value(), statement.output->location, statement.output->indices};

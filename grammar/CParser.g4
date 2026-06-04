@@ -647,7 +647,11 @@ initializer
 
 // ISO C: initializer-list (6.7.11)
 initializerList
-    : designation? initializer (',' designation? initializer)*
+    : designatedInitializer (',' designatedInitializer)*
+    ;
+
+designatedInitializer
+    : designation? initializer
     ;
 
 // ISO C: designation (6.7.11)

@@ -7,7 +7,7 @@ namespace toycc::semantic {
     void SemanticAnalyzer::decode_initializer(CParser::InitializerContext* context, std::shared_ptr<Declaration> variable) {
         if (context->LeftBrace() || context->RightBrace()) {
             if (context->initializerList())
-                decode_initializer_list(context->initializerList(), variable);
+                emit_copy(variable, decode_initializer_list(context->initializerList(), variable->type, locate(context)), locate(context), true);
             else
                 default_initialize(variable, locate(context));
         } else if (context->assignmentExpression()) {
@@ -16,9 +16,35 @@ namespace toycc::semantic {
         } else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown initializer `{}`", context->getText()), locate(context));
     }
 
-    void SemanticAnalyzer::decode_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<Declaration>) {
-        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Initializer lists are not implemented", locate(context));
+    Constant SemanticAnalyzer::decode_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<Type> type, const CodeLocation& location) {
+        std::shared_ptr<Type> dequalified_type = type->dequalify();
+        switch (dequalified_type->category) {
+            case TypeCategory::ARRAY:
+                return decode_array_initializer_list(context, std::static_pointer_cast<ArrayType>(dequalified_type), location);
+
+            case TypeCategory::STRUCT:
+                return decode_struct_initializer_list(context, std::static_pointer_cast<StructType>(dequalified_type), location);
+
+            case TypeCategory::UNION:
+                return decode_union_initializer_list(context, std::static_pointer_cast<UnionType>(dequalified_type), location);
+
+            default: throw Diagnostic(DiagnosticLevel::ERROR, std::format("A variable of type {} can't have an initializer list", type->repr()), location);
+        }
+        __builtin_unreachable();
     }
+
+    Constant SemanticAnalyzer::decode_array_initializer_list (CParser::InitializerListContext*, std::shared_ptr<ArrayType>,  const CodeLocation& location) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Array initializer lists are not implemented", location);
+    }
+
+    Constant SemanticAnalyzer::decode_struct_initializer_list(CParser::InitializerListContext*, std::shared_ptr<StructType>, const CodeLocation& location) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Struct initializer lists are not implemented", location);
+    }
+
+    Constant SemanticAnalyzer::decode_union_initializer_list (CParser::InitializerListContext*, std::shared_ptr<UnionType>,  const CodeLocation& location) {
+        throw Diagnostic(DiagnosticLevel::NOT_IMPLEMENTED, "Union initializer lists are not implemented", location);
+    }
+
 
     // 6.7.10.11 : Default initialization, for empty initializers (int variable = {}) and static / thread-local storage variables
     void SemanticAnalyzer::default_initialize(std::shared_ptr<Declaration> variable, const CodeLocation& location) {

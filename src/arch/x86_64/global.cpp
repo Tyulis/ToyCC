@@ -168,6 +168,9 @@ namespace toycc::arch::x86_64 {
                 output.directive(std::format(".string \"{}\"", value.string()));
                 break;
 
+            case ir::Constant::REFERENCE:  // If it was a constant expression it should have been resolved in constant propagation
+                throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Global initializers must be constant expressions", value.location);
+
             case ir::Constant::AGGREGATE:
                 generate_aggregate_global_value(output, value);
                 break;
