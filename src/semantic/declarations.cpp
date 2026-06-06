@@ -51,9 +51,10 @@ namespace toycc::semantic {
                 if (declarator->initializer()) {
                     if (declaration->storage & StorageClass::TYPEDEF)
                         throw Diagnostic(DiagnosticLevel::ERROR, "Initializers are not allowed in typedef declarations", locate(declarator->initializer()));
-                    decode_initializer(declarator->initializer(), declaration);
+                    emit_copy(declaration, decode_initializer(declarator->initializer(), declaration->type), locate(declarator), true);
                 } else if (declaration->storage & (StorageClass::STATIC | StorageClass::THREAD_LOCAL)) {
-                    default_initialize(declaration, declaration->location);  // 6.7.10.11 : Uninitialized static and thread-local are default-initialized, automatic storage variables are left uninitialized
+                    // 6.7.10.11 : Uninitialized static and thread-local are default-initialized, automatic storage variables are left uninitialized
+                    emit_copy(declaration, default_initializer(declaration->type, declaration->location), locate(declarator), true);
                 }
             }
         }

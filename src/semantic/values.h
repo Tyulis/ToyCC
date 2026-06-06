@@ -46,23 +46,34 @@ namespace toycc::semantic {
 
     // -------- Expression result to keep track of the lvalue/rvalue distinction during semantic analysis while preserving an unified interface -> semantic/expressionresult.cpp
     struct ExpressionResult {
-    public:
-        ExpressionResult(LValue result, CodeLocation location);
-        ExpressionResult(RValue result, CodeLocation location);
+        public:
+            ExpressionResult(LValue result, CodeLocation location);
+            ExpressionResult(RValue result, CodeLocation location);
 
-        std::shared_ptr<Type> type() const;
-        bool is_lvalue() const;
+            std::shared_ptr<Type> type() const;
+            bool is_lvalue() const;
 
-        LValue lvalue() const;
-        RValue rvalue() const;
-        Operand operand() const;
-        RValue base() const;
-        std::vector<RValue> indices() const;
+            LValue lvalue() const;
+            RValue rvalue() const;
+            Operand operand() const;
+            RValue base() const;
+            std::vector<RValue> indices() const;
 
-        ExpressionResult dereference(RValue index, CodeLocation location) const;
+            ExpressionResult dereference(RValue index, CodeLocation location) const;
 
-    private:
-        std::variant<LValue, RValue> result;
-        CodeLocation location;
+        private:
+            std::variant<LValue, RValue> result;
+            CodeLocation location;
+    };
+
+
+    // -------- Designated initializer (for initializer lists)
+    struct Designation {
+        enum Tag {POSITIONAL, INDEX, NAME};
+        std::variant<std::monostate, size_t, std::string> designation;
+
+        Tag tag() const;
+        size_t index() const;
+        std::string name() const;
     };
 }

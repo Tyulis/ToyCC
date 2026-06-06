@@ -1,4 +1,5 @@
 #include "diagnostic.h"
+#include <variant>
 #include "semantic/values.h"
 
 namespace toycc::semantic {
@@ -78,5 +79,25 @@ namespace toycc::semantic {
         for (RValue index : indices)
             type = type->dereference(index.as_index(), location);
         return type;
+    }
+
+
+    // -------- Designation
+    Designation::Tag Designation::tag() const {
+        if (std::holds_alternative<std::monostate>(designation))
+            return POSITIONAL;
+        else if (std::holds_alternative<size_t>(designation))
+            return INDEX;
+        else if (std::holds_alternative<std::string>(designation))
+            return NAME;
+        else throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid designation type");
+    }
+
+    size_t Designation::index() const {
+        return std::get<size_t>(designation);
+    }
+
+    std::string Designation::name() const {
+        return std::get<std::string>(designation);
     }
 }

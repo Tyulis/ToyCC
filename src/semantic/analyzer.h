@@ -103,13 +103,15 @@ namespace toycc::semantic {
             std::shared_ptr<Type> decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> base_type);
 
             // -------- Initializers -> semantic/initialization.cpp
-            void decode_initializer(CParser::InitializerContext* context, std::shared_ptr<Declaration> variable);
+            RValue decode_initializer(CParser::InitializerContext* context, std::shared_ptr<Type> type);
             Constant decode_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<Type> type, const CodeLocation& location);
             Constant decode_array_initializer_list (CParser::InitializerListContext* context, std::shared_ptr<ArrayType> type,  const CodeLocation& location);
             Constant decode_struct_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<StructType> type, const CodeLocation& location);
             Constant decode_union_initializer_list (CParser::InitializerListContext* context, std::shared_ptr<UnionType> type,  const CodeLocation& location);
+            std::vector<Designation> decode_designation(CParser::DesignationContext* context);
+            std::vector<Designation> decode_designator(CParser::DesignatorContext* context);
+            std::vector<Designation> decode_gnu_array_designator(CParser::GnuArrayDesignatorContext* context);
 
-            void default_initialize(std::shared_ptr<Declaration> variable, const CodeLocation& location);
             Constant default_initializer(std::shared_ptr<Type> type, const CodeLocation& location);
             Constant array_default_initializer(std::shared_ptr<ArrayType> type, const CodeLocation& location);
             Constant struct_default_initializer(std::shared_ptr<StructType> type, const CodeLocation& location);
