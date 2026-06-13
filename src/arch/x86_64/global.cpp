@@ -93,7 +93,9 @@ namespace toycc::arch::x86_64 {
         output.directive(".bss");
         for (std::shared_ptr<ir::Declaration> declaration : globals) {
             generate_global_declaration(output, declaration, debuginfo);
-            output.directive(std::format(".zero {}", declaration->type->size(declaration->location)));
+            const size_t size = declaration->type->size(declaration->location);
+            if (size > 0)
+                output.directive(std::format(".zero {}", size));
         }
     }
 
@@ -160,7 +162,8 @@ namespace toycc::arch::x86_64 {
                 generate_global_value(output, *member.value);
                 std::shared_ptr<ir::UnionType> union_type = std::static_pointer_cast<ir::UnionType>(value.type->dequalify());
                 const size_t padding = value.type->size(value.location) - union_type->members[member.index].type->size(value.location);
-                output.directive(std::format(".zero {}", padding));
+                if (padding > 0)
+                    output.directive(std::format(".zero {}", padding));
                 break;
             }
 
@@ -226,7 +229,8 @@ namespace toycc::arch::x86_64 {
                 const size_t nof_members = struct_type->members.size();
                 const size_t full_size = struct_type->size(value.location);
                 const size_t padding = full_size - (struct_type->member_offset(nof_members - 1) + struct_type->members[nof_members - 1].type->size(value.location));
-                output.directive(std::format(".zero {}", padding));
+                if (padding > 0)
+                    output.directive(std::format(".zero {}", padding));
                 break;
             }
 

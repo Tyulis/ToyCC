@@ -102,6 +102,7 @@ add_executable(${PROJECT_NAME}
 	src/ir/type.cpp
 	src/ir/type_expressions.cpp
 
+	src/semantic/constexpr.cpp
 	src/semantic/conversions.cpp
 	src/semantic/declarations.cpp
 	src/semantic/exports.cpp

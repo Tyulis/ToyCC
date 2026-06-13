@@ -34,10 +34,13 @@ namespace toycc::semantic {
         // Those are only valid when both types are equal
         if (destination->category == TypeCategory::FUNCTION || source->category == TypeCategory::FUNCTION)
             return ConversionValidity::INVALID;
-        if (destination->category == TypeCategory::STRUCT || source->category == TypeCategory::STRUCT)
-            return ConversionValidity::INVALID;
-        if (destination->category == TypeCategory::UNION || source->category == TypeCategory::UNION)
-            return ConversionValidity::INVALID;
+        if (destination->category == TypeCategory::STRUCT || source->category == TypeCategory::STRUCT) {
+            if (*destination == *source)  return ConversionValidity::IMPLICIT;
+            else                          return ConversionValidity::INVALID;
+        } if (destination->category == TypeCategory::UNION || source->category == TypeCategory::UNION) {
+            if (*destination == *source)  return ConversionValidity::IMPLICIT;
+            else                          return ConversionValidity::INVALID;
+        }
 
         if (destination->category == TypeCategory::ENUM) {
             if      (source->category == TypeCategory::INTEGER)  return ConversionValidity::EXPLICIT;
@@ -170,6 +173,7 @@ namespace toycc::semantic {
             case TypeCategory::POINTER: return emit_conversion_to_pointer(                                            destination_type,  source_type, source, location, destination_generator);
             case TypeCategory::ARRAY:   return emit_conversion_to_pointer(                                            destination_type,  source_type, source, location, destination_generator);
             case TypeCategory::ENUM:    return emit_conversion_to_enum   (std::static_pointer_cast<EnumType>         (destination_type), source_type, source, location, destination_generator);
+            case TypeCategory::STRUCT:  return emit_conversion_to_struct (std::static_pointer_cast<StructType>       (destination_type), source_type, source, location, destination_generator);
             default: throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, std::format("Unknown conversion case : `{}` to `{}`", destination_type->text(), source_type->text()), location);
         }
     }
@@ -303,6 +307,19 @@ namespace toycc::semantic {
         if (destination_type->underlying_type->category != TypeCategory::INTEGER)
             throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Invalid enum underlying type", location);
         return emit_conversion_to_integer(std::static_pointer_cast<IntegerType>(destination_type->underlying_type), source_type, source, location, destination_generator);
+    }
+
+    Operand SemanticAnalyzer::emit_conversion_to_struct(std::shared_ptr<StructType> destination_type, std::shared_ptr<Type> source_type, Operand source,
+                                                        CodeLocation location, SemanticAnalyzer::TemporaryGenerator)
+    {
+        if (source_type->category != TypeCategory::STRUCT)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert a non-struct type to a struct", location);
+
+        std::shared_ptr<StructType> source_struct_type = std::static_pointer_cast<StructType>(source_type);
+        if (*source_type != *destination_type)
+            throw Diagnostic(DiagnosticLevel::INTERNAL_ERROR, "Can't convert to incompatible struct type", location);
+
+        return source;
     }
 
 

@@ -17,6 +17,8 @@ namespace toycc::semantic {
 
         RValue(std::shared_ptr<Declaration> declaration);
         RValue(Constant value);
+        RValue(const RValue& source) = default;
+        RValue& operator= (const RValue& source) = default;
 
         operator Operand() const;
 

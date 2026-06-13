@@ -103,11 +103,13 @@ namespace toycc::semantic {
             std::shared_ptr<Type> decode_pointer_spec(CParser::PointerContext* context, std::shared_ptr<Type> base_type);
 
             // -------- Initializers -> semantic/initialization.cpp
-            RValue decode_initializer(CParser::InitializerContext* context, std::shared_ptr<Type> type);
-            Constant decode_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<Type> type, const CodeLocation& location);
-            Constant decode_array_initializer_list (CParser::InitializerListContext* context, std::shared_ptr<ArrayType> type,  const CodeLocation& location);
-            Constant decode_struct_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<StructType> type, const CodeLocation& location);
-            Constant decode_union_initializer_list (CParser::InitializerListContext* context, std::shared_ptr<UnionType> type,  const CodeLocation& location);
+            Operand decode_initializer(CParser::InitializerContext* context, std::shared_ptr<Type> type);
+            Constant decode_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<Type> type);
+            Constant decode_array_initializer_list (CParser::InitializerListContext* context, std::shared_ptr<ArrayType> type);
+            Constant decode_struct_initializer_list(CParser::InitializerListContext* context, std::shared_ptr<StructType> type);
+            Constant decode_union_initializer_list (CParser::InitializerListContext* context, std::shared_ptr<UnionType> type);
+            Constant make_constant_initializer(const Operand& value, std::shared_ptr<Type> type);
+
             std::vector<Designation> decode_designation(CParser::DesignationContext* context);
             std::vector<Designation> decode_designator(CParser::DesignatorContext* context);
             std::vector<Designation> decode_gnu_array_designator(CParser::GnuArrayDesignatorContext* context);
@@ -172,6 +174,10 @@ namespace toycc::semantic {
             bool is_operator_valid(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
             std::shared_ptr<Type> operation_result_type(StatementTag op, std::shared_ptr<Type> left, std::shared_ptr<Type> right);
 
+            // -------- Constant expressions -> semantic/constexpr.cpp
+            Constant evaluate_constant_expression(CParser::ConstantExpressionContext* context);
+            Constant evaluate_constant_scope(std::shared_ptr<Scope> scope, const CodeLocation& location);
+
             // -------- Literals -> semantic/literals.cpp
             RValue decode_constant(CParser::ConstantContext* context);
             RValue decode_character_constant(antlr4::tree::TerminalNode* terminal);
@@ -216,6 +222,8 @@ namespace toycc::semantic {
             Operand emit_conversion_to_pointer(std::shared_ptr<Type> destination_type, std::shared_ptr<Type> effective_source_type, Operand source,
                                 CodeLocation location, TemporaryGenerator destination_generator);
             Operand emit_conversion_to_enum(std::shared_ptr<EnumType> destination_type, std::shared_ptr<Type> effective_source_type, Operand source,
+                                CodeLocation location, TemporaryGenerator destination_generator);
+            Operand emit_conversion_to_struct(std::shared_ptr<StructType> destination_type, std::shared_ptr<Type> effective_source_type, Operand source,
                                 CodeLocation location, TemporaryGenerator destination_generator);
 
             Operand emit_copy_conversion(std::shared_ptr<Type> destination_type, Operand source, CodeLocation location, TemporaryGenerator destination_generator, StatementTag op = StatementTag::COPY);
